@@ -61,10 +61,12 @@ foreach ($line in $rawStatus) {
     }
 }
 
-$normalized = $dirtyAbsolute |
-    Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
-    ForEach-Object { $_.Trim() } |
-    Select-Object -Unique
+$normalized = @(
+    $dirtyAbsolute |
+        Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
+        ForEach-Object { $_.Trim() } |
+        Select-Object -Unique
+)
 
 $outputLines = @(
     "# Dirty Files",

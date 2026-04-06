@@ -144,3 +144,37 @@ Open risk:
 Next action:
 
 - Restart/reload Claude session if hook does not trigger immediately.
+
+## 2026-04-06 (dependabot ecdsa alert mitigation)
+
+Branch: Development
+Goal: Mitigate Dependabot alert about Minerva timing attack on python-ecdsa.
+
+Files updated:
+
+- auth/auth.py
+- requirements.txt
+- scripts/auto-memory-sync.ps1
+
+Security action:
+
+- Migrated JWT operations from python-jose to PyJWT.
+- Removed direct dependencies python-jose and ecdsa from requirements.txt.
+
+Validation:
+
+- Local runtime check: create_access_token/decode_token works with PyJWT.
+- No remaining jose imports in Python files.
+- auto-memory-sync script runs successfully after robustness fix.
+
+Decision:
+
+- Because python-ecdsa has no patched version and upstream marks side-channel issues out-of-scope, dependency removal was chosen over version pinning.
+
+Residual risk:
+
+- Existing environments must reinstall dependencies to effectively remove python-jose/ecdsa.
+
+Next action:
+
+- Run dependency reinstall/update in CI and local environments, then close Dependabot alert as mitigated-by-removal.

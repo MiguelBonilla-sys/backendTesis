@@ -2,7 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 from core.config import settings
 from core.exceptions import AuthError
@@ -19,7 +20,7 @@ def create_access_token(subject: str, role: str = "user") -> str:
 def decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError as exc:
+    except InvalidTokenError as exc:
         raise AuthError("Invalid or expired token") from exc
 
 
