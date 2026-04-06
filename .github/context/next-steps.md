@@ -4,13 +4,16 @@ Ordered actionable backlog for the next sessions.
 
 1. Standardize team daily start:
 
-- Use pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-daily-workflow.ps1.
+- Use OS-aware start command.
+	- macOS/Linux: bash ./scripts/start-daily-workflow.sh
+	- Windows: pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-daily-workflow.ps1
 - Confirm everyone follows the same reading order before coding.
 
 1. Enforce per-message memory sync in chat:
 
 - Keep .github/instructions/backendTesis.instructions.md with the always-run auto-memory command.
 - Keep .github/rules/AUTO_MEMORY_ALWAYS_RULE.md as governance reference.
+- Add hook configuration that invokes OS-aware wrappers by default.
 
 1. Reconcile documentation status with runtime implementation:
 
@@ -36,4 +39,4 @@ Ordered actionable backlog for the next sessions.
 
 - Update .github/context/work-log.md after each meaningful change.
 - Refresh this file after each session.
-- Keep .github/auto-memory/dirty-files updated via scripts/auto-memory-sync.ps1.
+- Keep .github/auto-memory/dirty-files updated via OS-aware auto-memory sync.

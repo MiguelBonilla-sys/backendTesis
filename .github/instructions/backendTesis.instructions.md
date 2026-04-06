@@ -7,7 +7,9 @@ applyTo: "**"
 You are working in backendTesis, an async FastAPI backend for phishing detection.
 
 Always do this at the beginning of every user message in chat:
-1. Run from repository root: pwsh -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\auto-memory-sync.ps1
+1. Run from repository root with OS-aware command:
+	- macOS/Linux: bash ./scripts/auto-memory-sync.sh
+	- Windows: pwsh -NoProfile -ExecutionPolicy Bypass -File .\\scripts\\auto-memory-sync.ps1
 2. Continue with analysis and requested work.
 
 Always do this before major edits:

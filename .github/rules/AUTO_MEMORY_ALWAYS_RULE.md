@@ -8,7 +8,8 @@ For every incoming user message in this workspace chat:
 
 1. Run from repository root:
 
-- pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\auto-memory-sync.ps1
+- macOS/Linux: bash ./scripts/auto-memory-sync.sh
+- Windows: pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\auto-memory-sync.ps1
 
 1. Then continue with analysis, file reads, or edits.
 

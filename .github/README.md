@@ -22,8 +22,10 @@ It is based on these project sources:
 
 ## Daily start command
 
-PowerShell command:
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-daily-workflow.ps1
+Use an OS-aware command:
+
+- macOS/Linux: bash ./scripts/start-daily-workflow.sh
+- Windows: pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-daily-workflow.ps1
 
 This command will:
 

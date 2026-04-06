@@ -4,8 +4,10 @@ Purpose: daily execution guide for backendTesis with a stable, repeatable flow.
 
 ## One command to start daily flow
 
-PowerShell command:
-pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-daily-workflow.ps1
+Use an OS-aware command:
+
+- macOS/Linux: bash ./scripts/start-daily-workflow.sh
+- Windows: pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-daily-workflow.ps1
 
 What it does:
 
@@ -47,7 +49,7 @@ Path:
 Behavior:
 
 - triggerMode is currently default.
-- dirty-files is refreshed from git status by scripts/auto-memory-sync.ps1.
+- dirty-files is refreshed from git status by scripts/auto_memory_sync.py through OS wrappers.
 - Hook enforcement enabled in .claude/settings.local.json via UserPromptSubmit.
 
 ## End-of-session checklist

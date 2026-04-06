@@ -28,7 +28,9 @@ Keep persistent project memory, execution history, and next actions synchronized
 1. Before work
 - Read the latest entries in work-log and next-steps.
 - Confirm current phase from docs/PLAN.md.
-- Run scripts/auto-memory-sync.ps1 to refresh dirty-files snapshot.
+- Run OS-aware auto-memory sync to refresh dirty-files snapshot.
+	- macOS/Linux: bash ./scripts/auto-memory-sync.sh
+	- Windows: pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\auto-memory-sync.ps1
 
 2. During work
 - Record important decisions, constraints, and deviations from docs.
@@ -38,7 +40,7 @@ Keep persistent project memory, execution history, and next actions synchronized
 - Append a new entry to work-log.md with date, objective, changed files, tests, and decisions.
 - Update project-history.md only if phase status changed.
 - Refresh next-steps.md with actionable ordered items.
-- Re-run scripts/auto-memory-sync.ps1.
+- Re-run OS-aware auto-memory sync.
 
 ## Entry template
 

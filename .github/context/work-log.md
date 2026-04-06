@@ -178,3 +178,45 @@ Residual risk:
 Next action:
 
 - Run dependency reinstall/update in CI and local environments, then close Dependabot alert as mitigated-by-removal.
+
+## 2026-04-06 (auto-memory OS-aware)
+
+Branch: feat/phase-1-core-setup
+Goal: Make auto-memory and daily startup work on macOS/Linux and Windows.
+
+Files added:
+
+- scripts/auto_memory_sync.py
+- scripts/auto-memory-sync.sh
+- scripts/start-daily-workflow.sh
+
+Files updated:
+
+- scripts/auto-memory-sync.ps1
+- .github/instructions/backendTesis.instructions.md
+- .github/rules/AUTO_MEMORY_ALWAYS_RULE.md
+- .github/README.md
+- .github/context/TEAM_OPERATIVE_ONE_PAGER.md
+- .github/skills/project-memory/SKILL.md
+- .github/context/next-steps.md
+
+Checks:
+
+- bash ./scripts/auto-memory-sync.sh
+- bash ./scripts/start-daily-workflow.sh
+- python3 -m py_compile scripts/auto_memory_sync.py
+- bash -n scripts/auto-memory-sync.sh
+- bash -n scripts/start-daily-workflow.sh
+
+Decisions:
+
+- Keep sync logic in a single Python core script and use OS wrappers as entrypoints.
+- Keep Windows compatibility with existing PowerShell command while enabling macOS/Linux via bash wrappers.
+
+Open risks:
+
+- Environments without Python (python3/python) cannot run the new sync flow.
+
+Next action:
+
+- Add a cross-platform hook config file that invokes the OS-aware wrapper by default.
