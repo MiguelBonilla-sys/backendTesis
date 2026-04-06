@@ -1,0 +1,48 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from core.config import settings
+from core.logger import logger
+from models.database import close_db, init_db
+from models.redis_client import close_redis, init_redis
+from routers import analyze_router, health_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Starting BackendTesis...")
+    await init_db()
+    await init_redis()
+    yield
+    logger.info("Shutting down BackendTesis...")
+    await close_db()
+    await close_redis()
+
+
+app = FastAPI(
+    title="BackendTesis API",
+    description="IDN Homograph Phishing Detector — USB Bogotá 2026",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(health_router.router)
+app.include_router(analyze_router.router, prefix="/api/v1", tags=["analyze"])
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

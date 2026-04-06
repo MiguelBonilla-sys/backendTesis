@@ -1,0 +1,21 @@
+[project]
+name = "backendtesis"
+version = "1.0.0"
+description = "IDN Homograph Phishing Detector — USB Bogotá 2026"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=. --cov-report=term-missing --cov-fail-under=90"
