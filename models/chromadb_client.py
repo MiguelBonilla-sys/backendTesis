@@ -1,4 +1,5 @@
 import chromadb
+from chromadb.api import ClientAPI
 
 from core.config import settings
 from core.constants import (
@@ -8,7 +9,7 @@ from core.constants import (
 )
 from core.logger import logger
 
-_client: chromadb.HttpClient | None = None
+_client: ClientAPI | None = None
 
 _COLLECTIONS = [
     COLLECTION_EMAIL_EMBEDDINGS,
@@ -17,7 +18,7 @@ _COLLECTIONS = [
 ]
 
 
-def get_chromadb_client() -> chromadb.HttpClient:
+def get_chromadb_client() -> ClientAPI:
     global _client
     if _client is None:
         _client = chromadb.HttpClient(

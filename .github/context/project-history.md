@@ -29,3 +29,9 @@ This means docs status and runtime status are not fully synchronized.
 - Added local rules, instructions, skills, and agent playbooks.
 - Added memory workflow files under .github/context.
 - Added project-memory skill to maintain history and next steps.
+
+### 2026-04-07
+
+- Executed runtime verification for current unit test suite in active .venv (Python 3.11.15).
+- Observed 3 functional unit test failures and coverage gate failure (51.66% vs target 90%).
+- Confirmed Phase-1 document status remains ahead of runtime validation; reconciliation is still required before marking Phase 1 fully closed.

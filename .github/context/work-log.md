@@ -255,3 +255,175 @@ Open risks:
 Next action:
 
 - Normalize requirements pins and add platform markers (Windows-only and macOS-compatible constraints) for uv/pip parity.
+
+## 2026-04-07 (snapshot sharing implementation)
+
+Branch: feat/phase-1-core-setup
+Goal: Implement snapshot-sharing baseline for team data exchange and prevent accidental commit of backups.
+
+Files added:
+
+- .github/context/data-management.md
+
+Files updated:
+
+- .gitignore
+- .github/context/next-steps.md
+
+Checks:
+
+- Verified .gitignore includes snapshot/backup exclusion patterns for PostgreSQL, Redis, ChromaDB, and LlamaStack artifacts.
+
+Decisions:
+
+- Keep sharing mode based on offline snapshots (not shared live volumes).
+- Store operational procedure in .github/context to keep team workflow close to execution logs.
+- Keep implementation scope to gitignore + manual snapshot guide (no docker-compose changes).
+
+Open risks:
+
+- Snapshot file names must follow the documented naming convention to be excluded consistently.
+- Restore commands assume local container names/volumes and may require per-machine adjustment.
+
+Next action:
+
+- Run the first cross-machine dry-run (export/import + checksum verification) with a teammate and capture findings.
+
+## 2026-04-07 (snapshot automation scripts)
+
+Branch: feat/phase-1-core-setup
+Goal: Automate snapshot export/import workflow for team data sharing.
+
+Files added:
+
+- scripts/snapshot-export.sh
+- scripts/snapshot-import.sh
+
+Files updated:
+
+- .github/context/data-management.md
+
+Checks:
+
+- bash -n scripts/snapshot-export.sh
+- bash -n scripts/snapshot-import.sh
+- bash ./scripts/snapshot-export.sh --help
+- bash ./scripts/snapshot-import.sh --help
+
+Decisions:
+
+- Keep scripts as the primary workflow and manual commands as fallback reference.
+- Keep destructive restore confirmation by default in import script; allow bypass with --force for CI/automation.
+- Keep container and volume names configurable via environment variables.
+
+Open risks:
+
+- Restore script assumes Docker resources exist locally; missing containers/volumes are skipped with warnings.
+
+Next action:
+
+- Execute a full dry-run with a teammate using the scripts and capture resource-name overrides in the guide.
+
+## 2026-04-07 (dependencies compose added)
+
+Branch: feat/phase-1-core-setup
+Goal: Add missing Docker Compose for data dependencies and align it with snapshot tooling.
+
+Files added:
+
+- docker-compose.deps.yml
+
+Files updated:
+
+- .github/context/data-management.md
+
+Checks:
+
+- docker compose -f docker-compose.deps.yml config
+
+Decisions:
+
+- Use compose project name `backendtesis-deps` to keep stable volume names.
+- Keep container names aligned with snapshot scripts defaults (`bt-postgres`, `bt-chroma`, `bt-redis`, `bt-llamastack`).
+- Map LlamaStack host port to `5000` to match current `.env.example` (`LLAMASTACK_URL=http://localhost:5000`).
+
+Open risks:
+
+- LlamaStack service depends on a reachable Ollama endpoint (`host.docker.internal:11434`).
+
+Next action:
+
+- Run `docker compose -f docker-compose.deps.yml up -d` and execute end-to-end snapshot export/import dry-run with teammate.
+
+## 2026-04-07 (services up + env alignment)
+
+Branch: feat/phase-1-core-setup
+Goal: Start dependency containers and align `.env.example` with the actual reachable LlamaStack endpoint.
+
+Files updated:
+
+- docker-compose.deps.yml
+- .env.example
+- .github/context/data-management.md
+
+Checks:
+
+- docker compose -f docker-compose.deps.yml up -d
+- docker compose -f docker-compose.deps.yml ps
+- curl http://localhost:5001/v1/health
+
+Decisions:
+
+- Changed host mapping for LlamaStack from `5000:8321` to `5001:8321` due local port 5000 conflict on macOS (`ControlCe`).
+- Updated `.env.example` to `LLAMASTACK_URL=http://localhost:5001` and guide validation endpoint accordingly.
+
+Open risks:
+
+- LlamaStack starts and health endpoint is reachable even when Ollama is unavailable; model inference will require Ollama (or another configured provider) to be reachable.
+
+Next action:
+
+- Run first teammate dry-run with snapshot scripts against the running compose stack and capture any per-machine override variables.
+
+## 2026-04-07 (phase-1 verification + unit tests)
+
+Branch: feat/phase-1-core-setup
+Goal: Verify whether Phase 1 is complete in runtime and execute existing tests using active .venv.
+
+Files updated:
+
+- models/chromadb_client.py
+- pytest.ini
+- .coveragerc
+
+Checks:
+
+- source .venv/bin/activate && pytest tests/unit -v
+- source .venv/bin/activate && pytest tests/unit -v -o addopts=''
+- source .venv/bin/activate && pytest tests/unit/test_config.py tests/unit/test_health.py tests/unit/test_security.py tests/unit/test_url_parser.py -v -o addopts=''
+
+Results:
+
+- Unit tests with default addopts: 43 collected, 40 passed, 3 failed.
+- Failing tests: test_fusion_agent::test_verdict_suspicious, test_idn_agent::test_safe_domain_low_score, test_url_parser::test_extract_domain_invalid_url.
+- Coverage gate failed: total 51.66% < required 90%.
+- Phase-1-focused subset: 32 collected, 31 passed, 1 failed (test_url_parser::test_extract_domain_invalid_url).
+
+Divergence note (docs vs runtime):
+
+- docs/PHASE-1-core-setup.md marks Phase 1 as DONE with all acceptance criteria passing.
+- Runtime behavior still has at least one failing Phase-1 test and health endpoint reports static OK without dependency checks.
+
+Decisions:
+
+- Treat runtime and tests as source of truth for completion status.
+- Keep docs status reconciliation as an explicit backlog item before declaring Phase 1 closed.
+
+Open risks:
+
+- Health endpoint can produce false-positive readiness signal when dependencies are down.
+- Project quality gate cannot pass while coverage remains far below target.
+
+Next action:
+
+- Fix remaining functional failures first, then increase targeted coverage for low-covered runtime modules.

@@ -2,6 +2,17 @@
 
 Ordered actionable backlog for the next sessions.
 
+1. Close Phase 1 verification gaps in runtime:
+
+- Fix invalid URL handling so extract_domain raises InvalidURLError for malformed inputs.
+- Update health/readiness checks to reflect real dependency connectivity and return degraded status when needed.
+- Re-run phase-1 test subset until all acceptance tests pass.
+
+1. Resolve current unit test regressions outside Phase 1:
+
+- Align Fusion suspicious-threshold expectation with constants/formula and tests.
+- Align IDN safe-domain baseline expectations with current scoring strategy or adjust algorithm.
+
 1. Standardize team daily start:
 
 - Use OS-aware start command.
@@ -25,6 +36,14 @@ Ordered actionable backlog for the next sessions.
 - Add platform markers for Windows-only packages (e.g., pywin32).
 - Reconcile Python-version constraints (llama-stack vs project Python target).
 - Align macOS x86_64 pins for onnxruntime/numba/shap so requirements.txt resolves end-to-end.
+
+1. Validate snapshot-sharing workflow with a teammate:
+
+- Start dependencies with `docker compose -f docker-compose.deps.yml up -d`.
+- Use `.env.example` local endpoint `LLAMASTACK_URL=http://localhost:5001` when running backend on host.
+- Execute one full dry-run using scripts/snapshot-export.sh and scripts/snapshot-import.sh.
+- Verify checksum validation and restore order across PostgreSQL, ChromaDB, Redis, and LlamaStack.
+- Capture per-machine adjustments (container/volume names) and update the guide with concrete examples.
 
 1. Strengthen pipeline tests where needed:
 
