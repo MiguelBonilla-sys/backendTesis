@@ -20,6 +20,12 @@ Ordered actionable backlog for the next sessions.
 - Compare each phase doc against current code behavior.
 - Update docs/PLAN.md and phase files to avoid drift.
 
+1. Normalize dependency compatibility for uv workflows:
+
+- Add platform markers for Windows-only packages (e.g., pywin32).
+- Reconcile Python-version constraints (llama-stack vs project Python target).
+- Align macOS x86_64 pins for onnxruntime/numba/shap so requirements.txt resolves end-to-end.
+
 1. Strengthen pipeline tests where needed:
 
 - Add focused tests for analyze route concurrency behavior.

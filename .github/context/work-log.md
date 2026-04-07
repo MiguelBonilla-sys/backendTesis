@@ -220,3 +220,38 @@ Open risks:
 Next action:
 
 - Add a cross-platform hook config file that invokes the OS-aware wrapper by default.
+
+## 2026-04-06 (uv + Python 3.11 venv regeneration)
+
+Branch: feat/phase-1-core-setup
+Goal: Regenerate .venv using uv with Python 3.11 and validate install path.
+
+Environment actions:
+
+- Installed uv and validated version (0.11.3).
+- Installed Python 3.11.15 with uv.
+- Recreated .venv using uv venv --python 3.11.
+
+Checks:
+
+- .venv/bin/python --version -> Python 3.11.15
+- uv pip list --python .venv/bin/python
+
+Dependency findings:
+
+- requirements.txt is unsatisfiable on macOS x86_64 + Python 3.11 as pinned.
+- llama-stack==0.7.0 requires Python >=3.12.
+- onnxruntime==1.24.4 has no matching wheel for macOS x86_64.
+- shap==0.51.0 conflicts with pinned numba==0.65.0 on Darwin x86_64.
+
+Decision:
+
+- Keep .venv on Python 3.11 with uv and install a functional core dependency set using uv for local development/testing while requirements pins are reconciled.
+
+Open risks:
+
+- Full reproducible install from requirements.txt remains blocked until version/platform markers are fixed.
+
+Next action:
+
+- Normalize requirements pins and add platform markers (Windows-only and macOS-compatible constraints) for uv/pip parity.
