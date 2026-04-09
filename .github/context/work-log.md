@@ -1,6 +1,85 @@
 # Work Log
 
+<!-- AUTO-SYNC:START -->
+## Auto Sync
+
+- Last sync (UTC): 2026-04-09T01:33:39.113363Z
+- Branch: feat/phase-1-core-setup
+- Dirty entries: 9
+- Dirty preview:
+  - .gitattributes
+  - .github/auto-memory/dirty-files
+  - .github/context/next-steps.md
+  - .github/context/project-context.md
+  - .github/context/project-history.md
+  - .github/context/work-log.md
+  - scripts/auto_memory_sync.py
+  - scripts/snapshot-export.sh
+  - scripts/snapshot-import.sh
+<!-- AUTO-SYNC:END -->
+
 Concise session log for continuity across agents and sessions.
+
+## 2026-04-08 (linux/macos shell compatibility)
+
+Branch: feat/phase-1-core-setup
+Goal: Ensure shell automation runs on Linux/macOS.
+
+Files updated:
+
+- .gitattributes
+- scripts/auto-memory-sync.sh
+- scripts/start-daily-workflow.sh
+- scripts/snapshot-export.sh
+- scripts/snapshot-import.sh
+
+Checks:
+
+- bash -n ./scripts/auto-memory-sync.sh
+- bash -n ./scripts/start-daily-workflow.sh
+- bash -n ./scripts/snapshot-export.sh
+- bash -n ./scripts/snapshot-import.sh
+- bash ./scripts/auto-memory-sync.sh
+
+Decisions:
+
+- Normalize all repository shell scripts to LF to avoid bash parse failures in Linux/macOS.
+- Add .gitattributes rule (`*.sh text eol=lf`) to prevent future CRLF regressions.
+
+Open risks:
+
+- Existing local clones may still keep CRLF until files are refreshed by Git or manually normalized.
+
+Next action:
+
+- Ask teammates to run `git add --renormalize .` once after pulling this change.
+
+## 2026-04-08 (shared context auto-sync)
+
+Branch: feat/phase-1-core-setup
+Goal: Keep shared context files refreshed on each auto-memory sync run.
+
+Files updated:
+
+- scripts/auto_memory_sync.py
+
+Checks:
+
+- pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\auto-memory-sync.ps1
+- python -m py_compile .\scripts\auto_memory_sync.py
+
+Decisions:
+
+- Auto-update .github/context/work-log.md, project-history.md, next-steps.md, and project-context.md through managed AUTO-SYNC markers.
+- Store dirty snapshot entries as repository-relative paths to avoid machine-specific absolute paths.
+
+Open risks:
+
+- Timestamp refresh can add frequent markdown diffs during active sessions.
+
+Next action:
+
+- If diff noise becomes high, add a config gate in .github/auto-memory/config.json to throttle metadata writes.
 
 ## 2026-04-06
 

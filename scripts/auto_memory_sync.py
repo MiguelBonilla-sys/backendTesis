@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import json
 import platform
 import subprocess
@@ -11,6 +12,15 @@ from pathlib import Path
 
 
 DEFAULT_CONFIG = {"triggerMode": "default"}
+AUTO_SYNC_START = "<!-- AUTO-SYNC:START -->"
+AUTO_SYNC_END = "<!-- AUTO-SYNC:END -->"
+SHARED_CONTEXT_REL_PATHS = (
+    ".github/context/work-log.md",
+    ".github/context/project-history.md",
+    ".github/context/next-steps.md",
+    ".github/context/project-context.md",
+)
+MAX_DIRTY_PREVIEW = 12
 
 
 def repo_root() -> Path:
@@ -68,16 +78,27 @@ def normalize_status_entry(line: str) -> str | None:
     return entry
 
 
+def to_repo_relative(root: Path, file_path: Path) -> str:
+    try:
+        return file_path.resolve().relative_to(root.resolve()).as_posix()
+    except Exception:
+        return str(file_path).replace("\\", "/")
+
+
 def expand_entry_to_files(root: Path, entry: str) -> list[str]:
     candidate = (root / entry).resolve()
 
     if candidate.exists():
         if candidate.is_dir():
-            return [str(path.resolve()) for path in candidate.rglob("*") if path.is_file()]
-        return [str(candidate)]
+            return [
+                to_repo_relative(root, path)
+                for path in candidate.rglob("*")
+                if path.is_file()
+            ]
+        return [to_repo_relative(root, candidate)]
 
-    # Keep unresolved absolute path for deleted files.
-    return [str(candidate)]
+    # Preserve the git entry for deleted/unresolved paths.
+    return [entry.replace("\\", "/")]
 
 
 def collect_dirty_files(root: Path) -> list[str]:
@@ -106,11 +127,104 @@ def write_dirty_snapshot(dirty_path: Path, dirty_files: list[str]) -> None:
     dirty_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+def get_current_branch(root: Path) -> str:
+    cmd = ["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"]
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        return "unknown"
+    branch = result.stdout.strip()
+    return branch or "unknown"
+
+
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds").replace(
+        "+00:00", "Z"
+    )
+
+
+def render_auto_sync_section(branch: str, dirty_files: list[str], synced_at: str) -> str:
+    preview = dirty_files[:MAX_DIRTY_PREVIEW]
+    lines = [
+        "## Auto Sync",
+        "",
+        f"- Last sync (UTC): {synced_at}",
+        f"- Branch: {branch}",
+        f"- Dirty entries: {len(dirty_files)}",
+        "- Dirty preview:",
+    ]
+
+    if preview:
+        lines.extend([f"  - {entry}" for entry in preview])
+    else:
+        lines.append("  - none")
+
+    remaining = len(dirty_files) - len(preview)
+    if remaining > 0:
+        lines.append(f"  - ... (+{remaining} more)")
+
+    return "\n".join(lines)
+
+
+def insert_managed_section_after_title(text: str, managed_section: str) -> str:
+    normalized = text.strip("\n")
+    if not normalized:
+        return f"{managed_section}\n"
+
+    lines = normalized.splitlines()
+    if lines[0].startswith("#"):
+        body = "\n".join(lines[1:]).lstrip("\n")
+        if body:
+            return f"{lines[0]}\n\n{managed_section}\n\n{body}\n"
+        return f"{lines[0]}\n\n{managed_section}\n"
+
+    return f"{managed_section}\n\n{normalized}\n"
+
+
+def upsert_auto_sync_section(file_path: Path, section_content: str) -> None:
+    managed_block = "\n".join([AUTO_SYNC_START, section_content, AUTO_SYNC_END])
+
+    if file_path.exists():
+        current_text = file_path.read_text(encoding="utf-8")
+    else:
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        current_text = ""
+
+    start_index = current_text.find(AUTO_SYNC_START)
+    end_index = current_text.find(AUTO_SYNC_END)
+
+    if 0 <= start_index < end_index:
+        before = current_text[:start_index].rstrip("\n")
+        after = current_text[end_index + len(AUTO_SYNC_END) :].lstrip("\n")
+        merged = f"{before}\n\n{managed_block}"
+        if after:
+            merged = f"{merged}\n\n{after}"
+        new_text = merged.rstrip("\n") + "\n"
+    else:
+        new_text = insert_managed_section_after_title(current_text, managed_block)
+
+    if new_text != current_text:
+        file_path.write_text(new_text, encoding="utf-8")
+
+
+def sync_shared_context(root: Path, branch: str, dirty_files: list[str]) -> None:
+    synced_at = utc_now_iso()
+    section = render_auto_sync_section(branch=branch, dirty_files=dirty_files, synced_at=synced_at)
+    for rel_path in SHARED_CONTEXT_REL_PATHS:
+        upsert_auto_sync_section(root / rel_path, section)
+
+
 def main() -> int:
     root = repo_root()
     config_path, dirty_path = ensure_auto_memory_paths(root)
     trigger_mode = read_trigger_mode(config_path)
+    branch = get_current_branch(root)
 
+    dirty_files = collect_dirty_files(root)
+    sync_shared_context(root, branch, dirty_files)
+    dirty_files = collect_dirty_files(root)
+    write_dirty_snapshot(dirty_path, dirty_files)
+    dirty_files = collect_dirty_files(root)
+    sync_shared_context(root, branch, dirty_files)
     dirty_files = collect_dirty_files(root)
     write_dirty_snapshot(dirty_path, dirty_files)
 

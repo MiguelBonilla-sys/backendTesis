@@ -157,17 +157,19 @@ if [[ ! -d "$IMPORT_DIR" ]]; then
   exit 1
 fi
 
-echo "[info] Import directory: ${IMPORT_DIR}"
+IMPORT_DIR_ABS="$(cd "$IMPORT_DIR" && pwd)"
 
-checksum_file="${IMPORT_DIR}/checksums_${TS}.sha256"
+echo "[info] Import directory: ${IMPORT_DIR_ABS}"
+
+checksum_file="${IMPORT_DIR_ABS}/checksums_${TS}.sha256"
 if [[ ! -f "$checksum_file" ]]; then
-  checksum_file="$(find "$IMPORT_DIR" -maxdepth 1 -name 'checksums_*.sha256' | head -n1 || true)"
+  checksum_file="$(find "$IMPORT_DIR_ABS" -maxdepth 1 -name 'checksums_*.sha256' | head -n1 || true)"
 fi
 
 if [[ -n "$checksum_file" && -f "$checksum_file" ]]; then
   echo "[verify] Checksums from $(basename "$checksum_file")"
   (
-    cd "$IMPORT_DIR"
+    cd "$IMPORT_DIR_ABS"
     if [[ "$VERIFY_CMD" == "sha256sum" ]]; then
       sha256sum -c "$(basename "$checksum_file")"
     else
@@ -180,9 +182,9 @@ fi
 
 confirm_destructive
 
-postgres_file="${IMPORT_DIR}/postgres_${TS}.dump"
+postgres_file="${IMPORT_DIR_ABS}/postgres_${TS}.dump"
 if [[ ! -f "$postgres_file" ]]; then
-  postgres_file="$(find "$IMPORT_DIR" -maxdepth 1 -name 'postgres_*.dump' | head -n1 || true)"
+  postgres_file="$(find "$IMPORT_DIR_ABS" -maxdepth 1 -name 'postgres_*.dump' | head -n1 || true)"
 fi
 
 if [[ -n "$postgres_file" && -f "$postgres_file" ]]; then
@@ -198,9 +200,9 @@ else
   echo "[warn] PostgreSQL dump not found. Skipping."
 fi
 
-redis_file="${IMPORT_DIR}/redis_${TS}.rdb"
+redis_file="${IMPORT_DIR_ABS}/redis_${TS}.rdb"
 if [[ ! -f "$redis_file" ]]; then
-  redis_file="$(find "$IMPORT_DIR" -maxdepth 1 -name 'redis_*.rdb' | head -n1 || true)"
+  redis_file="$(find "$IMPORT_DIR_ABS" -maxdepth 1 -name 'redis_*.rdb' | head -n1 || true)"
 fi
 
 if [[ -n "$redis_file" && -f "$redis_file" ]]; then
@@ -215,9 +217,9 @@ else
   echo "[warn] Redis dump not found. Skipping."
 fi
 
-chroma_file="${IMPORT_DIR}/chroma_${TS}.tar.gz"
+chroma_file="${IMPORT_DIR_ABS}/chroma_${TS}.tar.gz"
 if [[ ! -f "$chroma_file" ]]; then
-  chroma_file="$(find "$IMPORT_DIR" -maxdepth 1 -name 'chroma_*.tar.gz' | head -n1 || true)"
+  chroma_file="$(find "$IMPORT_DIR_ABS" -maxdepth 1 -name 'chroma_*.tar.gz' | head -n1 || true)"
 fi
 
 if [[ -n "$chroma_file" && -f "$chroma_file" ]]; then
@@ -228,7 +230,7 @@ if [[ -n "$chroma_file" && -f "$chroma_file" ]]; then
     fi
     docker run --rm \
       -v "${CHROMA_VOLUME}:/to" \
-      -v "$(pwd)/${IMPORT_DIR}:/from" \
+      -v "${IMPORT_DIR_ABS}:/from" \
       alpine sh -c "find /to -mindepth 1 -delete && cd /to && tar xzf /from/$(basename "$chroma_file")"
     if container_exists "$CHROMA_CONTAINER"; then
       docker start "$CHROMA_CONTAINER" >/dev/null
@@ -240,9 +242,9 @@ else
   echo "[warn] Chroma archive not found. Skipping."
 fi
 
-llama_file="${IMPORT_DIR}/llamastack_${TS}.tar.gz"
+llama_file="${IMPORT_DIR_ABS}/llamastack_${TS}.tar.gz"
 if [[ ! -f "$llama_file" ]]; then
-  llama_file="$(find "$IMPORT_DIR" -maxdepth 1 -name 'llamastack_*.tar.gz' | head -n1 || true)"
+  llama_file="$(find "$IMPORT_DIR_ABS" -maxdepth 1 -name 'llamastack_*.tar.gz' | head -n1 || true)"
 fi
 
 if [[ -n "$llama_file" && -f "$llama_file" ]]; then
@@ -253,7 +255,7 @@ if [[ -n "$llama_file" && -f "$llama_file" ]]; then
     fi
     docker run --rm \
       -v "${LLAMA_VOLUME}:/to" \
-      -v "$(pwd)/${IMPORT_DIR}:/from" \
+      -v "${IMPORT_DIR_ABS}:/from" \
       alpine sh -c "find /to -mindepth 1 -delete && cd /to && tar xzf /from/$(basename "$llama_file")"
     if container_exists "$LLAMA_CONTAINER"; then
       docker start "$LLAMA_CONTAINER" >/dev/null
@@ -265,4 +267,4 @@ else
   echo "[warn] LlamaStack archive not found. Skipping."
 fi
 
-echo "[ok] Import completed from ${IMPORT_DIR}"
+echo "[ok] Import completed from ${IMPORT_DIR_ABS}"

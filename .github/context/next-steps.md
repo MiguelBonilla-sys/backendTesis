@@ -1,5 +1,23 @@
 # Next Steps
 
+<!-- AUTO-SYNC:START -->
+## Auto Sync
+
+- Last sync (UTC): 2026-04-09T01:33:39.113363Z
+- Branch: feat/phase-1-core-setup
+- Dirty entries: 9
+- Dirty preview:
+  - .gitattributes
+  - .github/auto-memory/dirty-files
+  - .github/context/next-steps.md
+  - .github/context/project-context.md
+  - .github/context/project-history.md
+  - .github/context/work-log.md
+  - scripts/auto_memory_sync.py
+  - scripts/snapshot-export.sh
+  - scripts/snapshot-import.sh
+<!-- AUTO-SYNC:END -->
+
 Ordered actionable backlog for the next sessions.
 
 1. Close Phase 1 verification gaps in runtime:
@@ -19,6 +37,7 @@ Ordered actionable backlog for the next sessions.
 	- macOS/Linux: bash ./scripts/start-daily-workflow.sh
 	- Windows: pwsh -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-daily-workflow.ps1
 - Confirm everyone follows the same reading order before coding.
+- Keep shell scripts with LF line endings (`*.sh text eol=lf`) to preserve Linux/macOS bash compatibility.
 
 1. Enforce per-message memory sync in chat:
 
@@ -62,6 +81,8 @@ Ordered actionable backlog for the next sessions.
 
 1. Keep memory cycle active:
 
-- Update .github/context/work-log.md after each meaningful change.
+- Keep scripts/auto-memory-sync.ps1 as the mandatory first command per user message.
+- Let AUTO-SYNC metadata refresh .github/context/work-log.md, project-history.md, next-steps.md, and project-context.md on each run.
+- Update narrative entries in .github/context/work-log.md after each meaningful change.
 - Refresh this file after each session.
 - Keep .github/auto-memory/dirty-files updated via OS-aware auto-memory sync.

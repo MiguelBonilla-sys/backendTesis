@@ -1,0 +1,2 @@
+# Keep shell scripts Unix-compatible across platforms
+*.sh text eol=lf

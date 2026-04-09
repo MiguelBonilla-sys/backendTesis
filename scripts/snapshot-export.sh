@@ -90,7 +90,9 @@ PG_USER="${PG_USER:-postgres}"
 PG_DB="${PG_DB:-phishing_detector}"
 
 TS="${TIMESTAMP:-$(date +%Y%m%d_%H%M%S)}"
-SNAP_DIR="${BACKUP_ROOT}/${TS}"
+mkdir -p "$BACKUP_ROOT"
+BACKUP_ROOT_ABS="$(cd "$BACKUP_ROOT" && pwd)"
+SNAP_DIR="${BACKUP_ROOT_ABS}/${TS}"
 mkdir -p "$SNAP_DIR"
 
 exported_count=0
@@ -119,7 +121,7 @@ if volume_exists "$CHROMA_VOLUME"; then
   echo "[export] Chroma volume ${CHROMA_VOLUME} -> ${chroma_file}"
   docker run --rm \
     -v "${CHROMA_VOLUME}:/from" \
-    -v "$(pwd)/${SNAP_DIR}:/to" \
+    -v "${SNAP_DIR}:/to" \
     alpine sh -c "cd /from && tar czf /to/chroma_${TS}.tar.gz ."
   exported_count=$((exported_count + 1))
 else
@@ -131,7 +133,7 @@ if volume_exists "$LLAMA_VOLUME"; then
   echo "[export] LlamaStack volume ${LLAMA_VOLUME} -> ${llama_file}"
   docker run --rm \
     -v "${LLAMA_VOLUME}:/from" \
-    -v "$(pwd)/${SNAP_DIR}:/to" \
+    -v "${SNAP_DIR}:/to" \
     alpine sh -c "cd /from && tar czf /to/llamastack_${TS}.tar.gz ."
   exported_count=$((exported_count + 1))
 else
@@ -157,8 +159,8 @@ checksum_file="${SNAP_DIR}/checksums_${TS}.sha256"
   done
 )
 
-bundle_file="${BACKUP_ROOT}/snapshot_${TS}.tar.gz"
-tar czf "$bundle_file" -C "$BACKUP_ROOT" "$TS"
+bundle_file="${BACKUP_ROOT_ABS}/snapshot_${TS}.tar.gz"
+tar czf "$bundle_file" -C "$BACKUP_ROOT_ABS" "$TS"
 
 echo "[ok] Snapshot folder: ${SNAP_DIR}"
 echo "[ok] Snapshot bundle: ${bundle_file}"
