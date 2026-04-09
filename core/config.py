@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # IDN Agent data files
+    CONFUSABLES_PATH: str = "data/confusables.txt"
+    DOMAIN_INDEX_PATH: str = "data/top1m.txt"
+
 
 @lru_cache
 def get_settings() -> Settings:

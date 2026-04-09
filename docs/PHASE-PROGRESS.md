@@ -6,17 +6,17 @@
 ## Snapshot Actual
 
 - Fecha de corte: 2026-04-09
-- Rama: feat/phase-1-core-setup
-- Ultima validacion: `pytest -q`
-- Resultado: 154 passed, 0 failed
-- Cobertura total: 94.45% (gate >= 90% cumplido)
+- Rama: feat/phase-2-idn-agent
+- Ultima validacion: `.venv/Scripts/python -m pytest -q`
+- Resultado: 234 passed, 0 failed
+- Cobertura total: 94.72% (gate >= 90% cumplido)
 
 ## Estado Global por Fase
 
 | Phase | Sprint | Estado real | Resumen |
 | --- | --- | --- | --- |
 | Phase 1 - Core Setup | S0 | DONE | Base del backend operativa: config, seguridad, modelos, middleware y health checks en funcionamiento. |
-| Phase 2 - IDN Agent | S1 | IN PROGRESS | Agente IDN implementado y probado, pero sin todo el alcance documental de confusables/BK-tree/TR39 avanzado. |
+| Phase 2 - IDN Agent | S1 | DONE | confusables_loader.py + bktree.py implementados; 12 dominios IDN phishing parametrizados; 234 tests, 94.72% cobertura. |
 | Phase 3 - LLM Agent + RAG | S2 | IN PROGRESS | LLM agent operativo con pruebas completas; maduracion pendiente en alcance de RAG segun documento de fase. |
 | Phase 4 - Fusion + TI + XAI | S3 | IN PROGRESS | Fusion y TI runtime implementados con explicabilidad en respuesta; pendientes de alcance completo segun plan (persistencia/analisis repo en fase). |
 | Phase 5 - API Layer | S3-S4 | IN PROGRESS | Endpoint `/api/v1/analyze` operativo y probado; capa incidents/dashboard aun parcial. |
@@ -45,19 +45,24 @@
 
 ### Phase 2 - IDN Agent
 
-**Estado:** IN PROGRESS
+**Estado:** DONE
 
 **Completado**
-- Agente `IDNAgent` implementado (`agents/idn_agent.py`).
-- Calculo de score local y flujo de analisis operando.
-- Cobertura de pruebas unitarias para casos clave.
+- Agente `IDNAgent` integrado con catalog TR#39 y BK-tree (`agents/idn_agent.py`).
+- `agents/confusables_loader.py` — parser TR#39 con fallback heuristico.
+- `agents/bktree.py` — BK-tree con `levenshtein_confusable` (costo 0 para pares confusables).
+- `init_catalog()` modulo-level singleton para startup.
+- Suite de pruebas completa: 12 dominios IDN phishing + 5 limpios parametrizados.
+- Cobertura Phase 2: 94.72% total suite (gate >= 90% cumplido).
 
 **Evidencia tecnica**
-- Codigo: `agents/idn_agent.py`.
-- Pruebas: `tests/unit/test_idn_agent.py`.
+- Codigo: `agents/idn_agent.py`, `agents/confusables_loader.py`, `agents/bktree.py`.
+- Pruebas: `tests/unit/test_idn_agent.py` (28 tests), `tests/unit/test_confusables_loader.py` (24 tests), `tests/unit/test_bktree.py` (20 tests).
+- Fixtures: `tests/fixtures/confusables_minimal.txt`, `tests/fixtures/domains/idn_phishing.txt`, `tests/fixtures/domains/legitimate.txt`.
+- Resultado: 234 passed, cobertura 94.72%.
 
 **Pendiente**
-- Completar alcance documental de fase: parser confusables dedicado, BK-tree, corpus ampliado TR39, validaciones avanzadas de similitud visual.
+- Descargar `data/confusables.txt` completo desde unicode.org (para produccion — tests usan fixture minimal).
 
 ---
 

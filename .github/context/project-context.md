@@ -3,23 +3,23 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T03:10:13.654684Z
-- Branch: feat/phase-1-core-setup
-- Dirty entries: 20
+- Last sync (UTC): 2026-04-09T15:48:10.222078Z
+- Branch: feat/phase-2-idn-agent
+- Dirty entries: 21
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - core/security.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_auth.py
-  - tests/unit/test_cache_manager.py
-  - tests/unit/test_fusion_agent.py
-  - tests/unit/test_idn_agent.py
-  - tests/unit/test_llm_agent.py
-  - ... (+8 more)
+  - agents/bktree.py
+  - agents/confusables_loader.py
+  - agents/idn_agent.py
+  - core/config.py
+  - data/confusables.txt
+  - data/top1m.txt
+  - data_pipeline/top1m_loader.py
+  - ... (+9 more)
 <!-- AUTO-SYNC:END -->
 
 ## Objective

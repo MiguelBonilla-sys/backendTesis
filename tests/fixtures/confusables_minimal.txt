@@ -1,0 +1,20 @@
+# Minimal confusables subset for unit testing.
+# NOT the full Unicode TR#39 catalog — do not use in production.
+# Production file: download from https://www.unicode.org/Public/security/latest/confusables.txt
+#
+# Format: <source_codepoint_hex> ; <target_codepoint_hex> ; <type> # comment
+#
+# Cyrillic → Latin lookalikes
+0430 ;	0061 ;	SA	# ( а ) CYRILLIC SMALL LETTER A → ( a ) LATIN SMALL LETTER A
+0435 ;	0065 ;	SA	# ( е ) CYRILLIC SMALL LETTER IE → ( e ) LATIN SMALL LETTER E
+043E ;	006F ;	SA	# ( о ) CYRILLIC SMALL LETTER O → ( o ) LATIN SMALL LETTER O
+0440 ;	0070 ;	SA	# ( р ) CYRILLIC SMALL LETTER ER → ( p ) LATIN SMALL LETTER P
+0441 ;	0063 ;	SA	# ( с ) CYRILLIC SMALL LETTER ES → ( c ) LATIN SMALL LETTER C
+0445 ;	0078 ;	SA	# ( х ) CYRILLIC SMALL LETTER HA → ( x ) LATIN SMALL LETTER X
+0456 ;	0069 ;	SA	# ( і ) CYRILLIC SMALL LETTER BYELORUSSIAN-UKRAINIAN I → ( i ) LATIN SMALL LETTER I
+0443 ;	0079 ;	SA	# ( у ) CYRILLIC SMALL LETTER U → ( y ) LATIN SMALL LETTER Y
+#
+# Greek → Latin lookalikes
+03B1 ;	0061 ;	SA	# ( α ) GREEK SMALL LETTER ALPHA → ( a ) LATIN SMALL LETTER A
+03BF ;	006F ;	SA	# ( ο ) GREEK SMALL LETTER OMICRON → ( o ) LATIN SMALL LETTER O
+03C1 ;	0070 ;	SA	# ( ρ ) GREEK SMALL LETTER RHO → ( p ) LATIN SMALL LETTER P

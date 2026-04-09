@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from agents.idn_agent import init_catalog, init_top1m
 from core.config import settings
 from core.logger import logger
+from data_pipeline.top1m_loader import load_top1m
 from middleware.error_handler import ErrorHandlerMiddleware
 from models.chromadb_client import ensure_collections
 from models.database import close_db, init_db
@@ -37,6 +39,9 @@ async def lifespan(app: FastAPI):
         ensure_collections()
     except Exception as exc:
         logger.warning(f"ChromaDB not available at startup: {exc}")
+    init_catalog(settings.CONFUSABLES_PATH)
+    top1m = load_top1m(settings.DOMAIN_INDEX_PATH, limit=1000)
+    init_top1m(top1m)
     yield
     logger.info("Shutting down BackendTesis...")
     await close_db()

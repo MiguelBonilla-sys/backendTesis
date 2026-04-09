@@ -3,26 +3,61 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T03:10:13.654684Z
-- Branch: feat/phase-1-core-setup
-- Dirty entries: 20
+- Last sync (UTC): 2026-04-09T15:48:10.222078Z
+- Branch: feat/phase-2-idn-agent
+- Dirty entries: 21
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - core/security.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_auth.py
-  - tests/unit/test_cache_manager.py
-  - tests/unit/test_fusion_agent.py
-  - tests/unit/test_idn_agent.py
-  - tests/unit/test_llm_agent.py
-  - ... (+8 more)
+  - agents/bktree.py
+  - agents/confusables_loader.py
+  - agents/idn_agent.py
+  - core/config.py
+  - data/confusables.txt
+  - data/top1m.txt
+  - data_pipeline/top1m_loader.py
+  - ... (+9 more)
 <!-- AUTO-SYNC:END -->
 
 Concise session log for continuity across agents and sessions.
+
+## 2026-04-09 (phase 2 docs reconciliation)
+
+Branch: feat/phase-2-idn-agent
+Goal: Align `docs/PHASE-2-idn-agent.md` with real runtime implementation and executed tests.
+
+Files updated:
+
+- docs/PHASE-2-idn-agent.md
+
+Checks:
+
+- .\\.venv\\Scripts\\python -m pytest tests/unit/test_idn_agent.py tests/unit/test_confusables_loader.py tests/unit/test_bktree.py --cov-reset --cov=agents.idn_agent --cov=agents.confusables_loader --cov=agents.bktree --cov-fail-under=90 -q
+- .\\.venv\\Scripts\\python -m pytest tests/unit/test_cache_manager.py tests/unit/test_threat_intel.py --no-cov -q
+- .\\.venv\\Scripts\\python -m pytest tests/unit/test_idn_agent.py tests/unit/test_confusables_loader.py tests/unit/test_bktree.py tests/unit/test_cache_manager.py tests/unit/test_threat_intel.py --no-cov -q
+- .\\.venv\\Scripts\\python -m bandit -r agents/ --severity-level medium
+
+Outcome:
+
+- Phase 2 docs no longer describe `confusables_loader.py` / `bktree.py` as pending.
+- Phase 2 evidence section now reflects actual results: 113 passed (Phase 2 related batch), and 92.89% coverage for (`idn_agent`, `confusables_loader`, `bktree`).
+- Security verification completed for Phase 2 scope: bandit reports no Medium/High issues in `agents/`.
+
+Decisions:
+
+- Treat code + executed tests as runtime source of truth when phase docs drift.
+- Keep security status in docs tied to explicit command evidence in work-log.
+
+Open risks:
+
+- Other planning artifacts (`docs/PLAN.md` and remaining phase docs) still contain stale TODO states versus runtime.
+
+Next action:
+
+- Continue reconciliation for `docs/PLAN.md` and remaining `docs/PHASE-*.md` files.
 
 ## 2026-04-09 (phase tracker document)
 

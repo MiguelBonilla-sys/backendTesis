@@ -1,0 +1,52 @@
+# IDN Homograph Phishing Domain Corpus — test fixture
+# Each line: domain (Unicode form) — NO protocol prefix
+# Used for parametrized tests in test_idn_agent.py
+# All domains contain confusable characters from Cyrillic, Greek, or Armenian scripts
+
+# ── Cyrillic lookalikes ────────────────────────────────────────────────────────
+# "paypal" variants — Cyrillic а (U+0430)
+pаypal.com
+pаypаl.com
+p\u0430yp\u0430l.com
+
+# "apple" variants
+аpple.com
+\u0430pple.com
+
+# "microsoft" variants — Cyrillic о (U+043E), с (U+0441)
+micrоsоft.com
+micrоsoft.com
+
+# "google" variants — Cyrillic о (U+043E)
+gооgle.com
+gоogle.com
+
+# "amazon" variants — Cyrillic а (U+0430), о (U+043E)
+аmаzon.com
+аmazоn.com
+
+# "facebook" variants — Cyrillic а, с, е, о
+fасеbook.com
+
+# "twitter" variants — Cyrillic і (U+0456)
+twіtter.com
+
+# "instagram" variants — Cyrillic а (U+0430), і (U+0456)
+іnstаgram.com
+
+# "linkedin" variants — Cyrillic е (U+0435), і (U+0456)
+linkedіn.com
+linkеdin.com
+
+# "youtube" variants — Cyrillic о (U+043E), у (U+0443)
+yоutube.com
+
+# ── Greek lookalikes ───────────────────────────────────────────────────────────
+# "google" — Greek ο (U+03BF)
+gοοgle.com
+
+# "apple" — Greek α (U+03B1)
+αpple.com
+
+# "paypal" — Greek α (U+03B1)
+pαypal.com
