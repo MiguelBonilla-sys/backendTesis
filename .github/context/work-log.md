@@ -3,19 +3,17 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T01:33:39.113363Z
+- Last sync (UTC): 2026-04-09T02:05:35.795344Z
 - Branch: feat/phase-1-core-setup
-- Dirty entries: 9
+- Dirty entries: 7
 - Dirty preview:
-  - .gitattributes
+  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - scripts/auto_memory_sync.py
-  - scripts/snapshot-export.sh
-  - scripts/snapshot-import.sh
+  - docker-compose.deps.yml
 <!-- AUTO-SYNC:END -->
 
 Concise session log for continuity across agents and sessions.
@@ -506,3 +504,64 @@ Open risks:
 Next action:
 
 - Fix remaining functional failures first, then increase targeted coverage for low-covered runtime modules.
+
+## 2026-04-08 (compose update: ollama in-stack + llamastack integration)
+
+Branch: feat/phase-1-core-setup
+Goal: Make dependency stack self-contained by adding Ollama to Compose and connecting LlamaStack through the internal Docker network.
+
+Files updated:
+
+- docker-compose.deps.yml
+- .env.example
+
+Checks:
+
+- docker compose -f docker-compose.deps.yml up -d
+- docker compose -f docker-compose.deps.yml ps
+- curl http://localhost:11434/api/tags
+- curl http://localhost:11434/v1/models
+- curl http://localhost:5001/v1/models
+- docker logs bt-llamastack (filtered)
+
+Decisions:
+
+- Added `ollama` service to `docker-compose.deps.yml` with persisted volume and healthcheck.
+- Changed LlamaStack provider URL from host bridge (`host.docker.internal`) to internal service DNS (`http://ollama:11434/v1`).
+- Kept host endpoint `LLAMASTACK_URL=http://localhost:5001` aligned with local development.
+
+Open risks:
+
+- Current LlamaStack model IDs are provider-scoped (e.g., `ollama/Llama-3.1-8B-Instruct-GGUF`), while legacy unscoped model names may return `ModelNotFoundError`.
+
+Next action:
+
+- Decide whether to normalize model ID in `.env`/config (`ollama/...`) or add compatibility fallback in `agents/llm_agent.py` for legacy model names.
+
+## 2026-04-08 (llamastack model id normalized in runtime config)
+
+Branch: feat/phase-1-core-setup
+Goal: Update active runtime configuration so backend uses the provider-scoped model id accepted by current LlamaStack + Ollama setup.
+
+Files updated:
+
+- .env
+- core/config.py
+
+Checks:
+
+- python -c "from core.config import settings; print(settings.LLAMASTACK_URL, settings.LLAMASTACK_MODEL)"
+- POST http://localhost:5001/v1/chat/completions with model `ollama/Llama-3.1-8B-Instruct-GGUF` (HTTP 200)
+
+Decisions:
+
+- Keep `LLAMASTACK_URL=http://localhost:5001`.
+- Set canonical runtime model id to `ollama/Llama-3.1-8B-Instruct-GGUF` in both `.env` and defaults in `core/config.py`.
+
+Open risks:
+
+- `.env.example` still uses the legacy unscoped model id and may need alignment to avoid onboarding confusion.
+
+Next action:
+
+- Align `.env.example` and add one focused test for model id normalization/fallback behavior in the LLM path.

@@ -3,19 +3,17 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T01:33:39.113363Z
+- Last sync (UTC): 2026-04-09T02:05:35.795344Z
 - Branch: feat/phase-1-core-setup
-- Dirty entries: 9
+- Dirty entries: 7
 - Dirty preview:
-  - .gitattributes
+  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - scripts/auto_memory_sync.py
-  - scripts/snapshot-export.sh
-  - scripts/snapshot-import.sh
+  - docker-compose.deps.yml
 <!-- AUTO-SYNC:END -->
 
 This file tracks milestone-level history and phase status.
