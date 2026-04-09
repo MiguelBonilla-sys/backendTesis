@@ -3,17 +3,23 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T02:05:35.795344Z
+- Last sync (UTC): 2026-04-09T03:10:13.654684Z
 - Branch: feat/phase-1-core-setup
-- Dirty entries: 7
+- Dirty entries: 20
 - Dirty preview:
-  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - docker-compose.deps.yml
+  - core/security.py
+  - tests/unit/test_analyze_router.py
+  - tests/unit/test_auth.py
+  - tests/unit/test_cache_manager.py
+  - tests/unit/test_fusion_agent.py
+  - tests/unit/test_idn_agent.py
+  - tests/unit/test_llm_agent.py
+  - ... (+8 more)
 <!-- AUTO-SYNC:END -->
 
 This file tracks milestone-level history and phase status.
@@ -61,3 +67,13 @@ This means docs status and runtime status are not fully synchronized.
   - .github/context/next-steps.md
   - .github/context/project-context.md
 - Dirty snapshot output switched to repository-relative paths for cross-machine consistency.
+
+### 2026-04-09
+
+- Fixed all current functional unit-test regressions in active branch:
+  - URL parser now raises InvalidURLError for malformed/non-string inputs.
+  - IDN and Fusion unit tests were aligned with runtime formulas/constants.
+  - Added range assertion for Fusion suspicious bucket and invalid-type parser test.
+- Coverage expansion completed with additional unit suites (auth, cache, TI, middleware, router, ORM, schemas, clients, LLM).
+- Verified current runtime quality gate with `pytest -q`: 154 passed, coverage 94.45% (target 90% reached).
+- Added `docs/PHASE-PROGRESS.md` as a living tracker for real phase execution status.

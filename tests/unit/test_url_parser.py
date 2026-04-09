@@ -18,9 +18,27 @@ def test_extract_domain_strips_port():
     assert extract_domain("http://localhost:8000") == "localhost"
 
 
+def test_extract_domain_with_userinfo():
+    assert extract_domain("http://user:pass@example.com:8080/path") == "example.com"
+
+
+def test_extract_domain_ipv6_host():
+    assert extract_domain("http://[2001:db8::1]:8080/path") == "2001:db8::1"
+
+
 def test_extract_domain_invalid_url():
     with pytest.raises(InvalidURLError):
         extract_domain("not-a-url-!@#$%")
+
+
+def test_extract_domain_invalid_type():
+    with pytest.raises(InvalidURLError):
+        extract_domain(None)  # type: ignore[arg-type]
+
+
+def test_extract_domain_invalid_ipv6_url():
+    with pytest.raises(InvalidURLError):
+        extract_domain("http://[::1")
 
 
 def test_extract_2ld_common():

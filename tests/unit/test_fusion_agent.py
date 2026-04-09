@@ -34,11 +34,12 @@ async def test_verdict_safe(agent: FusionAgent):
 @pytest.mark.asyncio
 async def test_verdict_suspicious(agent: FusionAgent):
     result = await agent.analyze(
-        s_idn_local=0.5,
+        s_idn_local=0.7,
         s_llm=0.5,
         ti_scores={"virustotal": 0.4, "urlscan": 0.3, "google_safe_browsing": 0.0},
     )
     assert result["verdict"] == VERDICT_SUSPICIOUS
+    assert 0.50 <= result["s_risk"] < 0.70
 
 
 @pytest.mark.asyncio

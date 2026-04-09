@@ -5,11 +5,18 @@ from core.exceptions import InvalidURLError
 
 def extract_domain(url: str) -> str:
     """Extract full hostname from URL (no port, lowercase)."""
+    if not isinstance(url, str):
+        raise InvalidURLError(f"Cannot extract domain from: {url!r}")
+
     try:
         parsed = urlparse(url.strip())
-        netloc = parsed.netloc or parsed.path
-        return netloc.split(":")[0].lower()
-    except Exception as exc:
+        if parsed.scheme not in ("http", "https"):
+            raise InvalidURLError(f"Cannot extract domain from: {url!r}")
+        hostname = parsed.hostname
+        if not hostname:
+            raise InvalidURLError(f"Cannot extract domain from: {url!r}")
+        return hostname.lower()
+    except ValueError as exc:
         raise InvalidURLError(f"Cannot extract domain from: {url!r}") from exc
 
 

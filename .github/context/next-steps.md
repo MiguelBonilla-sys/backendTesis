@@ -3,17 +3,23 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T02:05:35.795344Z
+- Last sync (UTC): 2026-04-09T03:10:13.654684Z
 - Branch: feat/phase-1-core-setup
-- Dirty entries: 7
+- Dirty entries: 20
 - Dirty preview:
-  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - docker-compose.deps.yml
+  - core/security.py
+  - tests/unit/test_analyze_router.py
+  - tests/unit/test_auth.py
+  - tests/unit/test_cache_manager.py
+  - tests/unit/test_fusion_agent.py
+  - tests/unit/test_idn_agent.py
+  - tests/unit/test_llm_agent.py
+  - ... (+8 more)
 <!-- AUTO-SYNC:END -->
 
 Ordered actionable backlog for the next sessions.
@@ -26,16 +32,21 @@ Ordered actionable backlog for the next sessions.
 - Pending: align `.env.example` to avoid `ModelNotFoundError` during onboarding.
 - Add/adjust one focused unit test for model ID normalization behavior in the LLM agent/config layer.
 
-1. Close Phase 1 verification gaps in runtime:
+1. Complete pending Phase 1 runtime verification:
 
-- Fix invalid URL handling so extract_domain raises InvalidURLError for malformed inputs.
 - Update health/readiness checks to reflect real dependency connectivity and return degraded status when needed.
-- Re-run phase-1 test subset until all acceptance tests pass.
+- Re-run Phase 1 acceptance subset after health changes.
 
-1. Resolve current unit test regressions outside Phase 1:
+1. Sustain coverage quality after hitting target:
 
-- Align Fusion suspicious-threshold expectation with constants/formula and tests.
-- Align IDN safe-domain baseline expectations with current scoring strategy or adjust algorithm.
+- Keep coverage >= 90% on every meaningful change (`pytest -q` / `pytest -v`).
+- Add regression tests for any new route, agent behavior, or schema contract before merging.
+- Keep warning debt visible (HTTP 422 deprecation) and schedule cleanup.
+
+1. Keep phase tracker synchronized:
+
+- Update `docs/PHASE-PROGRESS.md` after each sprint increment.
+- Reconcile `docs/PLAN.md` and `docs/PHASE-*.md` with tracker state to reduce documentation drift.
 
 1. Standardize team daily start:
 

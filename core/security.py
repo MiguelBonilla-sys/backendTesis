@@ -22,9 +22,19 @@ def sanitize_url(url: str) -> str:
 
 def extract_domain(url: str) -> str:
     """Extract full domain (no port) from a URL."""
-    parsed = urlparse(url.strip())
-    netloc = parsed.netloc or parsed.path
-    return netloc.split(":")[0].lower()
+    if not isinstance(url, str):
+        raise InvalidURLError(f"Cannot extract domain from: {url!r}")
+
+    try:
+        parsed = urlparse(url.strip())
+        if parsed.scheme not in ("http", "https"):
+            raise InvalidURLError(f"Forbidden URL scheme: {parsed.scheme!r}")
+        hostname = parsed.hostname
+        if not hostname:
+            raise InvalidURLError(f"URL has no host: {url!r}")
+        return hostname.lower()
+    except ValueError as exc:
+        raise InvalidURLError(f"Cannot extract domain from: {url!r}") from exc
 
 
 def extract_2ld(domain: str) -> str:

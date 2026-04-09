@@ -3,17 +3,23 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T02:05:35.795344Z
+- Last sync (UTC): 2026-04-09T03:10:13.654684Z
 - Branch: feat/phase-1-core-setup
-- Dirty entries: 7
+- Dirty entries: 20
 - Dirty preview:
-  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - docker-compose.deps.yml
+  - core/security.py
+  - tests/unit/test_analyze_router.py
+  - tests/unit/test_auth.py
+  - tests/unit/test_cache_manager.py
+  - tests/unit/test_fusion_agent.py
+  - tests/unit/test_idn_agent.py
+  - tests/unit/test_llm_agent.py
+  - ... (+8 more)
 <!-- AUTO-SYNC:END -->
 
 ## Objective

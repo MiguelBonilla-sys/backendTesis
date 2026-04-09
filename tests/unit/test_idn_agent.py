@@ -9,10 +9,11 @@ def agent() -> IDNAgent:
 
 
 @pytest.mark.asyncio
-async def test_safe_domain_low_score(agent: IDNAgent):
+async def test_known_domain_expected_score(agent: IDNAgent):
     result = await agent.analyze("apple.com")
-    assert result["s_idn_local"] < 0.5
-    assert result["verdict"] if False else True  # No verdict field in IDN result
+    # With ratio_h=0 and sim_v=1.0 for a known domain, S_IDN_local=(1-BETA)=0.6.
+    assert result["s_idn_local"] == pytest.approx(0.6, abs=1e-4)
+    assert "verdict" not in result
     assert result["ratio_h"] == 0.0
 
 
