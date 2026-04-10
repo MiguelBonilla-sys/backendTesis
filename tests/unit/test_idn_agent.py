@@ -228,7 +228,9 @@ async def test_confusable_details_structure(
     assert "script" in entry
     assert "lookalike" in entry
     assert entry["char"] == "\u0430"
-    assert entry["lookalike"] == "a"
+    assert isinstance(entry["lookalike"], list)
+    assert "a" in entry["lookalike"]
+    assert entry["script"] == "CYRILLIC"
 
 
 # ── Error handling ─────────────────────────────────────────────────────────────

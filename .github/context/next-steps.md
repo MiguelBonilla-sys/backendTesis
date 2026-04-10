@@ -3,23 +3,23 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-09T15:48:10.222078Z
-- Branch: feat/phase-2-idn-agent
-- Dirty entries: 21
+- Last sync (UTC): 2026-04-10T20:20:16.324412Z
+- Branch: feat/phase-3-llm-agent
+- Dirty entries: 17
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - agents/bktree.py
   - agents/confusables_loader.py
   - agents/idn_agent.py
-  - core/config.py
-  - data/confusables.txt
-  - data/top1m.txt
-  - data_pipeline/top1m_loader.py
-  - ... (+9 more)
+  - agents/llm_agent.py
+  - agents/prompt_builder.py
+  - agents/rag_retriever.py
+  - docs/PHASE-3-llm-agent.md
+  - docs/PHASE-PROGRESS.md
+  - ... (+5 more)
 <!-- AUTO-SYNC:END -->
 
 Ordered actionable backlog for the next sessions.

@@ -6,12 +6,12 @@ import re
 import httpx
 
 from agents.base_agent import BaseAgent
+from agents.rag_retriever import RAGRetriever
 from core.config import settings
 from core.constants import (
     COLLECTION_EMAIL_EMBEDDINGS,
     LLAMASTACK_MAX_TOKENS,
     LLAMASTACK_TIMEOUT_SECONDS,
-    RAG_TOP_K,
 )
 from core.exceptions import LLMInferenceError
 
@@ -19,7 +19,7 @@ from core.exceptions import LLMInferenceError
 class LLMAgent(BaseAgent):
     """
     LLM analysis with 3-step flow:
-      1. RAG retrieval from ChromaDB (email_embeddings, top-k=3)
+      1. RAG retrieval using RAGRetriever (email_embeddings, top-k=3)
       2. Prompt construction + LlamaStack inference
       3. Score parsing from response
     Falls back to 0.5 on timeout.
@@ -28,6 +28,7 @@ class LLMAgent(BaseAgent):
     def __init__(self, chromadb_client=None) -> None:
         super().__init__("LLMAgent")
         self._chroma = chromadb_client
+        self._retriever = RAGRetriever(chromadb_client=self._chroma) if self._chroma else None
 
     async def analyze(
         self,
@@ -72,18 +73,13 @@ class LLMAgent(BaseAgent):
     # ── Private helpers ───────────────────────────────────────────────────────
 
     async def _retrieve_rag(self, domain: str, email_body: str | None) -> list[str]:
-        if self._chroma is None:
+        if self._retriever is None:
             return []
         try:
             query = f"{domain} {email_body or ''}".strip()
-            results = self._chroma.query(
-                collection_name=COLLECTION_EMAIL_EMBEDDINGS,
-                query_texts=[query],
-                n_results=RAG_TOP_K,
-            )
-            return results.get("documents", [[]])[0]
+            return self._retriever.retrieve(query)
         except Exception as exc:
-            self.logger.warning(f"ChromaDB RAG retrieval failed: {exc}")
+            self.logger.warning(f"RAG retrieval via RAGRetriever failed: {exc}")
             return []
 
     def _build_prompt(

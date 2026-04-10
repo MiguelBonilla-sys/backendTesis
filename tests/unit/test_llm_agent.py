@@ -9,6 +9,9 @@ from agents.llm_agent import LLMAgent
 from core.exceptions import LLMInferenceError
 
 
+import numpy as np
+
+
 @pytest.fixture
 def agent_no_chroma() -> LLMAgent:
     return LLMAgent(chromadb_client=None)
@@ -17,14 +20,18 @@ def agent_no_chroma() -> LLMAgent:
 @pytest.fixture
 def mock_chroma():
     chroma = MagicMock()
-    chroma.query.return_value = {
+    # Mock para RAGRetriever: get_collection().query() -> dict with "documents"
+    mock_collection = MagicMock()
+    mock_collection.query.return_value = {
         "documents": [["past phishing email snippet 1", "snippet 2", "snippet 3"]]
     }
+    chroma.get_collection.return_value = mock_collection
     return chroma
 
 
 @pytest.fixture
 def agent_with_chroma(mock_chroma) -> LLMAgent:
+    # LLMAgent inyectará mock_chroma en RAGRetriever
     return LLMAgent(chromadb_client=mock_chroma)
 
 
@@ -38,14 +45,22 @@ async def test_retrieve_rag_no_chroma_returns_empty(agent_no_chroma: LLMAgent):
 
 @pytest.mark.asyncio
 async def test_retrieve_rag_with_chroma(agent_with_chroma: LLMAgent):
-    result = await agent_with_chroma._retrieve_rag("evil.com", "some body")
-    assert len(result) == 3
-    assert "snippet 1" in result[0]
+    # Patch encoder to avoid heavy loading
+    with patch("agents.rag_retriever._get_encoder") as mock_get_encoder:
+        mock_encoder = MagicMock()
+        # Mocking encode to return a numpy array so tolist() works
+        mock_encoder.encode.return_value = np.array([0.1] * 384)
+        mock_get_encoder.return_value = mock_encoder
+        
+        result = await agent_with_chroma._retrieve_rag("evil.com", "some body")
+        assert len(result) == 3
+        assert "snippet 1" in result[0]
 
 
 @pytest.mark.asyncio
 async def test_retrieve_rag_chroma_error_returns_empty(mock_chroma):
-    mock_chroma.query.side_effect = RuntimeError("ChromaDB connection failed")
+    # Error en get_collection para disparar el fallback de RAGRetriever
+    mock_chroma.get_collection.side_effect = RuntimeError("ChromaDB connection failed")
     agent = LLMAgent(chromadb_client=mock_chroma)
     result = await agent._retrieve_rag("evil.com", "body")
     assert result == []

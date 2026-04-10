@@ -9,6 +9,7 @@ from agents.bktree import levenshtein_confusable
 from agents.confusables_loader import (
     ConfusablesCatalog,
     detect_confusables,
+    detect_script_mixing,
     load_confusables,
 )
 from core.constants import BETA, IDN_HOMOGRAPH_RATIO_ALERT
@@ -105,7 +106,7 @@ class IDNAgent(BaseAgent):
             # Stage 1: NFC normalization
             normalized = unicodedata.normalize("NFC", domain.lower().strip())
 
-            # Stage 2: Confusable detection
+            # Stage 2: Confusable detection + Script Mixing
             confusable_entries = detect_confusables(normalized, self._catalog)
             # Unique confusable chars as a sorted list (for ratio computation)
             confusables: list[str] = sorted({e["char"] for e in confusable_entries})
@@ -113,12 +114,29 @@ class IDNAgent(BaseAgent):
             # Stage 3: Homograph ratio on 2LD
             second_level = self._extract_2ld(normalized)
             ratio_h = self._ratio_h(second_level, confusables)
+            
+            # Script mix detection (e.g., LATIN + CYRILLIC in same 2LD)
+            script_mix = detect_script_mixing(second_level)
+            # Find non-COMMON scripts
+            active_scripts = {s for s in script_mix.keys() if s not in ("COMMON", "UNKNOWN")}
+            is_mixed_script = len(active_scripts) > 1
+            
+            # Penalización por mezcla de scripts
+            script_mix_factor = 1.6 if is_mixed_script else 1.0
 
             # Stage 4: Visual similarity (confusable-aware when catalog loaded)
             sim_v, closest = self._sim_v(second_level)
 
-            # Stage 5: S_IDN_local
-            s_idn_local = BETA * ratio_h + (1.0 - BETA) * sim_v
+            # Stage 5: S_IDN_local (Adjusted formula)
+            base_score = BETA * ratio_h + (1.0 - BETA) * sim_v
+            s_idn_local = base_score * script_mix_factor
+            
+            # Si es un homógrafo perfecto (visual similarity alta) con mezcla de scripts, subir a PHISHING directo
+            # O si el ratio de homógrafos es significativo en un dominio mezclado
+            if is_mixed_script and (sim_v >= 0.9 or ratio_h > 0.1):
+                s_idn_local = max(s_idn_local, 0.85)
+            
+            s_idn_local = min(1.0, s_idn_local)
 
             result = {
                 "domain": domain,
@@ -126,6 +144,8 @@ class IDNAgent(BaseAgent):
                 "is_punycode": is_punycode(domain),
                 "confusables": confusables,
                 "confusable_details": confusable_entries,
+                "scripts": {k: sorted(list(v)) for k, v in script_mix.items()},
+                "is_mixed_script": is_mixed_script,
                 "ratio_h": round(ratio_h, 4),
                 "sim_v": round(sim_v, 4),
                 "closest_domain": closest,

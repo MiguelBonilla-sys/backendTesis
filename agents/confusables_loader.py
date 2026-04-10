@@ -13,6 +13,12 @@ import logging
 import unicodedata
 from pathlib import Path
 
+# NEW: Import for better script detection if available
+try:
+    import unicodedata2 as ud2
+except ImportError:
+    ud2 = None
+
 logger = logging.getLogger(__name__)
 
 # Type alias: char → list of chars it can be confused with
@@ -94,77 +100,64 @@ def char_script(char: str) -> str:
     Returns "LATIN" for Latin characters and "UNKNOWN" for unrecognised ones.
     """
     try:
+        # Priority 1: Check known Scripts from CONFUSABLE_SCRIPTS
         name = unicodedata.name(char, "").upper()
         for script in CONFUSABLE_SCRIPTS:
             if script in name:
                 return script
-        return "LATIN"
-    except Exception:
+        
+        # Priority 2: Explicitly identify LATIN
+        if "LATIN" in name:
+            return "LATIN"
+        
+        # Priority 3: Common symbols/digits are treated as COMMON
+        if not name or any(k in name for k in ["DIGIT", "SPACE", "FULL STOP", "HYPHEN"]):
+            return "COMMON"
+            
+        return "OTHER"
+    except (ValueError, Exception):
         return "UNKNOWN"
 
 
-def detect_confusables(
-    domain_unicode: str,
-    catalog: ConfusablesCatalog,
-) -> list[dict]:
-    """Detect confusable characters in a domain string.
+def detect_script_mixing(text: str) -> dict[str, set[str]]:
+    """Analyze a string to detect if it contains characters from multiple scripts.
 
-    For each character in *domain_unicode* that belongs to a confusable
-    script, this function attempts to find a Latin lookalike:
-
-    1. Catalog lookup (precise, TR#39-based): if the character is in the
-       catalog and has a Latin lookalike, report it with that lookalike.
-    2. Heuristic fallback (when catalog is empty or char is absent): if the
-       character's Unicode name contains a confusable script keyword, report
-       it with ``lookalike=None``.
-
-    Args:
-        domain_unicode: Normalised (NFC) domain string.
-        catalog: TR#39 confusables catalog from :func:`load_confusables`.
-                 Pass an empty dict to use heuristic-only detection.
+    Phishing attacks often mix scripts (e.g., Latin + Cyrillic) to create
+    homographs. Legitimate domains usually stick to a single script.
 
     Returns:
-        List of dicts, one per confusable character found::
-
-            {"char": "а", "position": 1, "script": "Cyrillic", "lookalike": "a"}
-
-        ``lookalike`` is ``None`` when only the heuristic fired.
+        A dict mapping script names to the set of characters found for that script.
+        Common characters (digits, hyphens) are typically ignored or counted as 'COMMON'.
     """
-    result: list[dict] = []
-    for pos, char in enumerate(domain_unicode):
-        if char in (".", "-", "_", " "):
-            continue
-
+    scripts_found: dict[str, set[str]] = {}
+    for char in text:
         script = char_script(char)
-        if script not in CONFUSABLE_SCRIPTS:
-            continue  # Latin or unknown — not a cross-script confusable
+        if script not in scripts_found:
+            scripts_found[script] = set()
+        scripts_found[script].add(char)
+    
+    return scripts_found
 
-        lookalikes = catalog.get(char, [])
-        if lookalikes:
-            # Find the first lookalike that is NOT itself a confusable-script char
-            latin_lookalike: str | None = None
-            for lk in lookalikes:
-                if char_script(lk) not in CONFUSABLE_SCRIPTS:
-                    latin_lookalike = lk
-                    break
-            if latin_lookalike is not None:
-                result.append(
-                    {
-                        "char": char,
-                        "position": pos,
-                        "script": script.capitalize(),
-                        "lookalike": latin_lookalike,
-                    }
-                )
-        else:
-            # Char not in catalog — heuristic-only detection (lookalike unknown)
-            result.append(
+
+def detect_confusables(text: str, catalog: ConfusablesCatalog) -> list[dict]:
+    """Identify characters in *text* that are present in the confusables *catalog*.
+
+    Returns:
+        List of dicts: {"char", "position", "script", "lookalike"}
+        - char: The character found in text.
+        - position: 0-indexed position in text.
+        - script: Unicode script of the character.
+        - lookalike: List of prototype characters it can be confused with.
+    """
+    results = []
+    for i, char in enumerate(text):
+        if char in catalog:
+            results.append(
                 {
                     "char": char,
-                    "position": pos,
-                    "script": script.capitalize(),
-                    "lookalike": None,
+                    "position": i,
+                    "script": char_script(char),
+                    "lookalike": catalog[char],
                 }
             )
-
-    return result
+    return results

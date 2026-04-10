@@ -1,8 +1,38 @@
 # Phase 3 — LLM Agent + ChromaDB RAG
 
-> **Status:** 🔴 TODO  
+> **Status:** 🟡 IN PROGRESS — core files created, tests written  
 > **Sprint:** S2 · **Branch:** `feat/phase-3-llm-agent`  
 > **Goal:** LlamaStack inference with ChromaDB RAG context injection, returns `S_LLM ∈ [0.0, 1.0]` + reasoning trace.
+
+## Implementation Status
+
+| File | Status | Notes |
+|------|--------|-------|
+| `agents/llm_agent.py` | ✅ Done | Uses `SCORE: <float> \| REASON: <text>` response format |
+| `agents/rag_retriever.py` | ✅ Done | RAGRetriever class, SentenceTransformer all-MiniLM-L6-v2 |
+| `agents/prompt_builder.py` | ✅ Done | build_prompt() + count_tokens(), tiktoken cl100k_base |
+| `tests/unit/test_llm_agent.py` | ✅ Done | 14 tests — mocked LlamaStack + ChromaDB |
+| `tests/unit/test_rag_retriever.py` | ✅ Done | 15 tests — mocked ChromaDB + encoder |
+| `tests/unit/test_prompt_builder.py` | ✅ Done | 25+ tests — pure Python, no mocks |
+
+## CRITICAL — Implementation Contracts (DO NOT change without review)
+
+### Response format (LLMAgent ↔ PromptBuilder)
+- Prompt ends with: `Format: SCORE: <float> | REASON: <text>`
+- `LLMAgent._parse_score()` uses: `re.search(r"SCORE:\s*([\d.]+)", text)`
+- **If you change the format string in `prompt_builder.py`, update `_parse_score()` in `llm_agent.py`.**
+
+### RAGRetriever → ChromaDB API
+- Uses `client.get_collection(name).query(query_embeddings=[...], n_results=top_k)`
+- **DO NOT use `query_texts` — that bypasses the SentenceTransformer encoder.**
+
+### Embedding model
+- Model: `all-MiniLM-L6-v2` (384-dimensional)
+- **DO NOT change without re-indexing ALL ChromaDB collections.**
+
+### Graceful degradation
+- `RAGRetriever.retrieve()` always returns `list[str]`, never raises.
+- `LLMAgent.analyze()` falls back to `s_llm=0.5` on `asyncio.TimeoutError`.
 
 ---
 
