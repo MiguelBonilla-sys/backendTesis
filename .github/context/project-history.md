@@ -3,23 +3,16 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-10T20:53:26.940496Z
+- Last sync (UTC): 2026-04-11T03:13:52.270713Z
 - Branch: feat/phase-4-fusion-agent
-- Dirty entries: 14
+- Dirty entries: 6
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - agents/llm_agent.py
-  - docker-compose.deps.yml
-  - docs/THESIS-DEVIATIONS.md
-  - grafana-provisioning/dashboards/dashboards.yml
-  - grafana-provisioning/dashboards/llamastack-dashboard.json
-  - grafana-provisioning/datasources/loki.yml
   - loki-config.yml
-  - ... (+2 more)
 <!-- AUTO-SYNC:END -->
 
 This file tracks milestone-level history and phase status.
