@@ -6,6 +6,7 @@ import re
 import httpx
 
 from agents.base_agent import BaseAgent
+from agents.prompt_builder import build_prompt
 from agents.rag_retriever import RAGRetriever
 from core.config import settings
 from core.constants import (
@@ -89,17 +90,11 @@ class LLMAgent(BaseAgent):
         s_idn: float,
         rag_context: list[str],
     ) -> str:
-        ctx = "\n".join(f"- {c}" for c in rag_context) if rag_context else "None."
-        body = (email_body or "")[:500] or "Not provided."
-        return (
-            "You are a phishing detection expert.\n"
-            f"Similar past phishing emails:\n{ctx}\n\n"
-            f"Domain: {domain}\n"
-            f"IDN homograph score: {s_idn:.2f} (0=safe, 1=phishing)\n"
-            f"Email body snippet: {body}\n\n"
-            "Output a phishing risk score 0.0–1.0 and brief reasoning.\n"
-            "Format: SCORE: <float> | REASON: <text>"
+        prompt, token_count = build_prompt(domain, email_body, s_idn, rag_context)
+        self.logger.debug(
+            "Prompt built for domain=%r: %d tokens", domain, token_count
         )
+        return prompt
 
     async def _call_llamastack(self, prompt: str) -> dict:
         async with httpx.AsyncClient(timeout=LLAMASTACK_TIMEOUT_SECONDS) as client:
