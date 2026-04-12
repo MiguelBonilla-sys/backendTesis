@@ -1,6 +1,6 @@
 # Phase 3 — LLM Agent + ChromaDB RAG
 
-> **Status:** 🟡 IN PROGRESS — core files created, tests written  
+> **Status:** ✅ COMPLETE  
 > **Sprint:** S2 · **Branch:** `feat/phase-3-llm-agent`  
 > **Goal:** LlamaStack inference with ChromaDB RAG context injection, returns `S_LLM ∈ [0.0, 1.0]` + reasoning trace.
 
@@ -8,12 +8,14 @@
 
 | File | Status | Notes |
 |------|--------|-------|
-| `agents/llm_agent.py` | ✅ Done | Uses `SCORE: <float> \| REASON: <text>` response format |
-| `agents/rag_retriever.py` | ✅ Done | RAGRetriever class, SentenceTransformer all-MiniLM-L6-v2 |
-| `agents/prompt_builder.py` | ✅ Done | build_prompt() + count_tokens(), tiktoken cl100k_base |
-| `tests/unit/test_llm_agent.py` | ✅ Done | 14 tests — mocked LlamaStack + ChromaDB |
+| `agents/llm_agent.py` | ✅ Done | RAG from `email_embeddings` + `idn_patterns`; `SCORE: <float> \| REASON: <text>` format |
+| `agents/rag_retriever.py` | ✅ Done | RAGRetriever class, SentenceTransformer all-MiniLM-L6-v2, graceful degradation |
+| `agents/prompt_builder.py` | ✅ Done | build_prompt() + count_tokens(), tiktoken cl100k_base, progressive truncation |
+| `models/chromadb_client.py` | ✅ Done | ensure_collections() con `hnsw:space: cosine` en las 3 colecciones |
+| `tests/unit/test_llm_agent.py` | ✅ Done | 14 tests — mocked LlamaStack + ChromaDB (ambas colecciones RAG) |
 | `tests/unit/test_rag_retriever.py` | ✅ Done | 15 tests — mocked ChromaDB + encoder |
 | `tests/unit/test_prompt_builder.py` | ✅ Done | 25+ tests — pure Python, no mocks |
+| `tests/integration/test_llm_rag_pipeline.py` | ⚠️ Pendiente | Documentado en CLAUDE.md pero no existe en disco — crear en Phase 6 |
 
 ## CRITICAL — Implementation Contracts (DO NOT change without review)
 

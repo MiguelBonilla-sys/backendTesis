@@ -48,12 +48,13 @@ async def test_retrieve_rag_with_chroma(agent_with_chroma: LLMAgent):
     # Patch encoder to avoid heavy loading
     with patch("agents.rag_retriever._get_encoder") as mock_get_encoder:
         mock_encoder = MagicMock()
-        # Mocking encode to return a numpy array so tolist() works
         mock_encoder.encode.return_value = np.array([0.1] * 384)
         mock_get_encoder.return_value = mock_encoder
-        
+
         result = await agent_with_chroma._retrieve_rag("evil.com", "some body")
-        assert len(result) == 3
+        # email_embeddings (3) + idn_patterns (3) — mock_chroma returns same 3 docs
+        # for both collections since get_collection() returns the same mock_collection.
+        assert len(result) == 6
         assert "snippet 1" in result[0]
 
 

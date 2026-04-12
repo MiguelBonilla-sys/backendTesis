@@ -30,8 +30,16 @@ def get_chromadb_client() -> ClientAPI:
 
 
 def ensure_collections() -> None:
-    """Create ChromaDB collections on startup if they don't already exist."""
+    """Create ChromaDB collections on startup if they don't already exist.
+
+    All collections use cosine distance (HNSW) for embedding similarity search.
+    Without this metadata, ChromaDB defaults to L2 (euclidean) which degrades
+    RAG retrieval quality for normalized sentence embeddings.
+    """
     client = get_chromadb_client()
     for name in _COLLECTIONS:
-        client.get_or_create_collection(name)
+        client.get_or_create_collection(
+            name,
+            metadata={"hnsw:space": "cosine"},
+        )
         logger.info(f"ChromaDB collection ready: {name}")
