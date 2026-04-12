@@ -1,0 +1,50 @@
+# ── Lambda Container Image ────────────────────────────────────────────────────
+# Builds a Lambda-compatible image based on the AWS-provided Python 3.12 base.
+# Usage:
+#   docker build -f infra/aws/Dockerfile.lambda -t backendtesis-lambda .
+#   docker tag backendtesis-lambda <account>.dkr.ecr.<region>.amazonaws.com/backendtesis:latest
+#   docker push <account>.dkr.ecr.<region>.amazonaws.com/backendtesis:latest
+
+# Stage 1: builder — compile native extensions
+FROM public.ecr.aws/lambda/python:3.12 AS builder
+
+WORKDIR /build
+
+RUN yum install -y gcc gcc-c++ postgresql-devel && yum clean all
+
+COPY requirements.txt .
+RUN grep -v "pywin32" requirements.txt > requirements_linux.txt && \
+    # pywin32 is a Windows-only package that fails to install on Linux builds.
+    # It is excluded here; all other dependencies are installed normally.
+    pip install --upgrade pip setuptools wheel packaging && \
+    pip install --target /install --no-cache-dir -r requirements_linux.txt && \
+    # Add Mangum for ASGI-Lambda bridge (pinned to match requirements.txt)
+    pip install --target /install --no-cache-dir "mangum==0.21.0"
+
+# Stage 2: Lambda runtime image
+FROM public.ecr.aws/lambda/python:3.12
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+# Runtime system deps (asyncpg needs libpq)
+RUN yum install -y libpq && yum clean all
+
+# Copy installed Python packages from builder
+COPY --from=builder /install ${LAMBDA_TASK_ROOT}
+
+# Copy application source
+COPY agents/       agents/
+COPY auth/         auth/
+COPY core/         core/
+COPY data/         data/
+COPY data_pipeline/ data_pipeline/
+COPY middleware/   middleware/
+COPY models/       models/
+COPY routers/      routers/
+COPY schemas/      schemas/
+COPY utils/        utils/
+COPY main.py       .
+COPY infra/aws/lambda_handler.py .
+
+# Lambda handler — module.attribute
+CMD ["lambda_handler.handler"]

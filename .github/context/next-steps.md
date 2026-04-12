@@ -3,24 +3,27 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-12T14:48:54.310442Z
-- Branch: feat/phase-5-api-layer
-- Dirty entries: 11
+- Last sync (UTC): 2026-04-12T21:18:56.897457Z
+- Branch: copilot/investigar-despliegue-aws-lambda
+- Dirty entries: 5
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - main.py
-  - routers/analyze_router.py
-  - routers/incidents_router.py
-  - schemas/analyze_schemas.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_incidents_router.py
 <!-- AUTO-SYNC:END -->
 
 Ordered actionable backlog for the next sessions.
+
+1. **AWS deployment (nueva)**: Seguir `docs/AWS-DEPLOYMENT.md` §7 para despliegue real:
+
+- Prerequisito: cuenta AWS con credenciales configuradas.
+- Construir imagen Lambda con `infra/aws/Dockerfile.lambda` y subir a ECR.
+- Aplicar Terraform en `infra/aws/terraform/` con variables reales (nunca commitear `terraform.tfvars`).
+- Si se usa Bedrock: migrar `agents/llm_agent.py` a boto3 SDK (ver §8.4 del doc).
+- Si se elimina ChromaDB: migrar `models/chromadb_client.py` + `agents/rag_retriever.py` a pgvector (ver §8.3).
+- Costo estimado: ~$7–15/mes (primeros 12 meses free tier), ~$40–55/mes después.
 
 1. Consolidate LlamaStack model ID compatibility after compose update:
 
