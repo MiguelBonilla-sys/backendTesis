@@ -9,7 +9,7 @@ from agents.base_agent import BaseAgent
 from agents.rag_retriever import RAGRetriever
 from core.config import settings
 from core.constants import (
-    COLLECTION_EMAIL_EMBEDDINGS,
+    COLLECTION_IDN_PATTERNS,
     LLAMASTACK_MAX_TOKENS,
     LLAMASTACK_TIMEOUT_SECONDS,
 )
@@ -19,7 +19,7 @@ from core.exceptions import LLMInferenceError
 class LLMAgent(BaseAgent):
     """
     LLM analysis with 3-step flow:
-      1. RAG retrieval using RAGRetriever (email_embeddings, top-k=3)
+      1. RAG retrieval using RAGRetriever (email_embeddings + idn_patterns, top-k=3 each)
       2. Prompt construction + LlamaStack inference
       3. Score parsing from response
     Falls back to 0.5 on timeout.
@@ -29,6 +29,14 @@ class LLMAgent(BaseAgent):
         super().__init__("LLMAgent")
         self._chroma = chromadb_client
         self._retriever = RAGRetriever(chromadb_client=self._chroma) if self._chroma else None
+        self._idn_retriever = (
+            RAGRetriever(
+                chromadb_client=self._chroma,
+                collection_name=COLLECTION_IDN_PATTERNS,
+            )
+            if self._chroma
+            else None
+        )
 
     async def analyze(
         self,
@@ -77,7 +85,11 @@ class LLMAgent(BaseAgent):
             return []
         try:
             query = f"{domain} {email_body or ''}".strip()
-            return self._retriever.retrieve(query)
+            email_ctx = self._retriever.retrieve(query)
+            # Also retrieve known IDN attack patterns for additional context.
+            # RAGRetriever.retrieve() never raises — returns [] on any error.
+            idn_ctx = self._idn_retriever.retrieve(domain) if self._idn_retriever else []
+            return email_ctx + idn_ctx
         except Exception as exc:
             self.logger.warning(f"RAG retrieval via RAGRetriever failed: {exc}")
             return []
