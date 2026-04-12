@@ -1,0 +1,104 @@
+name: backend-tesis-full
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bt-api
+    restart: always
+    environment:
+      # These must match the service names in this network
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/phishing_detector
+      REDIS_URL: redis://redis:6379/0
+      CHROMA_HOST: chroma
+      CHROMA_PORT: 8000
+      LLAMASTACK_HOST: llamastack
+      LLAMASTACK_PORT: 5001
+      SECRET_KEY: strong-secret-key-for-dev-123
+      APP_ENV: development
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: bt-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: phishing_detector
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  chroma:
+    image: chromadb/chroma:0.4.24
+    container_name: bt-chroma
+    restart: unless-stopped
+    environment:
+      CHROMA_SERVER_PORT: 8000
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/heartbeat || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - chroma_data:/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: bt-redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  llamastack:
+    image: llamastack/distribution-starter:latest
+    container_name: bt-llamastack
+    restart: unless-stopped
+    environment:
+      LLAMA_STACK_PORT: "5001"
+      OLLAMA_URL: http://ollama:11434/v1
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      # Map model directory etc.
+      - llama_data:/root/.llama
+    command: ["--port", "5001"]
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bt-ollama
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  pg_data:
+  chroma_data:
+  redis_data:
+  ollama_data:
+  llama_data:

@@ -11,7 +11,7 @@ from middleware.error_handler import ErrorHandlerMiddleware
 from models.chromadb_client import ensure_collections
 from models.database import close_db, init_db
 from models.redis_client import close_redis, init_redis
-from routers import analyze_router, health_router
+from routers import analyze_router, health_router, incidents_router
 
 
 def _validate_startup_config() -> None:
@@ -68,6 +68,7 @@ app.add_middleware(
 
 app.include_router(health_router.router)
 app.include_router(analyze_router.router, prefix="/api/v1", tags=["analyze"])
+app.include_router(incidents_router.router, prefix="/api/v1", tags=["incidents"])
 
 
 if __name__ == "__main__":

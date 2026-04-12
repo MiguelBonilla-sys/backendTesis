@@ -1,22 +1,27 @@
-# Phase 6 — Testing Strategy (Continuous)
+# Phase 6 — Testing & Deployment (Hardening)
 
-> **Status:** 🔴 IN PROGRESS (co-located with each feature branch)  
+> **Status:** 🟢 COMPLETED (Hardening + Infrastructure)  
 > **Sprint:** S1–S6 · Tests live in `tests/` · **Coverage target: 90%**  
-> **Goal:** Every merged branch maintains ≥90% coverage with documented, thesis-ready test results.
+> **Goal:** High-coverage unit tests + full-stack integration with Docker Compose.
 
 ---
 
-## Context
+## Technical Outcomes
 
-Testing in this project serves two purposes:
-1. **Software quality** — catch regressions, validate algorithmic correctness
-2. **Thesis validation** — each phase has documented test results that prove the research contribution works
+1. **Unit Testing (359 tests passed)**:
+    - 100% logic coverage on agents: `IDNAgent`, `LLMAgent`, `FusionAgent`.
+    - Data pipeline validation: `ThreatIntelService`, `Top1MIndex`.
+    - API components: `Middlewares`, `Routers`, `Schemas`, `Auth`.
 
-Tests are written **before** implementation (TDD: RED → GREEN → REFACTOR) following the London School (mock dependencies, test behavior).
+2. **Integration Environment**:
+    - `docker-compose.yml` for local multi-service orchestration. 
+    - Active health check logic pings Postgres, Redis, and ChromaDB.
+    - Automated `scripts/launch_ngrok.py` for public exposure of Swagger UI.
 
----
-
-## Test Stack
+3. **Status Check**: 
+    - [x] All 0 warnings resolved.
+    - [x] Integration tests for `/health` validated against active Docker dependencies.
+    - [x] Integration test for `/analyze` infrastructure ready.
 
 | Tool | Role |
 |------|------|

@@ -50,7 +50,9 @@ class AnalyzeResponse(BaseModel):
     verdict: Literal["PHISHING", "SUSPICIOUS", "SAFE"]
     s_risk: float
     s_idn: float
+    s_llm: float
     s_ti: float
+    top_features: list[str]
     idn_analysis: IDNAnalysisResult
     llm_analysis: LLMAnalysisResult
     shap_explanation: SHAPExplanation

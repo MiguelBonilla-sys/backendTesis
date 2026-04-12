@@ -1,17 +1,23 @@
 """POST /api/v1/analyze — orchestrates IDN → (LLM ‖ TI) → Fusion pipeline."""
 
 import asyncio
+import hashlib
+import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.fusion_agent import FusionAgent
 from agents.idn_agent import IDNAgent
 from agents.llm_agent import LLMAgent
+from auth.auth import require_auth
 from core.exceptions import BackendTesisError, InvalidURLError
 from core.logger import logger
 from core.security import extract_domain, sanitize_url
+from data_pipeline.analysis_repo import save_full_analysis
 from data_pipeline.cache_manager import CacheManager
 from data_pipeline.threat_intel import ThreatIntelService
+from models.database import get_session
 from schemas.analyze_schemas import AnalyzeRequest, AnalyzeResponse
 
 router = APIRouter()
@@ -44,11 +50,14 @@ def _ti() -> ThreatIntelService:
 @router.post("/analyze", response_model=AnalyzeResponse, status_code=status.HTTP_200_OK)
 async def analyze_url(
     request: AnalyzeRequest,
+    background_tasks: BackgroundTasks,
     idn_agent: IDNAgent = Depends(_idn),
     llm_agent: LLMAgent = Depends(_llm),
     fusion_agent: FusionAgent = Depends(_fusion),
     cache: CacheManager = Depends(_cache),
     ti_service: ThreatIntelService = Depends(_ti),
+    session: AsyncSession = Depends(get_session),
+    _user: dict = Depends(require_auth),
 ) -> AnalyzeResponse:
     # Validate & sanitize input
     try:
@@ -57,11 +66,19 @@ async def analyze_url(
     except InvalidURLError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
 
+    # Privacy: SHA-256 of email body if present — raw body is never stored
+    email_sha256: str | None = (
+        hashlib.sha256(request.email_body.encode()).hexdigest()
+        if request.email_body
+        else None
+    )
+    trace_id = str(uuid.uuid4())
+
     try:
-        # Stage 1: IDN (CPU-bound, fast)
+        # Stage 1: IDN analysis (CPU-bound, fast)
         idn_result = await idn_agent.analyze(domain)
 
-        # Stage 2: LLM + TI in parallel (both are I/O-bound)
+        # Stage 2: LLM + TI in parallel (both I/O-bound)
         llm_task = asyncio.create_task(
             llm_agent.analyze(domain, request.email_body, idn_result["s_idn_local"])
         )
@@ -75,13 +92,29 @@ async def analyze_url(
             ti_scores=ti_scores,
         )
 
+        # Persist atomically in background — response is sent before DB write completes
+        background_tasks.add_task(
+            save_full_analysis,
+            session=session,
+            trace_id=trace_id,
+            url=url,
+            domain=domain,
+            email_sha256=email_sha256,
+            source=request.source,
+            idn_result=idn_result,
+            llm_result=llm_result,
+            fusion_result=fusion_result,
+        )
+
         return AnalyzeResponse(
             url=request.url,
             domain=domain,
             verdict=fusion_result["verdict"],
             s_risk=fusion_result["s_risk"],
             s_idn=fusion_result["s_idn"],
+            s_llm=fusion_result["s_llm"],
             s_ti=fusion_result["s_ti"],
+            top_features=fusion_result.get("top_features", []),
             idn_analysis=idn_result,
             llm_analysis=llm_result,
             shap_explanation=fusion_result["shap_explanation"],

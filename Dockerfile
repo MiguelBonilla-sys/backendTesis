@@ -1,18 +1,20 @@
 # ── Stage 1: builder ─────────────────────────────────────────────────────────
-FROM python:3.11-slim AS builder
+FROM python:3.12-slim AS builder
 
 WORKDIR /build
 
-# System deps for asyncpg and chromadb
+# System deps for asyncpg, chromadb and shap
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc libpq-dev curl \
+    gcc g++ libpq-dev curl python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --upgrade pip && pip install --prefix=/install --no-cache-dir -r requirements.txt
+RUN grep -v "pywin32" requirements.txt > requirements_linux.txt && \
+    pip install --upgrade pip setuptools wheel packaging && \
+    pip install --prefix=/install --no-cache-dir -r requirements_linux.txt
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM python:3.11-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 

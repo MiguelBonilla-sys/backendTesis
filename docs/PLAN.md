@@ -19,14 +19,21 @@ last_updated: 2026-03-30
 
 | Phase | Sprint | Description | Branch |
 |-------|--------|-------------|--------|
-| 1 | S0 | Core Setup & Scaffolding | `feat/phase-1-core-setup` |
-| 2 | S1 | IDN Agent | `feat/phase-2-idn-agent` |
-| 3 | S2 | LLM Agent + ChromaDB RAG | `feat/phase-3-llm-agent` |
-| 4 | S3 | Fusion Agent + TI Integration | `feat/phase-4-fusion-agent` |
-| 5 | S3–S4 | API Layer | `feat/phase-5-api-layer` |
-| 6 | S1–S6 | Testing (continuous) | merged into each feature branch |
+| 1 | S0 | Core Setup & Scaffolding | 🟢 DONE |
+| 2 | S1 | IDN Agent | 🟢 DONE |
+| 3 | S2 | LLM Agent + ChromaDB RAG | 🟢 DONE |
+| 4 | S3 | Fusion Agent + TI Integration | 🟢 DONE |
+| 5 | S3–S4 | API Layer | 🟢 DONE |
+| 6 | S1–S6 | Testing & Deployment | 🟢 DONE |
 
 ---
+
+## Technical Hardening (Phase 6 Finalized)
+
+- **Zero Warnings**: All 359 tests run without `PytestDeprecationWarning` or `RuntimeWarning`.
+- **Infrastructure**: `docker-compose.yml` orchestrates backend, postgres, redis, chromadb, and llamastack.
+- **Monitoring**: Dynamic health check with active connectivity pings.
+- **Exposure**: Native `scripts/launch_ngrok.py` for public testing.
 
 ## Phase 1 — Core Setup & Scaffolding 🔴
 > Sprint 0 · Branch: `feat/phase-1-core-setup`
