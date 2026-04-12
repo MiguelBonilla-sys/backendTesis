@@ -16,6 +16,13 @@
 
 Ordered actionable backlog for the next sessions.
 
+1. **Deploy to production VPS using Dokploy** ← NEW — see `docs/DEPLOY-DOKPLOY.md`
+   - Install Dokploy on an Ubuntu 22.04 VPS with ≥16 GB RAM
+   - Configure env vars in Dokploy UI (DOMAIN, SECRET_KEY, POSTGRES_PASSWORD)
+   - Deploy via `docker-compose.dokploy.yml`
+   - Pull Ollama model post-deploy: `docker exec bt-ollama ollama pull llama3.1:8b`
+   - Verify: `curl https://api.yourdomain.com/health`
+
 1. Consolidate LlamaStack model ID compatibility after compose update:
 
 - Keep `docker-compose.deps.yml` with internal Ollama URL (`http://ollama:11434/v1`).
