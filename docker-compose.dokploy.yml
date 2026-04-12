@@ -1,0 +1,193 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# BackendTesis — Dokploy Production Compose
+#
+# How it works:
+#   • All services communicate on the private "bt-internal" bridge network.
+#   • Only the FastAPI app is attached to "dokploy-network" so Dokploy's
+#     built-in Traefik reverse-proxy can route HTTPS traffic to it.
+#   • No service ports are published to the host; the firewall surface is
+#     minimal.
+#   • Every secret is injected via environment variables that you set in
+#     Dokploy's project → Environment tab (never hardcoded here).
+#
+# Required env vars (set in Dokploy UI):
+#   DOMAIN                        e.g. api.yourdomain.com
+#   SECRET_KEY                    strong random string (≥ 32 chars)
+#   POSTGRES_PASSWORD             strong database password
+#   POSTGRES_USER                 default: postgres
+#   POSTGRES_DB                   default: phishing_detector
+#   CORS_ORIGINS                  JSON array  e.g. ["https://app.yourdomain.com"]
+#
+# Optional TI API keys (leave empty to skip that source):
+#   VIRUSTOTAL_API_KEY
+#   URLSCAN_API_KEY
+#   GOOGLE_SAFE_BROWSING_API_KEY
+#   WHOISXML_API_KEY
+#
+# See docs/DEPLOY-DOKPLOY.md for the full step-by-step guide.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: backend-tesis
+
+networks:
+  bt-internal:
+    driver: bridge
+  dokploy-network:
+    external: true   # Managed by Dokploy — connects the app to Traefik
+
+# ── Persistent volumes ────────────────────────────────────────────────────────
+volumes:
+  pg_data:
+  redis_data:
+  chroma_data:
+  ollama_data:
+  llama_data:
+
+# ── Services ──────────────────────────────────────────────────────────────────
+services:
+
+  # ── FastAPI application ─────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bt-api
+    restart: always
+    networks:
+      - bt-internal
+      - dokploy-network   # Traefik routes external HTTPS traffic here
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router — replace ${DOMAIN} with your real domain in Dokploy's env
+      - "traefik.http.routers.bt-api.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.bt-api.entrypoints=websecure"
+      - "traefik.http.routers.bt-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.bt-api.loadbalancer.server.port=8000"
+      # Optional HTTP → HTTPS redirect
+      - "traefik.http.routers.bt-api-http.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.bt-api-http.entrypoints=web"
+      - "traefik.http.routers.bt-api-http.middlewares=redirect-to-https"
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-phishing_detector}
+      REDIS_URL: redis://redis:6379/0
+      CHROMADB_HOST: chroma
+      CHROMADB_PORT: "8000"
+      LLAMASTACK_URL: http://llamastack:8321
+      # LlamaStack model ID (uses LlamaStack's "provider/model-name" format).
+      # After deploying, pull the matching Ollama tag with:
+      #   docker exec bt-ollama ollama pull llama3.1:8b
+      LLAMASTACK_MODEL: ${LLAMASTACK_MODEL:-ollama/Llama-3.1-8B-Instruct-GGUF}
+      SECRET_KEY: ${SECRET_KEY}
+      CORS_ORIGINS: ${CORS_ORIGINS:-[]}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      URLSCAN_API_KEY: ${URLSCAN_API_KEY:-}
+      GOOGLE_SAFE_BROWSING_API_KEY: ${GOOGLE_SAFE_BROWSING_API_KEY:-}
+      WHOISXML_API_KEY: ${WHOISXML_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chroma:
+        condition: service_started
+    healthcheck:
+      # curl is pre-installed in the runtime image (see Dockerfile RUN apt-get install curl)
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: bt-postgres
+    restart: unless-stopped
+    networks:
+      - bt-internal
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-phishing_detector}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: bt-redis
+    restart: unless-stopped
+    networks:
+      - bt-internal
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis_data:/data
+
+  # ── ChromaDB ────────────────────────────────────────────────────────────────
+  chroma:
+    image: chromadb/chroma:1.5.6
+    container_name: bt-chroma
+    restart: unless-stopped
+    networks:
+      - bt-internal
+    environment:
+      CHROMA_PERSIST_PATH: /data
+    volumes:
+      - chroma_data:/data
+
+  # ── Ollama (LLM inference engine) ───────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bt-ollama
+    restart: unless-stopped
+    networks:
+      - bt-internal
+    healthcheck:
+      # Checks that the Ollama daemon is running; does NOT verify a model is
+      # loaded.  Pull the model in a separate step after first deploy
+      # (see docs/DEPLOY-DOKPLOY.md § 7).
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 30s
+      timeout: 15s
+      start_period: 30s
+      retries: 5
+    volumes:
+      - ollama_data:/root/.ollama
+    # Uncomment the following block if your VPS has an NVIDIA GPU:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  # ── LlamaStack ──────────────────────────────────────────────────────────────
+  llamastack:
+    image: llamastack/distribution-starter:latest
+    container_name: bt-llamastack
+    restart: unless-stopped
+    networks:
+      - bt-internal
+    environment:
+      LLAMA_STACK_PORT: "8321"
+      OLLAMA_URL: http://ollama:11434/v1
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - llama_data:/root/.llama
+    command: ["--port", "8321"]

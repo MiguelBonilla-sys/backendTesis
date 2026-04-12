@@ -3,24 +3,25 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-12T14:48:54.310442Z
-- Branch: feat/phase-5-api-layer
-- Dirty entries: 11
+- Last sync (UTC): 2026-04-12T20:59:53.275267Z
+- Branch: copilot/set-up-dockploy-server
+- Dirty entries: 5
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - main.py
-  - routers/analyze_router.py
-  - routers/incidents_router.py
-  - schemas/analyze_schemas.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_incidents_router.py
 <!-- AUTO-SYNC:END -->
 
 Ordered actionable backlog for the next sessions.
+
+1. **Deploy to production VPS using Dokploy** ← NEW — see `docs/DEPLOY-DOKPLOY.md`
+   - Install Dokploy on an Ubuntu 22.04 VPS with ≥16 GB RAM
+   - Configure env vars in Dokploy UI (DOMAIN, SECRET_KEY, POSTGRES_PASSWORD)
+   - Deploy via `docker-compose.dokploy.yml`
+   - Pull Ollama model post-deploy: `docker exec bt-ollama ollama pull llama3.1:8b`
+   - Verify: `curl https://api.yourdomain.com/health`
 
 1. Consolidate LlamaStack model ID compatibility after compose update:
 

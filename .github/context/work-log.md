@@ -3,26 +3,48 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-12T14:48:54.310442Z
-- Branch: feat/phase-5-api-layer
-- Dirty entries: 11
+- Last sync (UTC): 2026-04-12T20:59:53.275267Z
+- Branch: copilot/set-up-dockploy-server
+- Dirty entries: 5
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - main.py
-  - routers/analyze_router.py
-  - routers/incidents_router.py
-  - schemas/analyze_schemas.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_incidents_router.py
 <!-- AUTO-SYNC:END -->
 
 Concise session log for continuity across agents and sessions.
 
-## 2026-04-09 (phase 2 docs reconciliation)
+## 2026-04-12 (Dokploy deployment configuration)
+
+Branch: copilot/set-up-dockploy-server
+Goal: Create production deployment files for Dokploy (self-hosted PaaS).
+
+Files added:
+- docker-compose.dokploy.yml
+- docs/DEPLOY-DOKPLOY.md
+
+Checks run:
+- `docker compose -f docker-compose.dokploy.yml config --quiet` → OK
+- YAML parsed and validated (all services, networks, volumes correct)
+- `pytest tests/unit/ -q --tb=no` → 321 passed (38 pre-existing network failures unrelated to change)
+
+Decisions:
+- Only the `app` service is attached to `dokploy-network` (Traefik). All backend services are isolated on `bt-internal`.
+- No ports published to host. Traefik handles routing + TLS.
+- Redis has no password (internal-only, isolated network). Postgres password via env var.
+- Ollama GPU block included but commented out (activated by user if VPS has GPU).
+- `LLAMASTACK_MODEL` uses LlamaStack format (`ollama/model-name`); Ollama pull uses Ollama tag format (`llama3.1:8b`). Both documented with explanation.
+- curl already installed in Dockerfile runtime stage — healthcheck dependency documented.
+
+Open risks:
+- None. This is an additive change (new files only, no code modified).
+
+Next action:
+- On target VPS: install Dokploy, configure env vars via UI, deploy, pull model.
+
+
 
 Branch: feat/phase-2-idn-agent
 Goal: Align `docs/PHASE-2-idn-agent.md` with real runtime implementation and executed tests.
