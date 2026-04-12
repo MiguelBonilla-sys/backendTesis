@@ -16,6 +16,15 @@
 
 Ordered actionable backlog for the next sessions.
 
+1. **AWS deployment (nueva)**: Seguir `docs/AWS-DEPLOYMENT.md` §7 para despliegue real:
+
+- Prerequisito: cuenta AWS con credenciales configuradas.
+- Construir imagen Lambda con `infra/aws/Dockerfile.lambda` y subir a ECR.
+- Aplicar Terraform en `infra/aws/terraform/` con variables reales (nunca commitear `terraform.tfvars`).
+- Si se usa Bedrock: migrar `agents/llm_agent.py` a boto3 SDK (ver §8.4 del doc).
+- Si se elimina ChromaDB: migrar `models/chromadb_client.py` + `agents/rag_retriever.py` a pgvector (ver §8.3).
+- Costo estimado: ~$7–15/mes (primeros 12 meses free tier), ~$40–55/mes después.
+
 1. Consolidate LlamaStack model ID compatibility after compose update:
 
 - Keep `docker-compose.deps.yml` with internal Ollama URL (`http://ollama:11434/v1`).

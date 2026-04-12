@@ -16,6 +16,39 @@
 
 Concise session log for continuity across agents and sessions.
 
+## 2026-04-12 (AWS Lambda deployment research)
+
+Branch: copilot/investigar-despliegue-aws-lambda
+Goal: Investigate and document full AWS Lambda deployment for BackendTesis including architecture and cost breakdown.
+Files changed:
+  - docs/AWS-DEPLOYMENT.md (new — comprehensive guide, 600+ lines)
+  - infra/aws/lambda_handler.py (new — Mangum ASGI wrapper)
+  - infra/aws/Dockerfile.lambda (new — Lambda container image)
+  - infra/aws/terraform/main.tf (new — root Terraform + Secrets Manager)
+  - infra/aws/terraform/variables.tf (new — all Terraform variables)
+  - infra/aws/terraform/vpc.tf (new — VPC, subnets, NAT GW, security groups, VPC endpoints)
+  - infra/aws/terraform/rds.tf (new — RDS PostgreSQL 15 with pgvector)
+  - infra/aws/terraform/elasticache.tf (new — ElastiCache Serverless Redis)
+  - infra/aws/terraform/lambda.tf (new — ECR, IAM, Lambda function + Function URL)
+  - infra/aws/terraform/api_gateway.tf (new — API Gateway HTTP API)
+  - infra/aws/terraform/outputs.tf (new — cost estimate output + all endpoints)
+  - requirements.txt (mangum==0.21.0 added)
+  - .gitignore (Terraform state/lock/tfvars excluded)
+Checks run: advisory DB scan on mangum (no CVEs), Terraform files reviewed
+Decisions:
+  - Lambda container image chosen over ZIP (native deps exceed 250 MB limit).
+  - pgvector on RDS recommended over ChromaDB (no AWS-managed ChromaDB service).
+  - Amazon Bedrock recommended over LlamaStack/Ollama (GPU cost prohibitive).
+  - Single NAT Gateway for dev (Multi-AZ NAT in prod). NAT is biggest fixed cost (~$32/mo).
+  - ElastiCache Serverless chosen over t3.micro for low-traffic thesis scale (~$1-3/mo).
+  - DynamoDB TTL documented as free-tier alternative to ElastiCache.
+Open risks:
+  - Cold start 8–15 s with full image; mitigate with Provisioned Concurrency or ping schedule.
+  - RDS connection pooling under Lambda concurrency; use RDS Proxy or limit reserved concurrency.
+  - pgvector migration requires changes to chromadb_client.py and rag_retriever.py (not done yet).
+  - Bedrock integration requires changes to llm_agent.py (not done yet — code snippets in docs).
+Next action: If deploying for real, follow §7 of docs/AWS-DEPLOYMENT.md. Next code change: pgvector migration.
+
 ## 2026-04-09 (phase 2 docs reconciliation)
 
 Branch: feat/phase-2-idn-agent

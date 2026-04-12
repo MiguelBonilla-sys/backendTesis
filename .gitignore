@@ -257,3 +257,11 @@ backup_*.zip
 
 checksums_*.sha256
 snapshot-manifest*.json
+
+# Terraform
+infra/aws/terraform/.terraform/
+infra/aws/terraform/.terraform.lock.hcl
+infra/aws/terraform/terraform.tfstate
+infra/aws/terraform/terraform.tfstate.backup
+infra/aws/terraform/terraform.tfvars
+infra/aws/terraform/*.auto.tfvars
