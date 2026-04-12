@@ -137,3 +137,62 @@ def test_detect_returns_list_of_dicts():
     assert "position" in result[0]
     assert "script" in result[0]
     assert "lookalike" in result[0]
+
+
+# ── Coverage gap fixes — Phase 4 ──────────────────────────────────────────────
+
+def test_load_skips_lines_with_empty_hex_parts(tmp_path: Path) -> None:
+    """Lines where source or target hex is empty after strip() are skipped (L77)."""
+    f = tmp_path / "empty_parts.txt"
+    # '; 0061 ; SA' → source_hex is empty after strip → skip
+    # '0430 ;  ; SA' → target_hex is empty → skip
+    # valid line at the end to confirm parsing continues
+    f.write_text(
+        "; 0061 ; SA\n"
+        "0430 ;  ; SA\n"
+        "0435 ; 0065 ; SA\n",
+        encoding="utf-8",
+    )
+    catalog = load_confusables(f)
+    # Only the valid line (0435 → e) should be loaded
+    assert "\u0435" in catalog
+    assert "\u0430" not in catalog
+
+
+def test_load_skips_lines_with_invalid_hex(tmp_path: Path) -> None:
+    """ValueError from _hex_seq_to_str is caught; line is skipped, parsing continues (L81-82)."""
+    f = tmp_path / "invalid_hex.txt"
+    f.write_text(
+        "ZZZZ ; 0061 ; SA\n"       # invalid source hex
+        "0430 ; QQQQ ; SA\n"       # invalid target hex
+        "0441 ; 0063 ; SA\n",      # valid: Cyrillic с → c
+        encoding="utf-8",
+    )
+    catalog = load_confusables(f)
+    assert "\u0441" in catalog
+    assert "c" in catalog["\u0441"]
+
+
+def test_load_returns_empty_on_oserror(tmp_path: Path) -> None:
+    """OSError during file reading → {} returned, no exception propagated (L87-89)."""
+    from unittest.mock import patch
+
+    f = tmp_path / "exists.txt"
+    f.write_text("0430 ; 0061 ; SA\n", encoding="utf-8")
+
+    with patch("builtins.open", side_effect=OSError("permission denied")):
+        result = load_confusables(f)
+
+    assert result == {}
+
+
+def test_char_script_unknown_for_unnamed_char() -> None:
+    """Characters without a Unicode name return 'UNKNOWN' (L117-119 exception path)."""
+    import unicodedata
+    from unittest.mock import patch
+
+    # Patch unicodedata.name to raise ValueError (simulates unnamed codepoint)
+    with patch("agents.confusables_loader.unicodedata.name", side_effect=ValueError("no name")):
+        result = char_script("a")
+
+    assert result == "UNKNOWN"

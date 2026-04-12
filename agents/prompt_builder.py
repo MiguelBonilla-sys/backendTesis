@@ -20,7 +20,7 @@ DESIGN DECISIONS — DO NOT CHANGE without updating backendTesis/CLAUDE.md
 
 3. Response format: "SCORE: <float> | REASON: <text>"
    - This EXACT string appears in the prompt as the expected output format.
-   - LLMAgent._parse_score() uses re.search(r"SCORE:\s*([\d.]+)", text) to extract.
+   - LLMAgent._parse_score() uses re.search(r"SCORE:\\s*([\d.]+)", text) to extract.
    - DO NOT change the format without updating LLMAgent._parse_score().
 
 4. Body truncation: hard cap at 500 chars BEFORE token counting.

@@ -38,8 +38,8 @@ class FusionAgent(BaseAgent):
         self._log_start("fusion")
         try:
             s_ti = self._aggregate_ti(ti_scores)
-            s_idn = ALPHA * s_idn_local + (1.0 - ALPHA) * s_ti
-            s_risk = GAMMA * s_idn + (1.0 - GAMMA) * s_llm
+            s_idn = max(0.0, min(1.0, ALPHA * s_idn_local + (1.0 - ALPHA) * s_ti))
+            s_risk = max(0.0, min(1.0, GAMMA * s_idn + (1.0 - GAMMA) * s_llm))
             verdict = self._verdict(s_risk)
             shap = self._shap(s_idn_local, s_ti, s_llm, s_idn, s_risk)
 
@@ -50,6 +50,7 @@ class FusionAgent(BaseAgent):
                 "s_risk": round(s_risk, 4),
                 "verdict": verdict,
                 "shap_explanation": shap,
+                "top_features": self._top_features(shap),
             }
             self._log_result("fusion", s_risk)
             return result
@@ -91,3 +92,13 @@ class FusionAgent(BaseAgent):
             "idn_local_score": round(s_idn_local, 4),
             "baseline": baseline,
         }
+
+    @staticmethod
+    def _top_features(shap: dict[str, float], n: int = 3) -> list[str]:
+        """Return top-n feature keys sorted by |contribution| descending.
+
+        Excludes 'baseline' and 'idn_local_score' (metadata, not contributions).
+        """
+        _exclude = {"baseline", "idn_local_score"}
+        sortable = {k: v for k, v in shap.items() if k not in _exclude}
+        return sorted(sortable, key=lambda k: abs(sortable[k]), reverse=True)[:n]

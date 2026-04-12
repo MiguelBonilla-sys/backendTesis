@@ -60,3 +60,21 @@ def test_is_valid_url_false():
     assert is_valid_url("ftp://evil.com") is False
     assert is_valid_url("not-a-url") is False
     assert is_valid_url("") is False
+
+
+# ── Coverage gap fixes — Phase 4 ──────────────────────────────────────────────
+
+def test_extract_domain_no_hostname_raises() -> None:
+    """URL with http scheme but no hostname → InvalidURLError (L17)."""
+    with pytest.raises(InvalidURLError):
+        extract_domain("http://")
+
+
+def test_is_valid_url_exception_returns_false() -> None:
+    """If urlparse raises internally → False returned, no exception (L33-34)."""
+    from unittest.mock import patch
+
+    with patch("utils.url_parser.urlparse", side_effect=Exception("parse error")):
+        result = is_valid_url("https://example.com")
+
+    assert result is False

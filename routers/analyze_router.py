@@ -55,7 +55,7 @@ async def analyze_url(
         url = sanitize_url(request.url)
         domain = extract_domain(url)
     except InvalidURLError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
 
     try:
         # Stage 1: IDN (CPU-bound, fast)

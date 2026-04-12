@@ -18,7 +18,7 @@ from core.exceptions import (
 from core.logger import logger
 
 _STATUS_MAP: dict[type, int] = {
-    InvalidURLError: status.HTTP_422_UNPROCESSABLE_ENTITY,
+    InvalidURLError: status.HTTP_422_UNPROCESSABLE_CONTENT,
     AuthError: status.HTTP_401_UNAUTHORIZED,
     IDNAnalysisError: status.HTTP_500_INTERNAL_SERVER_ERROR,
     LLMInferenceError: status.HTTP_500_INTERNAL_SERVER_ERROR,
