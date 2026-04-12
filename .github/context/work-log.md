@@ -3,21 +3,15 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-12T14:48:54.310442Z
-- Branch: feat/phase-5-api-layer
-- Dirty entries: 11
+- Last sync (UTC): 2026-04-12T21:18:56.897457Z
+- Branch: copilot/investigar-despliegue-aws-lambda
+- Dirty entries: 5
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - main.py
-  - routers/analyze_router.py
-  - routers/incidents_router.py
-  - schemas/analyze_schemas.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_incidents_router.py
 <!-- AUTO-SYNC:END -->
 
 Concise session log for continuity across agents and sessions.
