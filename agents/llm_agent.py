@@ -86,10 +86,15 @@ class LLMAgent(BaseAgent):
             return []
         try:
             query = f"{domain} {email_body or ''}".strip()
-            email_ctx = self._retriever.retrieve(query)
-            # Also retrieve known IDN attack patterns for additional context.
-            # RAGRetriever.retrieve() never raises — returns [] on any error.
-            idn_ctx = self._idn_retriever.retrieve(domain) if self._idn_retriever else []
+            # Run the synchronous RAGRetriever.retrieve() in a separate thread.
+            # This prevents SentenceTransformer from freezing the Uvicorn event loop.
+            email_ctx = await asyncio.to_thread(self._retriever.retrieve, query)
+            
+            # Also retrieve known IDN attack patterns.
+            idn_ctx = []
+            if self._idn_retriever:
+                idn_ctx = await asyncio.to_thread(self._idn_retriever.retrieve, domain)
+                
             return email_ctx + idn_ctx
         except Exception as exc:
             self.logger.warning(f"RAG retrieval via RAGRetriever failed: {exc}")

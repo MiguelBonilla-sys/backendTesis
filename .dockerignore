@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+env
+__pycache__
+*.pyc
+postgres_data
+chroma_data
+redis_data
+llama_data
+ollama_data
+pg_data

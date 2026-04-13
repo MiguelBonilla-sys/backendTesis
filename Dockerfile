@@ -23,6 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Ensure bootstrap tooling used by transformer imports is present even if the
+# dependency resolver leaves it out of the runtime layer.
+RUN pip install --no-cache-dir packaging==26.0
+
 # Copy installed packages from builder
 COPY --from=builder /install /usr/local
 

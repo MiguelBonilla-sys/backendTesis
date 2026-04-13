@@ -23,7 +23,7 @@ IDN_HOMOGRAPH_RATIO_ALERT: float = 0.30   # r_h >= 0.30 → alert
 
 # ── LLM / RAG ─────────────────────────────────────────────────────────────────
 RAG_TOP_K: int = 3
-LLAMASTACK_TIMEOUT_SECONDS: float = 5.0
+LLAMASTACK_TIMEOUT_SECONDS: float = 120.0
 LLAMASTACK_MAX_TOKENS: int = 512
 
 # ── ChromaDB collections ──────────────────────────────────────────────────────

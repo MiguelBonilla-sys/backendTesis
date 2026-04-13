@@ -1,0 +1,19 @@
+[Unit]
+Description=BackendTesis Auto-Deploy (45m Watchdog)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=mangel
+Group=mangel
+WorkingDirectory=/home/mangel/Documentos/devs/backendTesis
+ExecStart=/bin/bash /home/mangel/Documentos/devs/backendTesis/scripts/autodeploy.sh
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=backendtesis-deploy
+
+[Install]
+WantedBy=multi-user.target

@@ -3,21 +3,15 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-12T14:48:54.310442Z
+- Last sync (UTC): 2026-04-13T00:05:29.113248Z
 - Branch: feat/phase-5-api-layer
-- Dirty entries: 11
+- Dirty entries: 5
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - main.py
-  - routers/analyze_router.py
-  - routers/incidents_router.py
-  - schemas/analyze_schemas.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_incidents_router.py
 <!-- AUTO-SYNC:END -->
 
 Ordered actionable backlog for the next sessions.
@@ -79,6 +73,13 @@ Ordered actionable backlog for the next sessions.
 - Execute one full dry-run using scripts/snapshot-export.sh and scripts/snapshot-import.sh.
 - Verify checksum validation and restore order across PostgreSQL, ChromaDB, Redis, and LlamaStack.
 - Capture per-machine adjustments (container/volume names) and update the guide with concrete examples.
+
+1. Investigate ChromaDB health degradation in compose:
+
+- `bt-api` now starts and answers requests after the `packaging` runtime fix.
+- `bt-chroma` still reports unhealthy in `docker compose ps`.
+- Compare app-side `chromadb.HttpClient` connectivity with the container healthcheck endpoint.
+- If needed, align the Chroma image/version or healthcheck path with the runtime client expectations.
 
 1. Strengthen pipeline tests where needed:
 

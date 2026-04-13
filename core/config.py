@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     # LlamaStack
     LLAMASTACK_URL: str = "http://localhost:5001"
-    LLAMASTACK_MODEL: str = "ollama/Llama-3.1-8B-Instruct-GGUF"
+    LLAMASTACK_MODEL: str = "ollama/llama3.2:1b"
 
     # TI APIs
     VIRUSTOTAL_API_KEY: str = ""

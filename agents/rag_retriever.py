@@ -58,6 +58,9 @@ def _get_encoder() -> SentenceTransformer:
         _ENCODER = SentenceTransformer(_MODEL_NAME)
     return _ENCODER
 
+# Preload to prevent PyTorch from blocking Uvicorn workers to death on first request!
+_get_encoder()
+
 
 class RAGRetriever:
     """Retrieves semantically similar phishing email chunks from a ChromaDB collection.

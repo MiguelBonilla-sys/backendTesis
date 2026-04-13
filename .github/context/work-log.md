@@ -3,21 +3,15 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-12T14:48:54.310442Z
+- Last sync (UTC): 2026-04-13T00:05:29.113248Z
 - Branch: feat/phase-5-api-layer
-- Dirty entries: 11
+- Dirty entries: 5
 - Dirty preview:
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - main.py
-  - routers/analyze_router.py
-  - routers/incidents_router.py
-  - schemas/analyze_schemas.py
-  - tests/unit/test_analyze_router.py
-  - tests/unit/test_incidents_router.py
 <!-- AUTO-SYNC:END -->
 
 Concise session log for continuity across agents and sessions.
@@ -676,3 +670,32 @@ Open risks:
 Next action:
 
 - Align `.env.example` and add one focused test for model id normalization/fallback behavior in the LLM path.
+
+## 2026-04-12 (docker runtime packaging fix)
+
+Branch: feat/phase-5-api-layer
+Goal: Restore API startup after container build/import failure on `packaging`.
+
+Files updated:
+
+- Dockerfile
+
+Checks:
+
+- docker compose up -d --build app
+- curl http://localhost:8000/docs
+- curl http://localhost:8000/health
+- docker compose ps
+
+Decisions:
+
+- Added an explicit runtime bootstrap install for `packaging==26.0` in the image so transformer imports do not fail at startup.
+- Verified the API now listens on `0.0.0.0:8000` and responds to HTTP requests.
+
+Open risks:
+
+- ChromaDB still reports unhealthy in compose, so `/health` remains degraded even though the API is reachable.
+
+Next action:
+
+- Investigate the ChromaDB connectivity/health mismatch if a fully green stack is needed.
