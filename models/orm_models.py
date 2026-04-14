@@ -22,12 +22,16 @@ from models.database import Base
 
 
 class User(Base):
+    # NOTE: This ORM definition reflects the Phase 7 schema.
+    # The corresponding DDL migration lives in infraTesis/scripts/schema.sql
+    # and must be applied separately (DROP/re-create users table or ALTER).
     __tablename__ = "users"
+    __table_args__ = (Index("ix_users_email", "email", unique=True),)
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    username: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    role: Mapped[str] = mapped_column(String(20), default="analyst", nullable=False)
-    api_key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)  # lowercase institutional email
+    password_hash: Mapped[str] = mapped_column(String(72), nullable=False)  # bcrypt hash (cost=12)
+    role: Mapped[str] = mapped_column(String(20), default="student", nullable=False)  # "student" | "admin"
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

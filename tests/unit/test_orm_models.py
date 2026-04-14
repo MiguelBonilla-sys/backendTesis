@@ -40,14 +40,15 @@ def test_incident_tablename():
 
 
 def test_user_instantiation():
+    # Phase 7: User model uses email + password_hash instead of username + api_key_hash.
     user = orm.User(
-        username="testuser",
-        role="analyst",
-        api_key_hash="a" * 64,
+        email="student@usbbog.edu.co",
+        password_hash="$2b$12$" + "a" * 53,
+        role="student",
         is_active=True,
     )
-    assert user.username == "testuser"
-    assert user.role == "analyst"
+    assert user.email == "student@usbbog.edu.co"
+    assert user.role == "student"
     assert user.is_active is True
 
 

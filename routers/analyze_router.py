@@ -66,12 +66,12 @@ async def analyze_url(
     except InvalidURLError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc))
 
-    # Privacy: SHA-256 of email body if present — raw body is never stored
-    email_sha256: str | None = (
-        hashlib.sha256(request.email_body.encode()).hexdigest()
-        if request.email_body
-        else None
-    )
+    # Privacy: hash email body when provided; fall back to client-supplied hash
+    # (extension sends SHA-256 computed client-side — raw body never reaches the server).
+    if request.email_body:
+        email_sha256: str | None = hashlib.sha256(request.email_body.encode()).hexdigest()
+    else:
+        email_sha256 = request.email_sha256  # may be None for anonymous requests
     trace_id = str(uuid.uuid4())
 
     try:

@@ -6,6 +6,9 @@ from pydantic import BaseModel, field_validator
 class AnalyzeRequest(BaseModel):
     url: str
     email_body: str | None = None
+    # Extension privacy path: sends SHA-256 hash of email body instead of raw body.
+    # When present and email_body is absent, this value is stored directly in analyses.email_sha256.
+    email_sha256: str | None = None
     source: Literal["gmail", "outlook", "extension", "manual"] = "manual"
 
     @field_validator("url")
