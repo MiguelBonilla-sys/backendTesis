@@ -149,6 +149,7 @@ def build_prompt(
             f"IDN homograph score: {s_idn:.2f} (0=safe, 1=phishing)\n"
             f"Email body snippet: {body}\n\n"
             "Output a phishing risk score 0.0–1.0 and brief reasoning.\n"
+            "Respond in ONE line only.\n"
             "Format: SCORE: <float> | REASON: <text>"
         )
 

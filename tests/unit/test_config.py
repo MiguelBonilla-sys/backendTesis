@@ -46,7 +46,7 @@ def test_default_cors_origins():
 def test_llamastack_defaults():
     s = Settings()
     assert s.LLAMASTACK_URL.startswith("http")
-    assert "Llama" in s.LLAMASTACK_MODEL
+    assert "granite" in s.LLAMASTACK_MODEL.lower()
 
 
 def test_chromadb_collection_names():

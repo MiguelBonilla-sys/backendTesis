@@ -3,18 +3,62 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-13T00:05:29.113248Z
-- Branch: feat/phase-5-api-layer
-- Dirty entries: 5
+- Last sync (UTC): 2026-04-14T01:46:03.189535Z
+- Branch: feat/testing-podman
+- Dirty entries: 20
 - Dirty preview:
+  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
+  - agents/fusion_agent.py
+  - agents/idn_agent.py
+  - agents/llm_agent.py
+  - agents/prompt_builder.py
+  - agents/rag_retriever.py
+  - core/config.py
+  - ... (+8 more)
 <!-- AUTO-SYNC:END -->
 
 Concise session log for continuity across agents and sessions.
+
+## 2026-04-13 (podman compose + .env source of truth)
+
+Branch: feat/phase-5-api-layer
+Goal: Run full backend stack on Podman while keeping `.env` as the canonical runtime config.
+
+Files updated:
+
+- docker-compose.yml
+- core/config.py
+- agents/rag_retriever.py
+- Dockerfile
+- .env.example
+
+Checks:
+
+- python -m podman_compose up -d --build
+- podman ps --format "table {{.Names}}\t{{.Status}}"
+- podman logs --tail 200 bt-postgres
+- podman exec bt-api sh -lc "python -c 'from core.config import settings; print(settings.LLAMASTACK_URL)'"
+- Invoke-WebRequest http://localhost:8000/health
+
+Outcome:
+
+- PostgreSQL stop loop fixed by using named volume for `postgres` (Windows bind-mount permission issue avoided).
+- App service now consumes `.env` via compose `env_file` with no hardcoded overrides.
+- Settings now ignore extra env vars and auto-map localhost endpoints to compose service hosts only when running inside container.
+- API starts successfully in Podman and reads expected `.env` values (`LLAMASTACK_URL=http://localhost:11434` mapped internally to `http://ollama:11434`).
+
+Open risks:
+
+- `bt-chroma` remains `unhealthy` even though container process is up; health endpoint reports `chromadb: error`.
+
+Next action:
+
+- Adjust Chroma healthcheck probe and verify `/health` returns all components `ok`.
 
 ## 2026-04-09 (phase 2 docs reconciliation)
 

@@ -4,6 +4,8 @@ from agents.fusion_agent import FusionAgent
 from core.constants import (
     ALPHA,
     GAMMA,
+    GAMMA_DEFINITIVE_HOMOGRAPH,
+    GAMMA_LLM_FALLBACK,
     SUSPICIOUS_THRESHOLD,
     THETA,
     TI_GSB_WEIGHT,
@@ -267,6 +269,107 @@ async def test_missing_ti_keys_default_to_zero(agent):
     )
     assert result["s_ti"] == 0.0
     assert 0.0 <= result["s_risk"] <= 1.0
+
+
+# ── Adaptive GAMMA — definitive homograph branch ──────────────────────────────
+
+@pytest.mark.asyncio
+async def test_definitive_homograph_bypasses_ti_blending(agent):
+    """is_definitive_homograph=True → s_idn = s_idn_local (TI not blended in)."""
+    s_idn_local = 1.0
+    result = await agent.analyze(
+        s_idn_local=s_idn_local,
+        s_llm=0.5,
+        ti_scores={"virustotal": 0.0, "urlscan": 0.0, "google_safe_browsing": 0.0},
+        is_definitive_homograph=True,
+    )
+    # s_idn must equal s_idn_local, NOT ALPHA*s_idn_local (which would be 0.60)
+    assert abs(result["s_idn"] - s_idn_local) < 1e-4
+
+
+@pytest.mark.asyncio
+async def test_definitive_homograph_zero_ti_yields_phishing(agent):
+    """Zero-day homograph (s_ti=0) with s_idn_local=1.0 → PHISHING via TI bypass."""
+    result = await agent.analyze(
+        s_idn_local=1.0,
+        s_llm=0.5,
+        ti_scores={"virustotal": 0.0, "urlscan": 0.0, "google_safe_browsing": 0.0},
+        is_definitive_homograph=True,
+    )
+    # s_idn=1.0, gamma=0.85 → s_risk = 0.85*1.0 + 0.15*0.5 = 0.925
+    assert result["verdict"] == VERDICT_PHISHING
+    assert result["s_risk"] >= THETA
+    assert abs(result["effective_gamma"] - GAMMA_DEFINITIVE_HOMOGRAPH) < 1e-4
+
+
+@pytest.mark.asyncio
+async def test_definitive_homograph_uses_homograph_gamma(agent):
+    """is_definitive_homograph=True → effective_gamma == GAMMA_DEFINITIVE_HOMOGRAPH."""
+    result = await agent.analyze(
+        s_idn_local=0.9,
+        s_llm=0.5,
+        ti_scores={"virustotal": 0.0, "urlscan": 0.0, "google_safe_browsing": 0.0},
+        is_definitive_homograph=True,
+    )
+    assert abs(result["effective_gamma"] - GAMMA_DEFINITIVE_HOMOGRAPH) < 1e-4
+
+
+# ── Adaptive GAMMA — LLM fallback branch ─────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_llm_fallback_uses_fallback_gamma(agent):
+    """llm_is_fallback=True → effective_gamma == GAMMA_LLM_FALLBACK."""
+    result = await agent.analyze(
+        s_idn_local=0.8,
+        s_llm=0.5,
+        ti_scores={"virustotal": 0.0, "urlscan": 0.0, "google_safe_browsing": 0.0},
+        llm_is_fallback=True,
+    )
+    assert abs(result["effective_gamma"] - GAMMA_LLM_FALLBACK) < 1e-4
+
+
+@pytest.mark.asyncio
+async def test_llm_fallback_still_uses_alpha_blending(agent):
+    """llm_is_fallback=True does NOT bypass TI blending — only homograph branch does."""
+    s_idn_local = 0.8
+    result = await agent.analyze(
+        s_idn_local=s_idn_local,
+        s_llm=0.5,
+        ti_scores={"virustotal": 0.0, "urlscan": 0.0, "google_safe_browsing": 0.0},
+        llm_is_fallback=True,
+    )
+    expected_s_idn = ALPHA * s_idn_local  # 0.60 * 0.8 = 0.48
+    assert abs(result["s_idn"] - expected_s_idn) < 1e-4
+
+
+@pytest.mark.asyncio
+async def test_homograph_takes_priority_over_llm_fallback(agent):
+    """is_definitive_homograph=True takes precedence over llm_is_fallback=True."""
+    result = await agent.analyze(
+        s_idn_local=1.0,
+        s_llm=0.5,
+        ti_scores={"virustotal": 0.0, "urlscan": 0.0, "google_safe_browsing": 0.0},
+        is_definitive_homograph=True,
+        llm_is_fallback=True,
+    )
+    assert abs(result["effective_gamma"] - GAMMA_DEFINITIVE_HOMOGRAPH) < 1e-4
+    assert abs(result["s_idn"] - 1.0) < 1e-4  # TI bypass active
+
+
+@pytest.mark.asyncio
+async def test_default_path_uses_gamma_and_alpha(agent):
+    """Default (no flags) uses GAMMA and ALPHA blending."""
+    s_idn_local, s_llm = 0.8, 0.6
+    result = await agent.analyze(
+        s_idn_local=s_idn_local,
+        s_llm=s_llm,
+        ti_scores={"virustotal": 0.0, "urlscan": 0.0, "google_safe_browsing": 0.0},
+    )
+    expected_s_idn = ALPHA * s_idn_local
+    expected_s_risk = GAMMA * expected_s_idn + (1.0 - GAMMA) * s_llm
+    assert abs(result["s_idn"] - expected_s_idn) < 1e-4
+    assert abs(result["s_risk"] - expected_s_risk) < 1e-4
+    assert abs(result["effective_gamma"] - GAMMA) < 1e-4
 
 
 # ── Exception path ────────────────────────────────────────────────────────────

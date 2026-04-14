@@ -1,46 +1,18 @@
-# ── Stage 1: builder ─────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
-
-WORKDIR /build
-
-# System deps for asyncpg, chromadb and shap
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc g++ libpq-dev curl python3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-RUN grep -v "pywin32" requirements.txt > requirements_linux.txt && \
-    pip install --upgrade pip setuptools wheel packaging && \
-    pip install --prefix=/install --no-cache-dir -r requirements_linux.txt
-
-# ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM python:3.12-slim AS runtime
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# System runtime deps
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq5 curl \
-    && rm -rf /var/lib/apt/lists/*
+# Copiamos primero solo los requerimientos para aprovechar el caché de capas
+COPY requirements_docker.txt .
 
-# Ensure bootstrap tooling used by transformer imports is present even if the
-# dependency resolver leaves it out of the runtime layer.
-RUN pip install --no-cache-dir packaging==26.0
+# Preinstalamos PyTorch CPU-only para evitar bajar dependencias CUDA gigantes.
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch==2.3.1+cpu
 
-# Copy installed packages from builder
-COPY --from=builder /install /usr/local
+# Instalamos el resto de dependencias, excluyendo paquetes no usados por este backend.
+RUN awk '!/^llama-stack==/ && !/^llama-stack-api==/' requirements_docker.txt > requirements_runtime.txt \
+	&& pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements_runtime.txt
 
-# Non-root user (security hardening)
-RUN useradd --create-home --shell /bin/bash appuser
-USER appuser
-
-# Copy source code
-COPY --chown=appuser:appuser . .
-
-EXPOSE 8000
-
-# Health check for Docker / Kubernetes
-HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+# NOTA: No copiamos tu código fuente (COPY . .) intencionalmente. 
+# El código se inyectará dinámicamente llamando a la ruta del host (bind mount) 
+# en el docker-compose.yml para ahorrar almacenamiento y permitirte 
+# editar los archivos de Python sin reconstruir la imagen.

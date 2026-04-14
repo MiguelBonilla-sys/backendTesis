@@ -86,10 +86,20 @@ async def analyze_url(
         llm_result, ti_scores = await asyncio.gather(llm_task, ti_task)
 
         # Stage 3: Fusion + XAI
+        # is_definitive_homograph: IDN floor rule fired → mixed-script + high sim_v
+        is_definitive_homograph: bool = (
+            idn_result.get("is_mixed_script", False)
+            and idn_result.get("s_idn_local", 0.0) >= 0.85
+        )
+        # llm_is_fallback: LLM timed out → s_llm is the 0.5 neutral fallback
+        llm_is_fallback: bool = llm_result.get("reasoning") == "timeout"
+
         fusion_result = await fusion_agent.analyze(
             s_idn_local=idn_result["s_idn_local"],
             s_llm=llm_result["s_llm"],
             ti_scores=ti_scores,
+            is_definitive_homograph=is_definitive_homograph,
+            llm_is_fallback=llm_is_fallback,
         )
 
         # Persist atomically in background — response is sent before DB write completes

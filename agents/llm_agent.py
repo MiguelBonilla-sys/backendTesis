@@ -114,16 +114,44 @@ class LLMAgent(BaseAgent):
         return prompt
 
     async def _call_llamastack(self, prompt: str) -> dict:
+        base_url = settings.LLAMASTACK_URL.rstrip("/")
+        openai_payload = {
+            "model": settings.LLAMASTACK_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": LLAMASTACK_MAX_TOKENS,
+            "temperature": 0.1,
+        }
+
         async with httpx.AsyncClient(timeout=LLAMASTACK_TIMEOUT_SECONDS) as client:
-            resp = await client.post(
-                f"{settings.LLAMASTACK_URL}/v1/chat/completions",
-                json={
+            resp = await client.post(f"{base_url}/v1/chat/completions", json=openai_payload)
+
+            # If using raw Ollama endpoint (11434) and OpenAI-compatible route is not
+            # available, fallback to native /api/chat while keeping the same caller API.
+            if resp.status_code == 404 and base_url.endswith(":11434"):
+                ollama_payload = {
                     "model": settings.LLAMASTACK_MODEL,
                     "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": LLAMASTACK_MAX_TOKENS,
-                    "temperature": 0.1,
-                },
-            )
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.1,
+                        "num_predict": LLAMASTACK_MAX_TOKENS,
+                    },
+                }
+                ollama_resp = await client.post(f"{base_url}/api/chat", json=ollama_payload)
+                ollama_resp.raise_for_status()
+                ollama_data = ollama_resp.json()
+                content = ollama_data.get("message", {}).get("content", "")
+                prompt_tokens = int(ollama_data.get("prompt_eval_count") or 0)
+                completion_tokens = int(ollama_data.get("eval_count") or 0)
+                return {
+                    "completion": content,
+                    "usage": {
+                        "prompt_tokens": prompt_tokens,
+                        "completion_tokens": completion_tokens,
+                        "total_tokens": prompt_tokens + completion_tokens,
+                    },
+                }
+
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]

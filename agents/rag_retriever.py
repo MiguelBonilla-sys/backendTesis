@@ -32,7 +32,7 @@ DESIGN DECISIONS — DO NOT CHANGE without updating backendTesis/CLAUDE.md
 
 from __future__ import annotations
 
-from sentence_transformers import SentenceTransformer
+from typing import Any
 
 from core.constants import COLLECTION_EMAIL_EMBEDDINGS, RAG_TOP_K
 from core.logger import get_logger
@@ -42,10 +42,10 @@ from core.logger import get_logger
 # Thread-safety: Python's GIL prevents concurrent first-init races in practice.
 # DO NOT change _MODEL_NAME without re-ingesting all ChromaDB collections.
 _MODEL_NAME: str = "all-MiniLM-L6-v2"
-_ENCODER: SentenceTransformer | None = None
+_ENCODER: Any | None = None
 
 
-def _get_encoder() -> SentenceTransformer:
+def _get_encoder() -> Any:
     """Return the module-level SentenceTransformer singleton.
 
     Lazy-initialized on first call. Subsequent calls return the cached instance.
@@ -55,11 +55,10 @@ def _get_encoder() -> SentenceTransformer:
     """
     global _ENCODER  # noqa: PLW0603
     if _ENCODER is None:
+        from sentence_transformers import SentenceTransformer
+
         _ENCODER = SentenceTransformer(_MODEL_NAME)
     return _ENCODER
-
-# Preload to prevent PyTorch from blocking Uvicorn workers to death on first request!
-_get_encoder()
 
 
 class RAGRetriever:

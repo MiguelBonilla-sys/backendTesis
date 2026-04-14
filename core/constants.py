@@ -24,7 +24,15 @@ IDN_HOMOGRAPH_RATIO_ALERT: float = 0.30   # r_h >= 0.30 → alert
 # ── LLM / RAG ─────────────────────────────────────────────────────────────────
 RAG_TOP_K: int = 3
 LLAMASTACK_TIMEOUT_SECONDS: float = 120.0
-LLAMASTACK_MAX_TOKENS: int = 512
+# Reduced from 512 → 150: response is one line "SCORE: X | REASON: …" (~30-40 tokens).
+# Smaller generation budget cuts CPU inference time significantly.
+LLAMASTACK_MAX_TOKENS: int = 150
+
+# ── Fusion adaptive GAMMA ──────────────────────────────────────────────────────
+# When LLM is unavailable (timeout fallback s_llm=0.5), rely more on IDN+TI.
+LLM_TIMEOUT_FALLBACK: float = 0.5
+GAMMA_LLM_FALLBACK: float = 0.75        # LLM timed out → trust IDN+TI more
+GAMMA_DEFINITIVE_HOMOGRAPH: float = 0.85 # Mixed-script homograph floor rule fired
 
 # ── ChromaDB collections ──────────────────────────────────────────────────────
 COLLECTION_EMAIL_EMBEDDINGS: str = "email_embeddings"   # all-MiniLM-L6-v2 (384d)

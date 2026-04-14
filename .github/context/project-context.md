@@ -3,15 +3,23 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-13T00:05:29.113248Z
-- Branch: feat/phase-5-api-layer
-- Dirty entries: 5
+- Last sync (UTC): 2026-04-14T01:46:03.189535Z
+- Branch: feat/testing-podman
+- Dirty entries: 20
 - Dirty preview:
+  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
+  - agents/fusion_agent.py
+  - agents/idn_agent.py
+  - agents/llm_agent.py
+  - agents/prompt_builder.py
+  - agents/rag_retriever.py
+  - core/config.py
+  - ... (+8 more)
 <!-- AUTO-SYNC:END -->
 
 ## Objective

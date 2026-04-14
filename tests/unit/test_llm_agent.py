@@ -146,6 +146,37 @@ async def test_call_llamastack_success(agent_no_chroma: LLMAgent):
     assert result["usage"]["total_tokens"] == 150
 
 
+@pytest.mark.asyncio
+async def test_call_llamastack_ollama_fallback(agent_no_chroma: LLMAgent):
+    mock_openai_404 = MagicMock()
+    mock_openai_404.status_code = 404
+
+    ollama_response = {
+        "message": {"content": "SCORE: 0.61 | REASON: suspicious intent"},
+        "prompt_eval_count": 10,
+        "eval_count": 15,
+    }
+    mock_ollama_ok = MagicMock()
+    mock_ollama_ok.raise_for_status = MagicMock()
+    mock_ollama_ok.json.return_value = ollama_response
+
+    mock_http = AsyncMock()
+    mock_http.post.side_effect = [mock_openai_404, mock_ollama_ok]
+    mock_cm = MagicMock()
+    mock_cm.__aenter__ = AsyncMock(return_value=mock_http)
+    mock_cm.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("agents.llm_agent.httpx.AsyncClient", return_value=mock_cm), \
+         patch("agents.llm_agent.settings") as mock_settings:
+        mock_settings.LLAMASTACK_URL = "http://localhost:11434"
+        mock_settings.LLAMASTACK_MODEL = "ibm-granite/granite-3.3-8b-instruct-GGUF"
+        result = await agent_no_chroma._call_llamastack("test prompt")
+
+    assert result["completion"] == "SCORE: 0.61 | REASON: suspicious intent"
+    assert result["usage"]["total_tokens"] == 25
+    assert mock_http.post.await_count == 2
+
+
 # ── analyze ───────────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

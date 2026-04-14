@@ -1,6 +1,7 @@
 """IDN Homograph Detection Agent — 5-stage algorithm (RFC 5890/5891, Unicode TR#39)."""
 from __future__ import annotations
 
+import encodings.idna
 import unicodedata
 from pathlib import Path
 
@@ -88,6 +89,28 @@ class IDNAgent(BaseAgent):
             catalog if catalog is not None else _CONFUSABLES_CATALOG
         )
 
+    @staticmethod
+    def _decode_punycode(domain: str) -> str:
+        """Decode Punycode/IDNA labels to Unicode for confusable analysis.
+
+        RFC 5890/5891: each xn-- label is decoded independently.
+        Falls back to the original label on any UnicodeError (malformed Punycode).
+
+        Example:
+            "xn--pypal-4ve.com" → "рaypal.com"  (Cyrillic р U+0440)
+        """
+        parts = domain.split(".")
+        decoded: list[str] = []
+        for label in parts:
+            if label.startswith("xn--"):
+                try:
+                    decoded.append(label.encode("ascii").decode("idna"))
+                except (UnicodeError, UnicodeDecodeError):
+                    decoded.append(label)  # keep ASCII label on failure
+            else:
+                decoded.append(label)
+        return ".".join(decoded)
+
     async def analyze(self, domain: str) -> dict:
         """Run the 5-stage IDN detection algorithm on *domain*.
 
@@ -97,14 +120,18 @@ class IDNAgent(BaseAgent):
 
         Returns:
             Result dict with keys:
-                domain, normalized, is_punycode, confusables,
+                domain, normalized, decoded, is_punycode, confusables,
                 confusable_details, ratio_h, sim_v, closest_domain,
-                s_idn_local, ratio_h_alert
+                s_idn_local, ratio_h_alert, is_mixed_script
         """
         self._log_start(domain)
         try:
-            # Stage 1: NFC normalization
-            normalized = unicodedata.normalize("NFC", domain.lower().strip())
+            # Stage 1: NFC normalization + Punycode decoding (RFC 5890/5891)
+            # Punycode must be decoded BEFORE confusable/script analysis so that
+            # cross-script characters (e.g. Cyrillic р in рaypal) are visible.
+            raw_normalized = unicodedata.normalize("NFC", domain.lower().strip())
+            decoded = self._decode_punycode(raw_normalized)
+            normalized = unicodedata.normalize("NFC", decoded)
 
             # Stage 2: Confusable detection + Script Mixing
             confusable_entries = detect_confusables(normalized, self._catalog)
@@ -140,7 +167,9 @@ class IDNAgent(BaseAgent):
 
             result = {
                 "domain": domain,
+                # normalized: Unicode-decoded form used for analysis
                 "normalized": normalized,
+                # is_punycode: True when original domain contains xn-- labels
                 "is_punycode": is_punycode(domain),
                 "confusables": confusables,
                 "confusable_details": confusable_entries,

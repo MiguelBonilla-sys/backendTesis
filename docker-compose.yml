@@ -6,20 +6,14 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: bt-api
-    restart: always
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
-    environment:
-      OMP_NUM_THREADS: "1"
-      # These must match the service names in this network
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/phishing_detector
-      REDIS_URL: redis://redis:6379/0
-      CHROMADB_HOST: chroma
-      CHROMADB_PORT: 8000
-      LLAMASTACK_URL: http://llamastack:5001
-      SECRET_KEY: strong-secret-key-for-dev-123
-      APP_ENV: development
+    restart: unless-stopped
     ports:
       - "8000:8000"
+    volumes:
+      - .:/app  # Monta tu código fuente ("la ruta") directamente dentro del contenedor sin duplicar archivos.
+    env_file:
+      - .env
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--workers", "1"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,6 +30,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: phishing_detector
+    ports:
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -50,30 +46,40 @@ services:
     restart: unless-stopped
     environment:
       CHROMA_SERVER_PORT: 8000
+    ports:
+      - "8001:8000"
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/v1/heartbeat\")' || exit 1"]
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/v2/heartbeat\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
     volumes:
-      - chroma_data:/data
+      - type: bind
+        source: ${PODMAN_HOST_DATA_DIR}/chroma
+        target: /data
 
   redis:
     image: redis:7-alpine
     container_name: bt-redis
     restart: unless-stopped
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     volumes:
-      - redis_data:/data
+      - type: bind
+        source: ${PODMAN_HOST_DATA_DIR}/redis
+        target: /data
 
   llamastack:
     image: llamastack/distribution-starter:latest
     container_name: bt-llamastack
     restart: unless-stopped
+    ports:
+      - "5001:5001"
     environment:
       LLAMA_STACK_PORT: "5001"
       OLLAMA_URL: http://ollama:11434/v1
@@ -81,25 +87,26 @@ services:
       ollama:
         condition: service_healthy
     volumes:
-      # Map model directory etc.
-      - llama_data:/root/.llama
+      - type: bind
+        source: ${PODMAN_HOST_DATA_DIR}/llamastack
+        target: /root/.llama
     command: ["--port", "5001"]
 
   ollama:
     image: ollama/ollama:latest
     container_name: bt-ollama
     restart: unless-stopped
+    ports:
+      - "11434:11434"
     healthcheck:
       test: ["CMD", "ollama", "list"]
       interval: 20s
       timeout: 10s
       retries: 5
     volumes:
-      - ollama_data:/root/.ollama
+      - type: bind
+        source: ${PODMAN_HOST_DATA_DIR}/ollama
+        target: /root/.ollama
 
 volumes:
   pg_data:
-  chroma_data:
-  redis_data:
-  ollama_data:
-  llama_data:
