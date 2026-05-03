@@ -1,0 +1,57 @@
+[
+  {
+    "email_id": "test_phishing_001",
+    "subject": "Urgent: Verify your PayPal account",
+    "sender": "security@xn--pypal-fya.com",
+    "urls": [
+      "http://xn--pypal-fya.com/verify",
+      "http://xn--pypal-fya.com/signin?token=abc123"
+    ],
+    "label": "phishing",
+    "notes": "Punycode domain mimicking paypal.com via Cyrillic substitution"
+  },
+  {
+    "email_id": "test_phishing_002",
+    "subject": "Your Amazon account needs attention",
+    "sender": "noreply@xn--mazon-uya.com",
+    "urls": [
+      "https://xn--mazon-uya.com/account/update",
+      "https://xn--mazon-uya.com/login?redirect=checkout"
+    ],
+    "label": "phishing",
+    "notes": "Punycode domain mimicking amazon.com"
+  },
+  {
+    "email_id": "test_phishing_003",
+    "subject": "Google security alert — action required",
+    "sender": "security@g00gle.com",
+    "urls": [
+      "http://g00gle.com/security/verify-account",
+      "http://g00gle.com/recovery?code=XYZ"
+    ],
+    "label": "phishing",
+    "notes": "Digit substitution (0 for o) in domain"
+  },
+  {
+    "email_id": "test_legit_001",
+    "subject": "Tu estado de cuenta Bancolombia — junio 2026",
+    "sender": "notificaciones@bancolombia.com.co",
+    "urls": [
+      "https://bancolombia.com.co/persona/home",
+      "https://sucursalpersonas.transaccionesbancolombia.com/mib"
+    ],
+    "label": "safe",
+    "notes": "Legitimate Colombian bank — known domain"
+  },
+  {
+    "email_id": "test_legit_002",
+    "subject": "Boletin académico USB — calificaciones disponibles",
+    "sender": "notificaciones@usbbog.edu.co",
+    "urls": [
+      "https://academia.usbbog.edu.co/estudiantes/calificaciones",
+      "https://usbbog.edu.co/noticias"
+    ],
+    "label": "safe",
+    "notes": "Legitimate USB university domain"
+  }
+]
