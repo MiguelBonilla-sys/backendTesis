@@ -1,9 +1,26 @@
 """POST /api/v1/auth/login and POST /api/v1/auth/register endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from sqlalchemy.ext.asyncio import AsyncSession
+
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+except ModuleNotFoundError:
+    class Limiter:  # type: ignore[override]
+        """Fallback no-op limiter used when slowapi is unavailable."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            _ = (args, kwargs)
+
+        def limit(self, _rule: str):
+            def decorator(func):
+                return func
+
+            return decorator
+
+    def get_remote_address(_request: Request) -> str:
+        return "0.0.0.0"
 
 from auth.auth import create_access_token
 from auth.auth_service import create_student_user, get_user_by_email, verify_password

@@ -3,26 +3,33 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-14T01:46:03.189535Z
-- Branch: feat/testing-podman
-- Dirty entries: 20
+- Last sync (UTC): 2026-04-14T17:33:13.002630Z
+- Branch: feat/phase-5-api-layer
+- Dirty entries: 12
 - Dirty preview:
-  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - agents/fusion_agent.py
-  - agents/idn_agent.py
-  - agents/llm_agent.py
-  - agents/prompt_builder.py
-  - agents/rag_retriever.py
-  - core/config.py
-  - ... (+8 more)
+  - docker-compose.yml
+  - Dockerfile
+  - requirements.txt
+  - requirements_docker.txt
+  - routers/auth_router.py
+  - schemas/auth_schemas.py
+  - scripts/seed_admin.py
 <!-- AUTO-SYNC:END -->
 
 Ordered actionable backlog for the next sessions.
+
+1. Restore dependency-complete `bt-api` image and remove temporary fallbacks:
+
+- Fix Podman build-network DNS/index resolution for pip during image build.
+- Rebuild `bt-api` image successfully from `Dockerfile`.
+- Remove `slowapi` no-op fallback in `routers/auth_router.py` once package installation is stable.
+- Restore `EmailStr` + `email-validator` flow in `schemas/auth_schemas.py` once image dependencies are complete.
+- Re-verify `POST /api/v1/auth/login` keeps returning proper HTTP responses under frontend load.
 
 1. Consolidate LlamaStack model ID compatibility after compose update:
 

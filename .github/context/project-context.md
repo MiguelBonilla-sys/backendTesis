@@ -3,23 +3,22 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-14T01:46:03.189535Z
-- Branch: feat/testing-podman
-- Dirty entries: 20
+- Last sync (UTC): 2026-04-14T17:33:13.002630Z
+- Branch: feat/phase-5-api-layer
+- Dirty entries: 12
 - Dirty preview:
-  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - agents/fusion_agent.py
-  - agents/idn_agent.py
-  - agents/llm_agent.py
-  - agents/prompt_builder.py
-  - agents/rag_retriever.py
-  - core/config.py
-  - ... (+8 more)
+  - docker-compose.yml
+  - Dockerfile
+  - requirements.txt
+  - requirements_docker.txt
+  - routers/auth_router.py
+  - schemas/auth_schemas.py
+  - scripts/seed_admin.py
 <!-- AUTO-SYNC:END -->
 
 ## Objective

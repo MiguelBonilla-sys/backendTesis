@@ -3,26 +3,61 @@
 <!-- AUTO-SYNC:START -->
 ## Auto Sync
 
-- Last sync (UTC): 2026-04-14T01:46:03.189535Z
-- Branch: feat/testing-podman
-- Dirty entries: 20
+- Last sync (UTC): 2026-04-14T17:33:13.002630Z
+- Branch: feat/phase-5-api-layer
+- Dirty entries: 12
 - Dirty preview:
-  - .env.example
   - .github/auto-memory/dirty-files
   - .github/context/next-steps.md
   - .github/context/project-context.md
   - .github/context/project-history.md
   - .github/context/work-log.md
-  - agents/fusion_agent.py
-  - agents/idn_agent.py
-  - agents/llm_agent.py
-  - agents/prompt_builder.py
-  - agents/rag_retriever.py
-  - core/config.py
-  - ... (+8 more)
+  - docker-compose.yml
+  - Dockerfile
+  - requirements.txt
+  - requirements_docker.txt
+  - routers/auth_router.py
+  - schemas/auth_schemas.py
+  - scripts/seed_admin.py
 <!-- AUTO-SYNC:END -->
 
 Concise session log for continuity across agents and sessions.
+
+## 2026-04-14 (auth availability recovery under offline image constraints)
+
+Branch: feat/phase-5-api-layer
+Goal: Recover frontend login availability on `localhost:8000` after Podman app startup failures.
+
+Files updated:
+
+- docker-compose.yml
+- routers/auth_router.py
+- schemas/auth_schemas.py
+- Dockerfile
+
+Checks:
+
+- podman ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+- podman logs --tail 120 bt-api
+- Invoke-WebRequest http://localhost:8000/health
+- Invoke-WebRequest -SkipHttpErrorCheck http://localhost:8000/api/v1/auth/login (POST)
+
+Outcome:
+
+- Removed `--reload` from app startup command in compose to avoid parent-only reloader state.
+- Added safe fallback in `auth_router` when `slowapi` is missing (no-op limiter) so API can boot instead of crashing on import.
+- Replaced `EmailStr` dependency in auth schemas with explicit string-based email validation to avoid runtime crash when `email-validator` is unavailable in the current image.
+- Backend is reachable again: `/health` returns `200 OK`; `/api/v1/auth/login` now returns HTTP responses (`401 Invalid credentials`) instead of connection-level errors.
+
+Open risks:
+
+- Current runtime fallback disables effective auth rate limiting if `slowapi` is absent.
+- Email format validation is now explicit/manual and less strict than `EmailStr` + `email-validator`.
+- Podman image rebuild remains blocked by DNS/index resolution during pip install; dependency-complete image has not been rebuilt yet.
+
+Next action:
+
+- Fix Podman build-network DNS/index access, rebuild `bt-api` image with full dependencies, then remove temporary auth/schema fallbacks and restore strict runtime behavior.
 
 ## 2026-04-13 (podman compose + .env source of truth)
 

@@ -1,6 +1,6 @@
 """Pydantic v2 request/response schemas for authentication endpoints."""
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 ALLOWED_DOMAINS: tuple[str, ...] = (
     "@academia.usbbog.edu.co",
@@ -8,20 +8,35 @@ ALLOWED_DOMAINS: tuple[str, ...] = (
 )
 
 
+def _normalize_email(value: str) -> str:
+    lowered = value.strip().lower()
+    if "@" not in lowered:
+        raise ValueError("Invalid email format")
+    local, domain = lowered.split("@", 1)
+    if not local or not domain or "." not in domain:
+        raise ValueError("Invalid email format")
+    return lowered
+
+
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(min_length=8)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: str) -> str:
+        return _normalize_email(v)
 
 
 class RegisterRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str = Field(min_length=8, max_length=72)  # bcrypt 72-char limit
     confirm_password: str
 
     @field_validator("email")
     @classmethod
     def must_be_university_domain(cls, v: str) -> str:
-        lower = v.lower()
+        lower = _normalize_email(v)
         if not any(lower.endswith(d) for d in ALLOWED_DOMAINS):
             raise ValueError(
                 "Email must be a USB institutional address "

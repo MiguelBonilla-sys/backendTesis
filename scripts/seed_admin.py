@@ -9,6 +9,11 @@ import asyncio
 import os
 import sys
 
+# asyncpg is incompatible with the Windows ProactorEventLoop (Python 3.8+).
+# Force SelectorEventLoop before any async code runs.
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 # Allow running from backendTesis/ root without installing the package.
 sys.path.insert(0, ".")
 

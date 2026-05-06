@@ -13,7 +13,7 @@ services:
       - .:/app  # Monta tu código fuente ("la ruta") directamente dentro del contenedor sin duplicar archivos.
     env_file:
       - .env
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--workers", "1"]
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
     depends_on:
       postgres:
         condition: service_healthy
