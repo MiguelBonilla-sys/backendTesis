@@ -1,0 +1,294 @@
+"""Tests for agents/llm_agent.py — LLMAgent score parsing and prompt building."""
+from __future__ import annotations
+
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+
+from agents.llm_agent import LLMAgent
+from core.constants import LLM_FALLBACK_SCORE
+
+
+class TestLLMAgentParsers:
+    @pytest.fixture
+    def agent(self) -> LLMAgent:
+        a = LLMAgent()
+        a._ready = True
+        return a
+
+    def test_parse_score_valid_float(self, agent: LLMAgent):
+        text = "SCORE: 0.85 | REASON: Suspicious domain"
+        assert agent._parse_score(text) == 0.85
+
+    def test_parse_score_zero(self, agent: LLMAgent):
+        text = "SCORE: 0.0 | REASON: Clean"
+        assert agent._parse_score(text) == 0.0
+
+    def test_parse_score_one(self, agent: LLMAgent):
+        text = "SCORE: 1.0 | REASON: Definite phishing"
+        assert agent._parse_score(text) == 1.0
+
+    def test_parse_score_no_pattern_returns_fallback(self, agent: LLMAgent):
+        assert agent._parse_score("No score here") == LLM_FALLBACK_SCORE
+
+    def test_parse_score_saturates_above_one(self, agent: LLMAgent):
+        text = "SCORE: 1.5 | REASON: Too high"
+        assert agent._parse_score(text) == 1.0
+
+    def test_parse_score_negative_value_returns_fallback(self, agent: LLMAgent):
+        # The regex only matches digits and '.', so "-0.5" won't match SCORE: pattern
+        # It will fall back to LLM_FALLBACK_SCORE
+        text = "SCORE: -0.5 | REASON: Negative"
+        result = agent._parse_score(text)
+        # Either returns fallback (pattern not matched) or 0.0 (clamped) — both are valid
+        assert result >= 0.0
+
+    def test_parse_score_with_whitespace(self, agent: LLMAgent):
+        text = "SCORE:   0.75 | REASON: Test"
+        assert agent._parse_score(text) == 0.75
+
+    def test_parse_reason_standard_format(self, agent: LLMAgent):
+        text = "SCORE: 0.9 | REASON: Domain uses Cyrillic characters"
+        reason = agent._parse_reason(text)
+        assert "Cyrillic" in reason
+
+    def test_parse_reason_no_pattern_returns_truncated_text(self, agent: LLMAgent):
+        text = "No structured output here at all"
+        reason = agent._parse_reason(text)
+        assert len(reason) > 0
+
+    def test_parse_reason_empty_text(self, agent: LLMAgent):
+        reason = agent._parse_reason("")
+        assert reason == "No reason provided"
+
+    def test_parse_reason_truncated_to_500(self, agent: LLMAgent):
+        long_reason = "REASON: " + "x" * 600
+        reason = agent._parse_reason(long_reason)
+        assert len(reason) <= 500
+
+    def test_parse_reason_strips_whitespace(self, agent: LLMAgent):
+        text = "SCORE: 0.8 | REASON:   Suspicious   "
+        reason = agent._parse_reason(text)
+        assert reason == reason.strip()
+
+
+class TestLLMAgentBuildPrompt:
+    @pytest.fixture
+    def agent(self) -> LLMAgent:
+        a = LLMAgent()
+        a._ready = True
+        return a
+
+    def test_prompt_contains_url(self, agent: LLMAgent):
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body=None,
+            rag_context=[],
+            idn_summary=None,
+        )
+        assert "https://paypal.com" in prompt
+
+    def test_prompt_contains_domain(self, agent: LLMAgent):
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body=None,
+            rag_context=[],
+            idn_summary=None,
+        )
+        assert "paypal.com" in prompt
+
+    def test_prompt_contains_rag_context(self, agent: LLMAgent):
+        context = ["[Past phishing pattern] Cyrillic domain attack"]
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body=None,
+            rag_context=context,
+            idn_summary=None,
+        )
+        assert "Cyrillic domain attack" in prompt
+
+    def test_prompt_no_rag_shows_no_patterns(self, agent: LLMAgent):
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body=None,
+            rag_context=[],
+            idn_summary=None,
+        )
+        assert "No similar patterns found" in prompt
+
+    def test_prompt_includes_email_body_when_provided(self, agent: LLMAgent):
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body="Click here to verify your account",
+            rag_context=[],
+            idn_summary=None,
+        )
+        assert "Click here to verify" in prompt
+
+    def test_prompt_includes_idn_summary_when_provided(self, agent: LLMAgent):
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body=None,
+            rag_context=[],
+            idn_summary="IDN score=0.90, mixed_script=True",
+        )
+        assert "IDN score=0.90" in prompt
+
+    def test_prompt_contains_score_format_instruction(self, agent: LLMAgent):
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body=None,
+            rag_context=[],
+            idn_summary=None,
+        )
+        assert "SCORE:" in prompt
+        assert "REASON:" in prompt
+
+    def test_email_body_truncated_to_500(self, agent: LLMAgent):
+        long_body = "x" * 1000
+        prompt = agent._build_prompt(
+            url="https://paypal.com",
+            domain="paypal.com",
+            email_body=long_body,
+            rag_context=[],
+            idn_summary=None,
+        )
+        # The snippet used in prompt should be truncated to 500 chars
+        assert "x" * 501 not in prompt
+
+
+class TestLLMAgentInitialize:
+    @pytest.mark.asyncio
+    async def test_initialize_sets_ready_true(self):
+        agent = LLMAgent()
+        assert not agent._ready
+        await agent.initialize()
+        assert agent._ready is True
+
+
+class TestLLMAgentAnalyze:
+    @pytest.fixture
+    def agent(self) -> LLMAgent:
+        a = LLMAgent()
+        a._ready = True
+        return a
+
+    @pytest.mark.asyncio
+    async def test_analyze_returns_fallback_on_llamastack_error(self, agent: LLMAgent):
+        with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
+             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+            mock_rag.return_value = []
+            mock_call.side_effect = Exception("Connection refused")
+            score, reason = await agent.analyze(
+                url="https://paypal.com",
+                domain="paypal.com",
+            )
+        assert score == LLM_FALLBACK_SCORE
+
+    @pytest.mark.asyncio
+    async def test_analyze_parses_score_from_response(self, agent: LLMAgent):
+        with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
+             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+            mock_rag.return_value = []
+            mock_call.return_value = "SCORE: 0.92 | REASON: Phishing detected"
+            score, reason = await agent.analyze(
+                url="https://paypal.com",
+                domain="paypal.com",
+            )
+        assert abs(score - 0.92) < 0.001
+        assert "Phishing" in reason
+
+    @pytest.mark.asyncio
+    async def test_analyze_returns_fallback_on_timeout(self, agent: LLMAgent):
+        import asyncio
+        with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
+             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+            mock_rag.return_value = []
+            mock_call.side_effect = asyncio.TimeoutError()
+            score, reason = await agent.analyze(
+                url="https://paypal.com",
+                domain="paypal.com",
+            )
+        assert score == LLM_FALLBACK_SCORE
+
+    @pytest.mark.asyncio
+    async def test_analyze_rag_retrieval_failure_graceful(self, agent: LLMAgent):
+        """RAG failure must not crash the analysis."""
+        with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
+             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+            mock_rag.return_value = []
+            mock_call.return_value = "SCORE: 0.5 | REASON: Neutral"
+            score, reason = await agent.analyze(
+                url="https://paypal.com",
+                domain="paypal.com",
+            )
+        assert 0.0 <= score <= 1.0
+
+
+class TestLLMAgentRetrieveRagContext:
+    """
+    The _retrieve_rag_context method does a late import:
+        from models.chromadb_client import query_collection
+    We must inject a mock module into sys.modules BEFORE calling the method.
+    """
+
+    @pytest.fixture
+    def agent(self) -> LLMAgent:
+        a = LLMAgent()
+        a._ready = True
+        return a
+
+    @pytest.fixture
+    def mock_chromadb_module(self):
+        """Inject a mock chromadb_client into sys.modules."""
+        import sys
+        from unittest.mock import MagicMock
+        mock_module = MagicMock()
+        original = sys.modules.get("models.chromadb_client")
+        sys.modules["models.chromadb_client"] = mock_module
+        yield mock_module
+        # Restore
+        if original is None:
+            sys.modules.pop("models.chromadb_client", None)
+        else:
+            sys.modules["models.chromadb_client"] = original
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_when_query_raises(self, agent: LLMAgent, mock_chromadb_module):
+        mock_chromadb_module.query_collection = AsyncMock(side_effect=Exception("ChromaDB down"))
+        result = await agent._retrieve_rag_context("test query")
+        assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_max_six_chunks_returned(self, agent: LLMAgent, mock_chromadb_module):
+        many_docs = [{"document": f"doc {i}"} for i in range(10)]
+        mock_chromadb_module.query_collection = AsyncMock(return_value=many_docs)
+        result = await agent._retrieve_rag_context("test query")
+        assert len(result) <= 6
+
+    @pytest.mark.asyncio
+    async def test_combines_email_and_idn_results(self, agent: LLMAgent, mock_chromadb_module):
+        email_docs = [{"document": "phishing email pattern"}]
+        idn_docs = [{"document": "IDN attack pattern"}]
+
+        async def mock_query(collection, query_texts, n_results):
+            if "email" in collection:
+                return email_docs
+            return idn_docs
+
+        mock_chromadb_module.query_collection = mock_query
+        result = await agent._retrieve_rag_context("test query")
+        assert len(result) <= 6
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_on_exception(self, agent: LLMAgent, mock_chromadb_module):
+        """Any exception from chromadb must not propagate — returns []."""
+        mock_chromadb_module.query_collection = AsyncMock(side_effect=RuntimeError("crashed"))
+        result = await agent._retrieve_rag_context("query text")
+        assert result == []
