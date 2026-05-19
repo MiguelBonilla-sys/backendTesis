@@ -7,7 +7,7 @@ from core.config import settings
 from core.logger import logger
 from models.database import close_db, init_db
 from models.redis_client import close_redis, init_redis
-from routers import analyze_router, health_router, incidents_router
+from routers import analyze_router, auth_router, health_router, incidents_router
 
 
 @asynccontextmanager
@@ -39,6 +39,7 @@ app.add_middleware(
 )
 
 app.include_router(health_router)
+app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
 app.include_router(analyze_router, prefix="/api/v1", tags=["analyze"])
 app.include_router(incidents_router, prefix="/api/v1", tags=["incidents"])
 

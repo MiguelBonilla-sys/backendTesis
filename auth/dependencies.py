@@ -37,3 +37,25 @@ async def require_auth(
             detail=exc.message,
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+
+async def require_admin(current_user: dict = Depends(require_auth)) -> dict:
+    """Dependency que exige rol 'admin'. Usado para endpoints de administración."""
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    return current_user
+
+
+def require_role(*roles: str):
+    """Factory de dependency para roles específicos."""
+    async def _check(current_user: dict = Depends(require_auth)) -> dict:
+        if current_user.get("role") not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Required roles: {', '.join(roles)}",
+            )
+        return current_user
+    return _check

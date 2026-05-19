@@ -2,20 +2,28 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, EmailStr, Field
+from typing import Literal
+
+from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(..., min_length=3)
-    password: str = Field(..., min_length=8)
+    username: str = Field(..., min_length=3, max_length=50)
+    password: str = Field(..., min_length=8, max_length=128)
 
 
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
-    expires_in: int  # seconds until the token expires
+    expires_in: int  # segundos (900 = 15 min)
 
 
 class UserInfo(BaseModel):
     username: str
-    role: str
+    role: Literal["admin", "student", "viewer"]
+
+
+class TokenPayload(BaseModel):
+    sub: str        # username
+    role: str       # "admin" | "student" | "viewer"
+    exp: int        # unix timestamp

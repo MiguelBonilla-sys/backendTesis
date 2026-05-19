@@ -460,3 +460,43 @@ class TestAnalyzeErrorHandling:
             )
         # Pipeline must not return 500 on LLM timeout
         assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# New endpoints — /analyze_email alias and /report
+# ---------------------------------------------------------------------------
+
+class TestNewEndpoints:
+    def test_analyze_email_alias_returns_200(self, client, mock_pipeline):
+        """El alias /analyze_email debe funcionar igual que /analyze."""
+        resp = client.post(
+            "/api/v1/analyze_email",
+            json={"url": "https://рaypal.com/login"},
+            headers=_auth_headers(),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["verdict"] == "PHISHING"
+
+    def test_report_endpoint_returns_201(self, client):
+        """POST /report debe retornar 201."""
+        with patch("routers.analyze_router._persist_manual_report", new_callable=AsyncMock), \
+             patch("routers.analyze_router.asyncio") as mock_asyncio:
+            mock_asyncio.create_task = MagicMock()
+            resp = client.post(
+                "/api/v1/report",
+                json={"url": "https://evil.com", "reported_verdict": "PHISHING"},
+                headers=_auth_headers(),
+            )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert "report_id" in data
+        assert data["reported_verdict"] == "PHISHING"
+
+    def test_report_endpoint_invalid_verdict_returns_422(self, client):
+        """Verdict inválido debe retornar 422."""
+        resp = client.post(
+            "/api/v1/report",
+            json={"url": "https://evil.com", "reported_verdict": "INVALID"},
+            headers=_auth_headers(),
+        )
+        assert resp.status_code == 422

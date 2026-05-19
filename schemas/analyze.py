@@ -37,6 +37,10 @@ class TIResult(BaseModel):
     s_urlscan: float
     s_gsb: float
     s_ti: float
+    # WhoisXML domain age fields
+    domain_age_days: int | None = None    # None si no disponible
+    is_newly_registered: bool = False      # True si < DOMAIN_AGE_SUSPICIOUS_DAYS
+    whois_registrar: str | None = None
 
 
 class AgentScores(BaseModel):

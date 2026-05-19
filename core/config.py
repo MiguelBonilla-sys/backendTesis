@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET_KEY: str = "change-me-in-production"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 60
+    JWT_EXPIRE_MINUTES: int = 15
+    JWT_REFRESH_EXPIRE_MINUTES: int = 1440  # 24h para refresh token
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD_HASH: str = ""  # hash bcrypt del password admin — se configura por env var
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
@@ -26,6 +29,8 @@ class Settings(BaseSettings):
     VIRUSTOTAL_API_KEY: str = ""
     URLSCAN_API_KEY: str = ""
     GOOGLE_SAFE_BROWSING_API_KEY: str = ""
+    WHOISXML_API_KEY: str = ""
+    DOMAIN_AGE_SUSPICIOUS_DAYS: int = 30  # dominios < 30 días = sospechoso
 
     # LlamaStack
     LLAMASTACK_URL: str = "http://localhost:5000"

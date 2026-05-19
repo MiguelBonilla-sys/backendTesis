@@ -87,3 +87,31 @@ async def fetchrow(query: str, *args: object) -> asyncpg.Record | None:
             message="Database fetchrow failed",
             detail=str(exc),
         ) from exc
+
+
+async def log_audit_event(
+    event_type: str,
+    status: str,
+    actor: str | None = None,
+    resource: str | None = None,
+    ip_address: str | None = None,
+    detail: dict | None = None,
+) -> None:
+    """Registra un evento en audit_log. Fire-and-forget — no lanza excepciones."""
+    try:
+        import json
+        await execute(
+            """
+            INSERT INTO audit_log (event_type, actor, resource, ip_address, status, detail)
+            VALUES ($1, $2, $3, $4::inet, $5, $6::jsonb)
+            """,
+            event_type,
+            actor,
+            resource,
+            ip_address,
+            status,
+            json.dumps(detail) if detail else None,
+        )
+    except Exception as e:
+        from core.logger import get_logger
+        get_logger(__name__).warning("audit_log_failed", error=str(e))

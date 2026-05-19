@@ -10,11 +10,12 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
-from auth.dependencies import require_auth
+from auth.dependencies import require_admin
 from core.exceptions import DatabaseError
 from core.logger import get_logger
+from core.rate_limiter import check_rate_limit, get_client_ip
 from models.database import fetch, fetchrow
 from schemas.incidents import IncidentListResponse, IncidentRecord
 
@@ -36,6 +37,7 @@ router = APIRouter(tags=["incidents"])
     ),
 )
 async def list_incidents(
+    http_request: Request,
     page: int = Query(default=1, ge=1, description="Número de página (base 1)"),
     page_size: int = Query(default=20, ge=1, le=100, description="Registros por página"),
     verdict: str | None = Query(
@@ -43,14 +45,18 @@ async def list_incidents(
         pattern="^(PHISHING|LEGITIMATE|SUSPICIOUS)$",
         description="Filtrar por veredicto",
     ),
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(require_admin),
 ) -> IncidentListResponse:
     """
     Lista incidentes almacenados en PostgreSQL.
 
     Soporta paginación (page / page_size) y filtro opcional por verdict.
     Los resultados se ordenan por `created_at DESC`.
+    Rate limit: 30 req/min por IP (CA-4).
     """
+    # Rate limiting: 30 req/min por IP (CA-4)
+    await check_rate_limit(f"rl:incidents:{get_client_ip(http_request)}", limit=30, window_seconds=60)
+
     offset = (page - 1) * page_size
 
     try:
@@ -127,7 +133,7 @@ async def list_incidents(
 )
 async def get_incident(
     incident_id: str,
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(require_admin),
 ) -> IncidentRecord:
     """
     Retorna un único incidente identificado por su UUID.
