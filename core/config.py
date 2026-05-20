@@ -4,36 +4,48 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # App
+    APP_ENV: str = "development"
+    DEBUG: bool = False
+
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/phishing_detector"
 
     # Redis
-    REDIS_URL: str = "redis://localhost:6379"
+    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_TTL: int = 3600
 
     # ChromaDB
     CHROMADB_HOST: str = "localhost"
     CHROMADB_PORT: int = 8001
 
     # JWT
-    JWT_SECRET_KEY: str = "change-me-in-production"
+    SECRET_KEY: str = "changeme-use-strong-secret-in-production"
+    JWT_SECRET_KEY: str = "changeme-use-strong-secret-in-production"
+    ALGORITHM: str = "HS256"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 15
-    JWT_REFRESH_EXPIRE_MINUTES: int = 1440  # 24h para refresh token
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    JWT_EXPIRE_MINUTES: int = 30
+    JWT_REFRESH_EXPIRE_MINUTES: int = 1440
     ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD_HASH: str = ""  # hash bcrypt del password admin — se configura por env var
+    ADMIN_PASSWORD_HASH: str = ""
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
-    # Threat Intelligence API keys (empty = disabled)
+    # Rate Limiting
+    RATE_LIMIT_ANALYZE: int = 100
+    RATE_LIMIT_REPORT: int = 20
+
+    # Threat Intelligence API keys
     VIRUSTOTAL_API_KEY: str = ""
     URLSCAN_API_KEY: str = ""
     GOOGLE_SAFE_BROWSING_API_KEY: str = ""
     WHOISXML_API_KEY: str = ""
-    DOMAIN_AGE_SUSPICIOUS_DAYS: int = 30  # dominios < 30 días = sospechoso
+    DOMAIN_AGE_SUSPICIOUS_DAYS: int = 30
 
     # LlamaStack
-    LLAMASTACK_URL: str = "http://localhost:5000"
+    LLAMASTACK_URL: str = "http://localhost:5001"
     LLAMASTACK_MODEL: str = "Llama-3.1-8B-Instruct-GGUF"
 
     # Data paths
