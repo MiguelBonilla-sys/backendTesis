@@ -243,3 +243,41 @@ class TestRowToRecord:
         }
         record = _row_to_record(row)
         assert record.email_hash == ""
+
+
+class TestListIncidentsGenericExceptions:
+    """Cover lines 110, 117-119 in incidents_router.py."""
+
+    def test_http_exception_inside_try_is_reraised(self, client):
+        """Line 110: HTTPException raised inside the try block is re-raised, not wrapped."""
+        from fastapi import HTTPException as FastAPIHTTPException
+        with patch("routers.incidents_router.fetchrow",
+                   new_callable=AsyncMock,
+                   side_effect=FastAPIHTTPException(status_code=429, detail="rate limited")):
+            resp = client.get("/api/v1/incidents", headers=_auth_headers())
+        assert resp.status_code == 429
+
+    def test_generic_exception_returns_500(self, client):
+        """Lines 117-119: RuntimeError in fetchrow is caught as generic Exception."""
+        with patch("routers.incidents_router.fetchrow",
+                   new_callable=AsyncMock,
+                   side_effect=RuntimeError("unexpected DB error")):
+            resp = client.get("/api/v1/incidents", headers=_auth_headers())
+        assert resp.status_code == 500
+        assert "Failed to retrieve" in resp.json()["detail"]
+
+
+class TestGetIncidentGenericException:
+    """Cover lines 171-173 in incidents_router.py."""
+
+    def test_generic_exception_returns_500(self, client):
+        """Lines 171-173: RuntimeError (not DatabaseError) in fetchrow."""
+        with patch("routers.incidents_router.fetchrow",
+                   new_callable=AsyncMock,
+                   side_effect=RuntimeError("connection reset")):
+            resp = client.get(
+                f"/api/v1/incidents/{uuid.uuid4()}",
+                headers=_auth_headers(),
+            )
+        assert resp.status_code == 500
+        assert "Failed to retrieve" in resp.json()["detail"]
