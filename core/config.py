@@ -46,7 +46,7 @@ class Settings(BaseSettings):
 
     # LlamaStack
     LLAMASTACK_URL: str = "http://localhost:5001"
-    LLAMASTACK_MODEL: str = "Llama-3.1-8B-Instruct-GGUF"
+    LLAMASTACK_MODEL: str = "llama3.1:8b-instruct"
 
     # Data paths
     TOP1M_PATH: str = "data/top1m.csv"
