@@ -8,8 +8,11 @@ from pydantic import BaseModel, Field
 
 
 class LoginRequest(BaseModel):
-    username: str = Field(..., min_length=3, max_length=50)
-    password: str = Field(..., min_length=8, max_length=128)
+    # Login must accept any non-empty credential — complexity rules belong on
+    # registration only. Enforcing min_length here returns 422 and locks out
+    # otherwise valid users instead of failing with a proper 401.
+    username: str = Field(..., min_length=1, max_length=254)
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class TokenResponse(BaseModel):
