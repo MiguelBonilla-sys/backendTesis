@@ -5,8 +5,6 @@ Genera JWT HS256 con exp=15min para acceso a endpoints protegidos.
 
 from __future__ import annotations
 
-import os
-
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from auth.dependencies import require_auth
@@ -72,24 +70,16 @@ async def get_current_user_info(
 
 
 async def _authenticate_user(username: str, password: str) -> UserInfo | None:
-    """
-    Valida credenciales contra config (v1: single admin user).
-    Usa bcrypt verify para comparar password.
-    """
+    """Valida credenciales contra la tabla users de PostgreSQL."""
     from core.security import verify_password
+    from models.database import fetchrow
 
-    if username != settings.ADMIN_USERNAME:
+    row = await fetchrow(
+        "SELECT email, password_hash, role, is_active FROM users WHERE email = $1",
+        username,
+    )
+    if row is None or not row["is_active"]:
         return None
-
-    if not settings.ADMIN_PASSWORD_HASH:
-        # Dev mode: si no hay hash configurado, aceptar cualquier password con advertencia.
-        # En producción ADMIN_PASSWORD_HASH es obligatorio.
-        logger.warning("admin_no_password_hash_dev_mode_only")
-        if os.getenv("ENVIRONMENT", "development") == "production":
-            return None
-        return UserInfo(username=username, role="admin")
-
-    if not verify_password(password, settings.ADMIN_PASSWORD_HASH):
+    if not verify_password(password, row["password_hash"]):
         return None
-
-    return UserInfo(username=username, role="admin")
+    return UserInfo(username=row["email"], role=row["role"])
