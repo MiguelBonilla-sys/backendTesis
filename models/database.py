@@ -17,8 +17,9 @@ async def init_db() -> None:
     """Create the shared asyncpg connection pool."""
     global _pool
     try:
+        dsn = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1)
         _pool = await asyncpg.create_pool(
-            dsn=settings.DATABASE_URL,
+            dsn=dsn,
             min_size=2,
             max_size=10,
         )
