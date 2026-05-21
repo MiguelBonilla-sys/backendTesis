@@ -44,7 +44,8 @@ async def login(request: LoginRequest) -> TokenResponse:
     return TokenResponse(
         access_token=token,
         token_type="bearer",
-        expires_in=settings.JWT_EXPIRE_MINUTES * 60,  # convertir a segundos
+        expires_in=settings.JWT_EXPIRE_MINUTES * 60,
+        role=user.role,
     )
 
 

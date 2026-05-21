@@ -19,6 +19,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int  # segundos (900 = 15 min)
+    role: Literal["admin", "student", "viewer"]
 
 
 class UserInfo(BaseModel):
