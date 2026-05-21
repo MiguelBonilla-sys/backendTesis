@@ -56,60 +56,52 @@ class TestGetCurrentUserInfo:
 # ─── _authenticate_user helper ────────────────────────────────────────────────
 
 class TestAuthenticateUserHelper:
-    """Direct unit tests for _authenticate_user (lines 79-95 in auth_router.py)."""
+    """Direct unit tests for _authenticate_user (DB-based implementation)."""
 
     @pytest.mark.asyncio
     async def test_wrong_username_returns_none(self):
         from routers.auth_router import _authenticate_user
-        from core.config import settings
-        with patch.object(settings, "ADMIN_USERNAME", "admin"):
+        with patch("models.database.fetchrow", new_callable=AsyncMock, return_value=None):
             result = await _authenticate_user("wrong_user", "any_password")
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_dev_mode_no_hash_returns_user(self):
-        """When ADMIN_PASSWORD_HASH is empty and ENVIRONMENT != production, accept any password."""
-        from routers.auth_router import _authenticate_user
-        from core.config import settings
-        with patch.object(settings, "ADMIN_USERNAME", "admin"), \
-             patch.object(settings, "ADMIN_PASSWORD_HASH", ""), \
-             patch.dict("os.environ", {"ENVIRONMENT": "development"}):
-            result = await _authenticate_user("admin", "any_password")
-        assert result is not None
-        assert result.username == "admin"
-        assert result.role == "admin"
-
-    @pytest.mark.asyncio
-    async def test_production_mode_no_hash_returns_none(self):
-        """In production, an unconfigured password hash means no login."""
-        from routers.auth_router import _authenticate_user
-        from core.config import settings
-        with patch.object(settings, "ADMIN_USERNAME", "admin"), \
-             patch.object(settings, "ADMIN_PASSWORD_HASH", ""), \
-             patch.dict("os.environ", {"ENVIRONMENT": "production"}):
-            result = await _authenticate_user("admin", "any_password")
+    async def test_inactive_user_returns_none(self):
+        row = {"email": "admin@usbbog.edu.co", "password_hash": "$2b$12$h", "role": "admin", "is_active": False}
+        with patch("models.database.fetchrow", new_callable=AsyncMock, return_value=row):
+            from routers.auth_router import _authenticate_user
+            result = await _authenticate_user("admin@usbbog.edu.co", "any_password")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_wrong_password_with_hash_returns_none(self):
-        """Incorrect password with configured hash → None."""
-        from routers.auth_router import _authenticate_user
-        from core.config import settings
-        with patch.object(settings, "ADMIN_USERNAME", "admin"), \
-             patch.object(settings, "ADMIN_PASSWORD_HASH", "$2b$12$fakehash"), \
+        """Incorrect password → None."""
+        row = {"email": "admin@usbbog.edu.co", "password_hash": "$2b$12$fakehash", "role": "admin", "is_active": True}
+        with patch("models.database.fetchrow", new_callable=AsyncMock, return_value=row), \
              patch("core.security.verify_password", return_value=False):
-            result = await _authenticate_user("admin", "wrong_password")
+            from routers.auth_router import _authenticate_user
+            result = await _authenticate_user("admin@usbbog.edu.co", "wrong_password")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_correct_password_with_hash_returns_user(self):
-        """Correct password with configured hash → UserInfo."""
-        from routers.auth_router import _authenticate_user
-        from core.config import settings
-        with patch.object(settings, "ADMIN_USERNAME", "admin"), \
-             patch.object(settings, "ADMIN_PASSWORD_HASH", "$2b$12$fakehash"), \
+        """Correct password → UserInfo with matching username and role."""
+        row = {"email": "admin@usbbog.edu.co", "password_hash": "$2b$12$fakehash", "role": "admin", "is_active": True}
+        with patch("models.database.fetchrow", new_callable=AsyncMock, return_value=row), \
              patch("core.security.verify_password", return_value=True):
-            result = await _authenticate_user("admin", "correct_password")
+            from routers.auth_router import _authenticate_user
+            result = await _authenticate_user("admin@usbbog.edu.co", "correct_password")
         assert result is not None
-        assert result.username == "admin"
+        assert result.username == "admin@usbbog.edu.co"
         assert result.role == "admin"
+
+    @pytest.mark.asyncio
+    async def test_student_role_returned_correctly(self):
+        """Role from DB row is preserved in UserInfo."""
+        row = {"email": "student@usbbog.edu.co", "password_hash": "$2b$12$h", "role": "student", "is_active": True}
+        with patch("models.database.fetchrow", new_callable=AsyncMock, return_value=row), \
+             patch("core.security.verify_password", return_value=True):
+            from routers.auth_router import _authenticate_user
+            result = await _authenticate_user("student@usbbog.edu.co", "pass")
+        assert result is not None
+        assert result.role == "student"

@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str = "changeme-use-strong-secret-in-production"
     ALGORITHM: str = "HS256"
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    JWT_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    JWT_EXPIRE_MINUTES: int = 15
     JWT_REFRESH_EXPIRE_MINUTES: int = 1440
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""

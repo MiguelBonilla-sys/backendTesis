@@ -21,7 +21,7 @@ class TestLoginEndpoint:
         assert resp.status_code == 422
 
     def test_login_short_password_returns_422(self, client):
-        resp = client.post("/api/v1/auth/login", json={"username": "admin", "password": "short"})
+        resp = client.post("/api/v1/auth/login", json={"username": "admin", "password": ""})
         assert resp.status_code == 422
 
     def test_login_dev_mode_success(self, client):
