@@ -13,6 +13,7 @@ F_MIX: float = 1.6          # mixed-script multiplier
 ALPHA: float = 0.60         # weight of S_IDN_local vs S_TI when computing S_IDN
 GAMMA: float = 0.50         # weight of S_IDN vs S_LLM when computing S_risk
 THETA: float = 0.70         # risk threshold above which verdict = PHISHING
+LAMBDA: float = 0.30        # false-negative penalty weight in fusion loss
 HOMOGRAPH_THRESHOLD: float = 0.30   # r_h alert threshold
 SIM_V_EARLY_EXIT: float = 0.95      # early-exit visual-similarity cutoff in BKTree
 
