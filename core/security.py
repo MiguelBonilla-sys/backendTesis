@@ -2,19 +2,27 @@
 
 import hashlib
 
-from passlib.context import CryptContext
+import bcrypt
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt only considers the first 72 bytes of a password. bcrypt 4.x+ raises
+# ValueError for longer inputs instead of truncating silently, so truncate
+# here to keep behaviour stable and avoid 500 errors on long passwords.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _to_bcrypt_bytes(password: str) -> bytes:
+    """Encode *password* to UTF-8 bytes, capped at bcrypt's 72-byte limit."""
+    return password.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 
 
 def hash_password(password: str) -> str:
     """Return a bcrypt hash of *password*."""
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(_to_bcrypt_bytes(password), bcrypt.gensalt(rounds=12)).decode()
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Return True if *plain* matches the bcrypt *hashed* value."""
-    return pwd_context.verify(plain, hashed)
+    return bcrypt.checkpw(_to_bcrypt_bytes(plain), hashed.encode())
 
 
 def hash_email(email: str) -> str:

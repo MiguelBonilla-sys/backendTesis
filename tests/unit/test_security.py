@@ -3,64 +3,46 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-from unittest.mock import patch, MagicMock
-
-from core.security import hash_email
+from core.security import hash_email, hash_password, verify_password
 
 
 class TestHashPassword:
     def test_returns_non_empty_string(self):
-        with patch("core.security.pwd_context") as mock_ctx:
-            mock_ctx.hash.return_value = "$2b$12$mockedhashvalue"
-            from core.security import hash_password
-            result = hash_password("mypassword123")
+        result = hash_password("mypassword123")
         assert isinstance(result, str)
         assert len(result) > 0
 
-    def test_delegates_to_pwd_context(self):
-        with patch("core.security.pwd_context") as mock_ctx:
-            mock_ctx.hash.return_value = "$2b$12$test"
-            from core.security import hash_password
-            hash_password("password")
-            mock_ctx.hash.assert_called_once_with("password")
-
     def test_bcrypt_hash_format(self):
-        with patch("core.security.pwd_context") as mock_ctx:
-            mock_ctx.hash.return_value = "$2b$12$mockedhashvalue"
-            from core.security import hash_password
-            result = hash_password("mypassword123")
+        result = hash_password("mypassword123")
+        assert result.startswith("$2")
+
+    def test_distinct_salts_produce_distinct_hashes(self):
+        # bcrypt uses a random salt — hashing the same password twice differs
+        assert hash_password("samepassword") != hash_password("samepassword")
+
+    def test_handles_password_over_72_bytes(self):
+        # bcrypt only uses the first 72 bytes — must not raise ValueError
+        result = hash_password("x" * 200)
         assert result.startswith("$2")
 
 
 class TestVerifyPassword:
     def test_correct_password_returns_true(self):
-        with patch("core.security.pwd_context") as mock_ctx:
-            mock_ctx.verify.return_value = True
-            from core.security import verify_password
-            result = verify_password("correct", "$2b$12$hash")
-        assert result is True
+        hashed = hash_password("correct-horse-battery")
+        assert verify_password("correct-horse-battery", hashed) is True
 
     def test_wrong_password_returns_false(self):
-        with patch("core.security.pwd_context") as mock_ctx:
-            mock_ctx.verify.return_value = False
-            from core.security import verify_password
-            result = verify_password("wrong", "$2b$12$hash")
-        assert result is False
-
-    def test_delegates_to_pwd_context(self):
-        with patch("core.security.pwd_context") as mock_ctx:
-            mock_ctx.verify.return_value = True
-            from core.security import verify_password
-            verify_password("plain", "hashed")
-            mock_ctx.verify.assert_called_once_with("plain", "hashed")
+        hashed = hash_password("correct-horse-battery")
+        assert verify_password("wrong-password", hashed) is False
 
     def test_verify_returns_bool(self):
-        with patch("core.security.pwd_context") as mock_ctx:
-            mock_ctx.verify.return_value = True
-            from core.security import verify_password
-            result = verify_password("password", "hash")
-        assert isinstance(result, bool)
+        hashed = hash_password("password")
+        assert isinstance(verify_password("password", hashed), bool)
+
+    def test_roundtrip_over_72_bytes(self):
+        long_password = "y" * 120
+        hashed = hash_password(long_password)
+        assert verify_password(long_password, hashed) is True
 
 
 class TestHashEmail:
