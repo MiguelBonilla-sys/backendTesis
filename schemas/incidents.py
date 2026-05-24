@@ -27,6 +27,10 @@ class IncidentRecord(BaseModel):
     email_to: str = ""
     all_urls: list[str] = Field(default_factory=list)
     reasons: list[str] = Field(default_factory=list)
+    # Full email content (always stored)
+    email_body_html: str = ""
+    email_images: list[str] = Field(default_factory=list)
+    email_attachments: list[str] = Field(default_factory=list)
 
 
 class IncidentListResponse(BaseModel):

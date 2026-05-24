@@ -105,7 +105,8 @@ async def list_incidents(
             SELECT id, email_hash, url, domain, verdict,
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
-                   email_subject, email_from, email_to, all_urls, reasons
+                   email_subject, email_from, email_to, all_urls, reasons,
+                   email_body_html, email_images, email_attachments
             FROM incidents
         """
 
@@ -172,7 +173,8 @@ async def get_incident(
             SELECT id, email_hash, url, domain, verdict,
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
-                   email_subject, email_from, email_to, all_urls, reasons
+                   email_subject, email_from, email_to, all_urls, reasons,
+                   email_body_html, email_images, email_attachments
             FROM incidents
             WHERE id = $1
             """,
@@ -274,6 +276,66 @@ async def get_settings(
 
 
 # --------------------------------------------------------------------------- #
+# GET /incidents/by_hash/{email_hash}
+# --------------------------------------------------------------------------- #
+
+@router.get(
+    "/incidents/by_hash/{email_hash}",
+    response_model=IncidentListResponse,
+    summary="Todos los incidentes de un mismo email (agrupados por email_hash)",
+)
+async def get_incidents_by_hash(
+    http_request: Request,
+    email_hash: str,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    current_user: dict = Depends(require_admin),
+) -> IncidentListResponse:
+    """
+    Retorna todos los incidentes que comparten el mismo email_hash.
+    Útil para ver todos los veredictos de URLs dentro de un mismo email
+    capturado por la extensión.
+    """
+    await check_rate_limit(f"rl:incidents:{get_client_ip(http_request)}", limit=30, window_seconds=60)
+
+    offset = (page - 1) * page_size
+
+    try:
+        count_row = await fetchrow(
+            "SELECT COUNT(*) AS count FROM incidents WHERE email_hash = $1",
+            email_hash,
+        )
+        total: int = int(count_row["count"]) if count_row else 0
+
+        rows = await fetch(
+            """
+            SELECT id, email_hash, url, domain, verdict,
+                   s_risk, s_idn, s_llm, s_ti,
+                   llm_reason, shap_contributions, created_at,
+                   email_subject, email_from, email_to, all_urls, reasons,
+                   email_body_html, email_images, email_attachments
+            FROM incidents
+            WHERE email_hash = $1
+            ORDER BY created_at DESC
+            LIMIT $2 OFFSET $3
+            """,
+            email_hash,
+            page_size,
+            offset,
+        )
+
+        items = [_row_to_record(row) for row in (rows or [])]
+        return IncidentListResponse(items=items, total=total, page=page, page_size=page_size)
+
+    except Exception as exc:
+        logger.error("incidents_by_hash_error", email_hash=email_hash, error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve incidents by hash",
+        ) from exc
+
+
+# --------------------------------------------------------------------------- #
 # Helpers
 # --------------------------------------------------------------------------- #
 
@@ -287,6 +349,8 @@ def _row_to_record(row: dict) -> IncidentRecord:
     shap_contributions: dict[str, float] = _parse_jsonb(row["shap_contributions"], {})  # type: ignore[assignment]
     all_urls: list[str] = _parse_jsonb(row.get("all_urls"), [])  # type: ignore[assignment]
     reasons: list[str] = _parse_jsonb(row.get("reasons"), [])  # type: ignore[assignment]
+    email_images: list[str] = _parse_jsonb(row.get("email_images"), [])  # type: ignore[assignment]
+    email_attachments: list[str] = _parse_jsonb(row.get("email_attachments"), [])  # type: ignore[assignment]
 
     return IncidentRecord(
         id=str(row["id"]),
@@ -306,4 +370,7 @@ def _row_to_record(row: dict) -> IncidentRecord:
         email_to=row.get("email_to") or "",
         all_urls=all_urls,
         reasons=reasons,
+        email_body_html=row.get("email_body_html") or "",
+        email_images=email_images,
+        email_attachments=email_attachments,
     )

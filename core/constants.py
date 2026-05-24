@@ -17,6 +17,14 @@ HOMOGRAPH_THRESHOLD: float = 0.30   # r_h alert threshold
 SIM_V_EARLY_EXIT: float = 0.95      # early-exit visual-similarity cutoff in BKTree
 
 # ---------------------------------------------------------------------------
+# Email context signal weights (additive boost to s_risk)
+# ---------------------------------------------------------------------------
+EMAIL_MISMATCH_WEIGHT: float = 0.35   # sender domain ≠ return-path → strong spoofing indicator
+EMAIL_URGENCY_WEIGHT: float = 0.30    # urgency_score coefficient (multiplied by urgency_score)
+EMAIL_ATTACHMENT_WEIGHT: float = 0.25 # suspicious attachment
+EMAIL_BOOST_CAP: float = 0.50         # max additive contribution from email signals to s_risk
+
+# ---------------------------------------------------------------------------
 # LLM / LlamaStack
 # ---------------------------------------------------------------------------
 LLM_TIMEOUT_S: float = 45.0
@@ -36,6 +44,18 @@ COLLECTION_EMAIL: str = "email_embeddings"
 COLLECTION_IDN: str = "idn_patterns"
 COLLECTION_TI: str = "ti_signals"
 RAG_TOP_K: int = 3
+
+# ---------------------------------------------------------------------------
+# Web Probe Agent
+# ---------------------------------------------------------------------------
+PROBE_TIMEOUT_S: float = 8.0
+PROBE_MAX_RESPONSE_BYTES: int = 65_536     # 64 KB — enough to find login forms
+PROBE_MAX_REDIRECTS: int = 5
+PROBE_LOGIN_WEIGHT: float = 0.45           # login form with password field
+PROBE_REDIRECT_WEIGHT: float = 0.25        # domain changed on redirect
+PROBE_BRAND_WEIGHT: float = 0.35           # brand impersonation in page content
+PROBE_FORM_ACTION_WEIGHT: float = 0.20     # form action points to external domain
+PROBE_BOOST_CAP: float = 0.60              # max additive contribution from probe to s_risk
 
 # ---------------------------------------------------------------------------
 # Redis key prefixes

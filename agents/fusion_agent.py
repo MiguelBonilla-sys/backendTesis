@@ -21,7 +21,21 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from core.constants import ALPHA, BETA, GAMMA, HF_WEIGHT, HOMOGRAPH_THRESHOLD, THETA, W_GSB, W_URLSCAN, W_VT
+from core.constants import (
+    ALPHA,
+    BETA,
+    EMAIL_ATTACHMENT_WEIGHT,
+    EMAIL_BOOST_CAP,
+    EMAIL_MISMATCH_WEIGHT,
+    EMAIL_URGENCY_WEIGHT,
+    GAMMA,
+    HF_WEIGHT,
+    HOMOGRAPH_THRESHOLD,
+    THETA,
+    W_GSB,
+    W_URLSCAN,
+    W_VT,
+)
 from core.logger import get_logger
 from schemas.analyze import (
     AgentScores,
@@ -30,6 +44,7 @@ from schemas.analyze import (
     IDNResult,
     ShapExplanation,
     TIResult,
+    WebProbeResult,
 )
 
 logger = get_logger(__name__)
@@ -59,6 +74,7 @@ class FusionAgent:
         email_hash: str | None = None,
         s_hf: float = 0.5,
         email_signals: EmailSignals | None = None,
+        probe_result: WebProbeResult | None = None,
     ) -> AnalyzeResponse:
         """
         Ejecuta la fusión tardía de los 3 agentes y retorna un
@@ -110,6 +126,18 @@ class FusionAgent:
         s_risk = GAMMA * s_idn + (1.0 - GAMMA) * s_llm_combined
         s_risk = float(min(max(s_risk, 0.0), 1.0))
 
+        # --- Paso 2b: Email context boost (additive) -------------------------
+        # Compensates for newly-registered phishing domains not yet in TI DBs.
+        # Capped at EMAIL_BOOST_CAP (0.50) to preserve relative IDN/LLM weights.
+        s_email = self._compute_email_signal(email_signals)
+
+        # --- Paso 2c: Web probe boost (additive) ----------------------------
+        # Active page-content signals: login forms, redirects, brand impersonation.
+        # Capped at PROBE_BOOST_CAP (0.60). Fails silently (s_probe=0.0).
+        s_probe = probe_result.s_probe if probe_result is not None else 0.0
+
+        s_risk = float(min(s_risk + s_email + s_probe, 1.0))
+
         # --- Paso 3: Verdict -------------------------------------------------
         verdict = self._compute_verdict(s_risk)
 
@@ -120,6 +148,7 @@ class FusionAgent:
             s_llm=s_llm,
             verdict=verdict,
             email_signals=email_signals,
+            probe_result=probe_result,
         )
 
         # --- Paso 4: SHAP contributions --------------------------------------
@@ -134,6 +163,8 @@ class FusionAgent:
             homograph_ratio=idn_result.homograph_ratio,
             visual_similarity=idn_result.visual_similarity,
             is_mixed_script=float(idn_result.is_mixed_script),
+            s_email=s_email,
+            s_probe=s_probe,
         )
 
         processing_ms = (time.perf_counter() - start_time) * 1000.0
@@ -149,6 +180,8 @@ class FusionAgent:
             s_llm_combined=round(s_llm_combined, 4),
             s_idn_local=round(idn_result.s_idn_local, 4),
             s_ti=round(ti_result.s_ti, 4),
+            s_email=round(s_email, 4),
+            s_probe=round(s_probe, 4),
             email_hash=email_hash,
             processing_ms=round(processing_ms, 1),
         )
@@ -165,16 +198,41 @@ class FusionAgent:
                 s_idn=round(s_idn, 4),
                 s_llm=round(s_llm, 4),
                 s_hf=round(s_hf, 4),
+                s_probe=round(s_probe, 4),
                 s_risk=round(s_risk, 4),
             ),
             idn_result=idn_result,
             ti_result=ti_result,
+            probe_result=probe_result,
             llm_reason=llm_reason,
             shap_explanation=ShapExplanation(feature_contributions=shap),
             reasons=reasons,
             processing_ms=round(processing_ms, 1),
             timestamp=datetime.now(timezone.utc),
         )
+
+    # ------------------------------------------------------------------
+    # Email context signal boost
+    # ------------------------------------------------------------------
+
+    def _compute_email_signal(self, email_signals: EmailSignals | None) -> float:
+        """
+        Additive boost to s_risk from email header/content signals.
+
+        Targets false negatives on newly-registered phishing domains whose
+        TI scores are 0 but whose email context is strongly suspicious.
+        Result is capped at EMAIL_BOOST_CAP (0.50).
+        """
+        if email_signals is None:
+            return 0.0
+        s_email = 0.0
+        if email_signals.sender_domain_mismatch:
+            s_email += EMAIL_MISMATCH_WEIGHT                       # 0.35
+        if email_signals.is_urgent and email_signals.urgency_score > 0.4:
+            s_email += email_signals.urgency_score * EMAIL_URGENCY_WEIGHT  # up to 0.18
+        if email_signals.has_suspicious_attachments:
+            s_email += EMAIL_ATTACHMENT_WEIGHT                     # 0.25
+        return min(s_email, EMAIL_BOOST_CAP)
 
     # ------------------------------------------------------------------
     # Human-readable reasons (coordinated with verdict thresholds)
@@ -187,6 +245,7 @@ class FusionAgent:
         s_llm: float,
         verdict: str,
         email_signals: EmailSignals | None = None,
+        probe_result: WebProbeResult | None = None,
     ) -> list[str]:
         """
         Genera razones legibles derivadas de los mismos umbrales que ``_compute_verdict``.
@@ -269,6 +328,12 @@ class FusionAgent:
                     f"{email_signals.sender_domain!r}"
                 )
 
+        # --- Señales del probe activo (contenido de la página) ---
+        if probe_result is not None and not probe_result.error:
+            for signal in probe_result.probe_signals:
+                if signal not in reasons:
+                    reasons.append(signal)
+
         if not reasons:
             reasons.append("No suspicious indicators detected")
 
@@ -310,6 +375,8 @@ class FusionAgent:
         homograph_ratio: float,
         visual_similarity: float,
         is_mixed_script: float,
+        s_email: float = 0.0,
+        s_probe: float = 0.0,
     ) -> dict[str, float]:
         """
         Calcula contribuciones lineales tipo SHAP para explicabilidad XAI.
@@ -378,6 +445,8 @@ class FusionAgent:
             "homograph_ratio": round(contrib_homograph, 4),
             "visual_similarity": round(contrib_visual, 4),
             "is_mixed_script": round(contrib_mixed, 4),
+            "s_email": round(s_email, 4),
+            "s_probe": round(s_probe, 4),
         }
 
 
