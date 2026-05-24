@@ -7,7 +7,7 @@ import pytest
 
 from agents.fusion_agent import FusionAgent
 from core.constants import ALPHA, GAMMA, THETA
-from schemas.analyze import IDNResult, TIResult
+from schemas.analyze import EmailSignals, IDNResult, TIResult
 
 
 # ---------------------------------------------------------------------------
@@ -449,3 +449,175 @@ class TestComputeVerdict:
 
     def test_exactly_070_is_phishing_not_suspicious(self, agent: FusionAgent):
         assert agent._compute_verdict(0.70) != "SUSPICIOUS"
+
+
+# ---------------------------------------------------------------------------
+# _compute_reasons
+# ---------------------------------------------------------------------------
+
+class TestComputeReasons:
+    @pytest.fixture
+    def clean_idn(self) -> IDNResult:
+        return IDNResult(
+            domain_unicode="paypal",
+            confusable_chars=[],
+            homograph_ratio=0.0,
+            visual_similarity=0.0,
+            s_idn_local=0.0,
+            is_mixed_script=False,
+            is_suspicious=False,
+        )
+
+    @pytest.fixture
+    def clean_ti(self) -> TIResult:
+        return TIResult(s_vt=0.0, s_urlscan=0.0, s_gsb=0.0, s_ti=0.0)
+
+    @pytest.fixture
+    def agent(self) -> FusionAgent:
+        return FusionAgent()
+
+    def test_always_returns_at_least_one_reason(self, agent, clean_idn, clean_ti):
+        reasons = agent._compute_reasons(clean_idn, clean_ti, 0.0, "LEGITIMATE")
+        assert len(reasons) >= 1
+
+    def test_clean_domain_gets_no_suspicious_message(self, agent, clean_idn, clean_ti):
+        reasons = agent._compute_reasons(clean_idn, clean_ti, 0.0, "LEGITIMATE")
+        assert any("No suspicious" in r for r in reasons)
+
+    def test_mixed_script_produces_reason(self, agent, clean_ti):
+        idn = IDNResult(
+            domain_unicode="рaypal",
+            confusable_chars=["р"],
+            homograph_ratio=0.167,
+            visual_similarity=0.857,
+            s_idn_local=0.85,
+            is_mixed_script=True,
+            is_suspicious=True,
+        )
+        reasons = agent._compute_reasons(idn, clean_ti, 0.0, "SUSPICIOUS")
+        assert any("mixed-script" in r.lower() or "homograph" in r.lower() for r in reasons)
+
+    def test_high_homograph_ratio_produces_reason(self, agent, clean_ti):
+        idn = IDNResult(
+            domain_unicode="pаypаl",
+            confusable_chars=["а", "а"],
+            homograph_ratio=0.40,  # > HOMOGRAPH_THRESHOLD (0.30)
+            visual_similarity=0.0,
+            s_idn_local=0.50,
+            is_mixed_script=False,
+            is_suspicious=True,
+        )
+        reasons = agent._compute_reasons(idn, clean_ti, 0.0, "SUSPICIOUS")
+        assert any("40%" in r or "confusable" in r.lower() for r in reasons)
+
+    def test_confusable_chars_listed_in_reason(self, agent, clean_ti):
+        idn = IDNResult(
+            domain_unicode="рaypal",
+            confusable_chars=["р"],
+            homograph_ratio=0.10,
+            visual_similarity=0.0,
+            s_idn_local=0.20,
+            is_mixed_script=False,
+            is_suspicious=True,
+        )
+        reasons = agent._compute_reasons(idn, clean_ti, 0.0, "LEGITIMATE")
+        assert any("confusable" in r.lower() for r in reasons)
+
+    def test_vt_flag_produces_reason(self, agent, clean_idn):
+        ti = TIResult(s_vt=0.50, s_urlscan=0.0, s_gsb=0.0, s_ti=0.25)
+        reasons = agent._compute_reasons(clean_idn, ti, 0.0, "LEGITIMATE")
+        assert any("virustotal" in r.lower() for r in reasons)
+
+    def test_gsb_flag_produces_reason(self, agent, clean_idn):
+        ti = TIResult(s_vt=0.0, s_urlscan=0.0, s_gsb=1.0, s_ti=0.20)
+        reasons = agent._compute_reasons(clean_idn, ti, 0.0, "SUSPICIOUS")
+        assert any("safe browsing" in r.lower() for r in reasons)
+
+    def test_newly_registered_domain_produces_reason(self, agent, clean_idn):
+        ti = TIResult(
+            s_vt=0.0, s_urlscan=0.0, s_gsb=0.0, s_ti=0.0,
+            is_newly_registered=True, domain_age_days=5,
+        )
+        reasons = agent._compute_reasons(clean_idn, ti, 0.0, "SUSPICIOUS")
+        assert any("newly registered" in r.lower() or "5 days" in r for r in reasons)
+
+    def test_high_llm_score_produces_reason(self, agent, clean_idn, clean_ti):
+        reasons = agent._compute_reasons(clean_idn, clean_ti, 0.85, "PHISHING")
+        assert any("llm" in r.lower() or "semantic" in r.lower() for r in reasons)
+
+    def test_email_urgency_signal_produces_reason(self, agent, clean_idn, clean_ti):
+        signals = EmailSignals(
+            sender_domain="evil.com",
+            return_path_domain="evil.com",
+            is_urgent=True,
+            urgency_score=0.6,
+            spf_pass=True,
+            dkim_pass=True,
+        )
+        reasons = agent._compute_reasons(clean_idn, clean_ti, 0.0, "LEGITIMATE", signals)
+        assert any("urgency" in r.lower() or "pressure" in r.lower() for r in reasons)
+
+    def test_sender_domain_mismatch_produces_reason(self, agent, clean_idn, clean_ti):
+        signals = EmailSignals(
+            sender_domain="sender.com",
+            return_path_domain="different.com",
+            sender_domain_mismatch=True,
+            spf_pass=True,
+            dkim_pass=True,
+        )
+        reasons = agent._compute_reasons(clean_idn, clean_ti, 0.0, "LEGITIMATE", signals)
+        assert any("sender" in r.lower() and "return" in r.lower() for r in reasons)
+
+    def test_returns_list_of_strings(self, agent, clean_idn, clean_ti):
+        reasons = agent._compute_reasons(clean_idn, clean_ti, 0.0, "LEGITIMATE")
+        assert isinstance(reasons, list)
+        assert all(isinstance(r, str) for r in reasons)
+
+    @pytest.mark.asyncio
+    async def test_fuse_response_contains_reasons_list(self, agent):
+        idn = IDNResult(
+            domain_unicode="рaypal",
+            confusable_chars=["р"],
+            homograph_ratio=0.333,
+            visual_similarity=0.857,
+            s_idn_local=0.90,
+            is_mixed_script=True,
+            is_suspicious=True,
+        )
+        ti = TIResult(s_vt=0.9, s_urlscan=0.8, s_gsb=1.0, s_ti=0.89)
+        response = await agent.fuse(
+            url="https://рaypal.com",
+            domain="рaypal.com",
+            idn_result=idn,
+            ti_result=ti,
+            s_llm=0.9,
+            llm_reason="Phishing detected",
+            start_time=time.perf_counter(),
+        )
+        assert isinstance(response.reasons, list)
+        assert len(response.reasons) >= 1
+
+    @pytest.mark.asyncio
+    async def test_fuse_reasons_consistent_with_verdict(self, agent):
+        """PHISHING verdict must not produce 'No suspicious indicators'."""
+        idn = IDNResult(
+            domain_unicode="рaypal",
+            confusable_chars=["р"],
+            homograph_ratio=0.333,
+            visual_similarity=0.857,
+            s_idn_local=0.90,
+            is_mixed_script=True,
+            is_suspicious=True,
+        )
+        ti = TIResult(s_vt=0.9, s_urlscan=0.8, s_gsb=1.0, s_ti=0.89)
+        response = await agent.fuse(
+            url="https://рaypal.com",
+            domain="рaypal.com",
+            idn_result=idn,
+            ti_result=ti,
+            s_llm=0.9,
+            llm_reason="Phishing",
+            start_time=time.perf_counter(),
+        )
+        assert response.verdict == "PHISHING"
+        assert not any("No suspicious" in r for r in response.reasons)

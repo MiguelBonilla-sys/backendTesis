@@ -6,8 +6,11 @@ import pytest
 from utils.url_parser import (
     extract_2ld,
     extract_domain,
+    extract_effective_domain,
+    extract_urls_from_html,
     extract_urls_from_text,
     is_ip_address,
+    normalize_url,
     sanitize_path,
 )
 
@@ -107,6 +110,93 @@ class TestExtractUrlsFromText:
         text = 'Click <a href="https://paypal.com">here</a>'
         urls = extract_urls_from_text(text)
         assert "https://paypal.com" in urls
+
+
+class TestExtractEffectiveDomain:
+    def test_gcs_bucket_abuse_extracts_embedded_domain(self):
+        url = "https://storage.googleapis.com/bucket123/evil.com.html"
+        assert extract_effective_domain(url) == "evil.com"
+
+    def test_real_phishing_eml_url(self):
+        url = (
+            "https://storage.googleapis.com/xhr09fe05fe2026/"
+            "optimisticdigital.xyz.html#tracker"
+        )
+        assert extract_effective_domain(url) == "optimisticdigital.xyz"
+
+    def test_non_cdn_url_returns_host(self):
+        assert extract_effective_domain("https://paypal.com/login") == "paypal.com"
+
+    def test_subdomain_non_cdn_returns_full_host(self):
+        assert extract_effective_domain("https://login.paypal.com/auth") == "login.paypal.com"
+
+    def test_gcs_without_domain_filename_returns_host(self):
+        # "report" is not a domain — no embedded domain detected
+        url = "https://storage.googleapis.com/bucket/report.html"
+        assert extract_effective_domain(url) == "storage.googleapis.com"
+
+    def test_gcs_empty_path_returns_host(self):
+        assert extract_effective_domain("https://storage.googleapis.com/") == "storage.googleapis.com"
+
+    def test_s3_abuse_pattern(self):
+        url = "https://s3.amazonaws.com/mybucket/phishing-target.com.html"
+        assert extract_effective_domain(url) == "phishing-target.com"
+
+    def test_result_is_lowercase(self):
+        url = "https://storage.googleapis.com/bucket/EVIL.COM.html"
+        assert extract_effective_domain(url) == "evil.com"
+
+    def test_non_html_extension_returns_host(self):
+        # .pdf extension not in the CDN strip list
+        url = "https://storage.googleapis.com/bucket/evil.com.pdf"
+        assert extract_effective_domain(url) == "storage.googleapis.com"
+
+
+class TestNormalizeUrl:
+    def test_strips_fragment(self):
+        url = "https://evil.com/page#tracker123abc"
+        assert normalize_url(url) == "https://evil.com/page"
+
+    def test_no_fragment_unchanged(self):
+        url = "https://paypal.com/login"
+        assert normalize_url(url) == url
+
+    def test_preserves_query_string(self):
+        url = "https://evil.com/page?id=1#frag"
+        assert normalize_url(url) == "https://evil.com/page?id=1"
+
+    def test_empty_fragment_stripped(self):
+        url = "https://evil.com/page#"
+        assert normalize_url(url) == "https://evil.com/page"
+
+
+class TestExtractUrlsFromHtml:
+    def test_extracts_href(self):
+        html = '<a href="https://phishing.com/login">Click</a>'
+        urls = extract_urls_from_html(html)
+        assert "https://phishing.com/login" in urls
+
+    def test_extracts_src(self):
+        html = '<img src="https://tracker.evil.com/pixel.gif">'
+        urls = extract_urls_from_html(html)
+        assert "https://tracker.evil.com/pixel.gif" in urls
+
+    def test_extracts_multiple_hrefs(self):
+        html = (
+            '<a href="https://a.com">1</a>'
+            '<a href="https://b.com">2</a>'
+        )
+        urls = extract_urls_from_html(html)
+        assert len(urls) == 2
+
+    def test_no_links_returns_empty(self):
+        html = "<p>No links here</p>"
+        assert extract_urls_from_html(html) == []
+
+    def test_stops_at_closing_quote(self):
+        html = '<a href="https://evil.com/path">text</a>'
+        urls = extract_urls_from_html(html)
+        assert urls == ["https://evil.com/path"]
 
 
 class TestSanitizePath:

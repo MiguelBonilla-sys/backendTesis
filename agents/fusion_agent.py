@@ -21,11 +21,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from core.constants import ALPHA, BETA, GAMMA, HF_WEIGHT, THETA, W_GSB, W_URLSCAN, W_VT
+from core.constants import ALPHA, BETA, GAMMA, HF_WEIGHT, HOMOGRAPH_THRESHOLD, THETA, W_GSB, W_URLSCAN, W_VT
 from core.logger import get_logger
 from schemas.analyze import (
     AgentScores,
     AnalyzeResponse,
+    EmailSignals,
     IDNResult,
     ShapExplanation,
     TIResult,
@@ -57,6 +58,7 @@ class FusionAgent:
         start_time: float,
         email_hash: str | None = None,
         s_hf: float = 0.5,
+        email_signals: EmailSignals | None = None,
     ) -> AnalyzeResponse:
         """
         Ejecuta la fusión tardía de los 3 agentes y retorna un
@@ -111,6 +113,15 @@ class FusionAgent:
         # --- Paso 3: Verdict -------------------------------------------------
         verdict = self._compute_verdict(s_risk)
 
+        # --- Paso 3b: Human-readable reasons (same thresholds as verdict) ----
+        reasons = self._compute_reasons(
+            idn_result=idn_result,
+            ti_result=ti_result,
+            s_llm=s_llm,
+            verdict=verdict,
+            email_signals=email_signals,
+        )
+
         # --- Paso 4: SHAP contributions --------------------------------------
         shap = self._compute_shap(
             s_idn_local=idn_result.s_idn_local,
@@ -160,9 +171,108 @@ class FusionAgent:
             ti_result=ti_result,
             llm_reason=llm_reason,
             shap_explanation=ShapExplanation(feature_contributions=shap),
+            reasons=reasons,
             processing_ms=round(processing_ms, 1),
             timestamp=datetime.now(timezone.utc),
         )
+
+    # ------------------------------------------------------------------
+    # Human-readable reasons (coordinated with verdict thresholds)
+    # ------------------------------------------------------------------
+
+    def _compute_reasons(
+        self,
+        idn_result: IDNResult,
+        ti_result: TIResult,
+        s_llm: float,
+        verdict: str,
+        email_signals: EmailSignals | None = None,
+    ) -> list[str]:
+        """
+        Genera razones legibles derivadas de los mismos umbrales que ``_compute_verdict``.
+
+        Garantía: las razones son coherentes con el veredicto porque se generan a
+        partir de los scores y señales que determinan ``S_risk``, no de lógica
+        independiente en el frontend.
+
+        Returns
+        -------
+        list[str]
+            Lista de razones ordenadas por severidad (IDN → TI → LLM → email).
+            Siempre retorna al menos un elemento.
+        """
+        reasons: list[str] = []
+
+        # --- Señales IDN ---
+        if idn_result.is_mixed_script:
+            reasons.append(
+                "Mixed-script domain detected (potential IDN homograph attack)"
+            )
+        if idn_result.homograph_ratio >= HOMOGRAPH_THRESHOLD:
+            reasons.append(
+                f"High confusable character ratio "
+                f"({idn_result.homograph_ratio:.0%}) above alert threshold (30%)"
+            )
+        if idn_result.visual_similarity >= 0.90:
+            reasons.append(
+                "Domain visually similar to a known legitimate domain (sim ≥ 0.90)"
+            )
+        if idn_result.confusable_chars:
+            sample = ", ".join(repr(c) for c in idn_result.confusable_chars[:3])
+            extra = (
+                f" (+{len(idn_result.confusable_chars) - 3} more)"
+                if len(idn_result.confusable_chars) > 3
+                else ""
+            )
+            reasons.append(f"Confusable Unicode characters detected: {sample}{extra}")
+
+        # --- Señales TI ---
+        if ti_result.s_vt >= 0.30:
+            reasons.append("Domain flagged by VirusTotal anti-malware engines")
+        if ti_result.s_urlscan >= 0.50:
+            reasons.append("Domain marked malicious by URLScan.io")
+        if ti_result.s_gsb >= 0.50:
+            reasons.append("URL matched Google Safe Browsing threat list")
+        if ti_result.is_newly_registered:
+            age_str = (
+                f"{ti_result.domain_age_days} days old"
+                if ti_result.domain_age_days is not None
+                else "recently registered"
+            )
+            reasons.append(f"Domain is newly registered ({age_str})")
+
+        # --- Señal LLM ---
+        if s_llm >= 0.70:
+            reasons.append("LLM semantic analysis indicates phishing content")
+
+        # --- Señales del email (contexto completo: cabeceras + cuerpo) ---
+        if email_signals is not None:
+            if email_signals.is_urgent:
+                reasons.append(
+                    "Email uses urgency/pressure tactics to coerce immediate action"
+                )
+            if email_signals.sender_domain_mismatch:
+                reasons.append(
+                    f"Sender domain ({email_signals.sender_domain!r}) does not match "
+                    f"return-path domain ({email_signals.return_path_domain!r})"
+                )
+            if email_signals.has_suspicious_attachments:
+                names = ", ".join(email_signals.attachment_names[:3])
+                reasons.append(f"Suspicious attachments detected: {names}")
+            if not email_signals.spf_pass and email_signals.sender_domain:
+                reasons.append(
+                    f"SPF authentication failed for {email_signals.sender_domain!r}"
+                )
+            if not email_signals.dkim_pass and email_signals.sender_domain:
+                reasons.append(
+                    f"DKIM signature verification failed for "
+                    f"{email_signals.sender_domain!r}"
+                )
+
+        if not reasons:
+            reasons.append("No suspicious indicators detected")
+
+        return reasons
 
     # ------------------------------------------------------------------
     # Verdict classification

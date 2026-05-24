@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import os
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 # Regex used to extract http/https URLs from free-form text
 _URL_RE = re.compile(r"https?://[^\s<>\"']+", re.IGNORECASE)
+
+# href/src attribute URL extractor for HTML bodies
+_HREF_RE = re.compile(r'(?:href|src|action)=["\']?(https?://[^"\'>\s]+)', re.IGNORECASE)
 
 # Simple IPv4 pattern
 _IPV4_RE = re.compile(
@@ -16,6 +19,24 @@ _IPV4_RE = re.compile(
 
 # IPv6 pattern (bare, not including port brackets)
 _IPV6_RE = re.compile(r"^\[?[0-9a-fA-F:]+\]?$")
+
+# CDN/storage hosts that may be abused to host phishing pages
+_KNOWN_CDN_HOSTS: frozenset[str] = frozenset({
+    "storage.googleapis.com",
+    "s3.amazonaws.com",
+    "blob.core.windows.net",
+    "r2.cloudflarestorage.com",
+    "raw.githubusercontent.com",
+    "objects.githubusercontent.com",
+    "cdn.jsdelivr.net",
+})
+
+# Embedded-domain pattern: looks like "evil.com" or "sub.evil.co.uk" used as a filename
+_EMBEDDED_DOMAIN_RE = re.compile(
+    r"^[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?"
+    r"(\.[a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?)*"
+    r"\.[a-zA-Z]{2,}$"
+)
 
 
 def extract_domain(url: str) -> str:
@@ -58,6 +79,59 @@ def is_ip_address(domain: str) -> bool:
 def extract_urls_from_text(text: str) -> list[str]:
     """Return all http/https URLs found in *text*."""
     return _URL_RE.findall(text)
+
+
+def extract_urls_from_html(html: str) -> list[str]:
+    """
+    Return all http/https URLs found in HTML *href*, *src*, and *action* attributes.
+
+    More reliable than regex on raw HTML text because it targets attribute values
+    directly, correctly stopping at the closing quote.
+    """
+    return _HREF_RE.findall(html)
+
+
+def normalize_url(url: str) -> str:
+    """Strip fragment identifier from *url* for deduplication purposes.
+
+    Tracking tokens embedded in fragments (e.g. ``#id117285abc…``) make
+    URLs look unique even when they point to the same resource.
+    """
+    parsed = urlparse(url)
+    return urlunparse(parsed._replace(fragment=""))
+
+
+def extract_effective_domain(url: str) -> str:
+    """
+    Return the effective target domain for threat-intelligence analysis.
+
+    CDN/storage services (GCS, S3, Azure Blob…) are sometimes abused as
+    phishing infrastructure — the actual attack domain is embedded in the
+    path as a filename, e.g.:
+
+        storage.googleapis.com/rnd-bucket/optimisticdigital.xyz.html
+        → effective domain: optimisticdigital.xyz
+
+    Falls back to :func:`extract_domain` for non-CDN URLs or when no
+    embedded domain can be detected in the path.
+    """
+    host = extract_domain(url)
+    if host not in _KNOWN_CDN_HOSTS:
+        return host
+
+    parsed = urlparse(url)
+    path_parts = [p for p in parsed.path.split("/") if p]
+    if not path_parts:
+        return host
+
+    filename = path_parts[-1]
+    for ext in (".html", ".htm", ".php", ".asp", ".aspx"):
+        if filename.lower().endswith(ext):
+            candidate = filename[: -len(ext)]
+            if _EMBEDDED_DOMAIN_RE.match(candidate):
+                return candidate.lower()
+
+    return host
 
 
 def sanitize_path(path: str) -> str:
