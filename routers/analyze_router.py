@@ -76,9 +76,11 @@ async def analyze_url(
 
     # ------------------------------------------------------------------ #
     # Paso 0: extracción de dominio
+    # CDN/storage abuse: resolve effective domain from filename
+    # (e.g. storage.googleapis.com/b/evil.com.html → evil.com)
     # ------------------------------------------------------------------ #
     try:
-        domain = extract_domain(url)
+        domain = extract_effective_domain(url)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
