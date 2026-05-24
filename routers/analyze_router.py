@@ -180,7 +180,7 @@ async def analyze_url(
     # Paso 4: Persistir incidente (fire-and-forget — no bloquea el response)
     # ------------------------------------------------------------------ #
     asyncio.create_task(
-        _persist_incident(response, body.email_hash),
+        _persist_incident(response, body),
         name=f"persist_{response.request_id}",
     )
 
@@ -200,7 +200,7 @@ async def analyze_url(
 
 async def _persist_incident(
     response: AnalyzeResponse,
-    email_hash: str | None,
+    body: AnalyzeRequest,
 ) -> None:
     """Inserta el incidente en PostgreSQL de forma asíncrona."""
     try:
@@ -211,15 +211,19 @@ async def _persist_incident(
             INSERT INTO incidents (
                 id, email_hash, url, domain, verdict,
                 s_risk, s_idn, s_llm, s_ti,
-                llm_reason, shap_contributions, created_at
+                llm_reason, shap_contributions,
+                email_subject, email_from, email_to, all_urls, reasons,
+                created_at
             ) VALUES (
                 $1, $2, $3, $4, $5,
                 $6, $7, $8, $9,
-                $10, $11, $12
+                $10, $11,
+                $12, $13, $14, $15, $16,
+                $17
             ) ON CONFLICT (id) DO NOTHING
             """,
             response.request_id,
-            email_hash or "",
+            body.email_hash or "",
             response.url,
             response.domain,
             response.verdict,
@@ -229,11 +233,15 @@ async def _persist_incident(
             response.agent_scores.s_ti,
             response.llm_reason,
             json.dumps(response.shap_explanation.feature_contributions),
+            body.email_subject or "",
+            body.email_from or "",
+            body.email_to or "",
+            json.dumps(body.all_urls),
+            json.dumps(response.reasons),
             response.timestamp,
         )
         logger.info("incident_persisted", request_id=response.request_id)
     except Exception as exc:
-        # Log but never propagate — DB failure must not affect the API response
         logger.error(
             "persist_incident_failed",
             request_id=response.request_id,
@@ -486,22 +494,25 @@ def _aggregate_email_reasons(
                 seen.add(reason)
                 reasons.append(reason)
 
+    def _add(reason: str) -> None:
+        if reason not in seen:
+            seen.add(reason)
+            reasons.append(reason)
+
     if email_signals.is_urgent and not any("urgency" in r.lower() for r in reasons):
-        reasons.append("Email uses urgency/pressure tactics to coerce immediate action")
+        _add("Email uses urgency/pressure tactics to coerce immediate action")
     if email_signals.sender_domain_mismatch:
-        reasons.append(
+        _add(
             f"Sender domain ({email_signals.sender_domain!r}) does not match "
             f"return-path domain ({email_signals.return_path_domain!r})"
         )
     if email_signals.has_suspicious_attachments:
         names = ", ".join(email_signals.attachment_names[:3])
-        reasons.append(f"Suspicious attachments detected: {names}")
+        _add(f"Suspicious attachments detected: {names}")
     if not email_signals.spf_pass and email_signals.sender_domain:
-        reasons.append(f"SPF authentication failed for {email_signals.sender_domain!r}")
+        _add(f"SPF authentication failed for {email_signals.sender_domain!r}")
     if not email_signals.dkim_pass and email_signals.sender_domain:
-        reasons.append(
-            f"DKIM verification failed for {email_signals.sender_domain!r}"
-        )
+        _add(f"DKIM signature verification failed for {email_signals.sender_domain!r}")
 
     if not reasons:
         reasons.append("No suspicious indicators detected in email or URLs")

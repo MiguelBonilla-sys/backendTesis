@@ -104,7 +104,8 @@ async def list_incidents(
         _select = """
             SELECT id, email_hash, url, domain, verdict,
                    s_risk, s_idn, s_llm, s_ti,
-                   llm_reason, shap_contributions, created_at
+                   llm_reason, shap_contributions, created_at,
+                   email_subject, email_from, email_to, all_urls, reasons
             FROM incidents
         """
 
@@ -170,7 +171,8 @@ async def get_incident(
             """
             SELECT id, email_hash, url, domain, verdict,
                    s_risk, s_idn, s_llm, s_ti,
-                   llm_reason, shap_contributions, created_at
+                   llm_reason, shap_contributions, created_at,
+                   email_subject, email_from, email_to, all_urls, reasons
             FROM incidents
             WHERE id = $1
             """,
@@ -277,15 +279,14 @@ async def get_settings(
 
 def _row_to_record(row: dict) -> IncidentRecord:
     """Convierte una fila asyncpg en un IncidentRecord Pydantic."""
-    raw_shap = row["shap_contributions"]
-    if isinstance(raw_shap, str):
-        shap_contributions: dict[str, float] = json.loads(raw_shap or "{}")
-    elif isinstance(raw_shap, dict):
-        shap_contributions = raw_shap
-    else:
-        shap_contributions = {}
+    def _parse_jsonb(val: object, default: object) -> object:
+        if isinstance(val, str):
+            return json.loads(val) if val else default
+        return val if val is not None else default
 
-    created_at: datetime = row["created_at"]
+    shap_contributions: dict[str, float] = _parse_jsonb(row["shap_contributions"], {})  # type: ignore[assignment]
+    all_urls: list[str] = _parse_jsonb(row.get("all_urls"), [])  # type: ignore[assignment]
+    reasons: list[str] = _parse_jsonb(row.get("reasons"), [])  # type: ignore[assignment]
 
     return IncidentRecord(
         id=str(row["id"]),
@@ -299,5 +300,10 @@ def _row_to_record(row: dict) -> IncidentRecord:
         s_ti=float(row["s_ti"]),
         llm_reason=row["llm_reason"] or "",
         shap_contributions=shap_contributions,
-        created_at=created_at,
+        created_at=row["created_at"],
+        email_subject=row.get("email_subject") or "",
+        email_from=row.get("email_from") or "",
+        email_to=row.get("email_to") or "",
+        all_urls=all_urls,
+        reasons=reasons,
     )

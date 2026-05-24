@@ -10,8 +10,13 @@ from pydantic import BaseModel, Field, field_validator
 
 class AnalyzeRequest(BaseModel):
     url: str = Field(..., min_length=1, max_length=2048)
-    email_hash: str | None = None  # SHA-256 hash of the email (privacy)
+    email_hash: str | None = None
     email_body_snippet: str | None = Field(None, max_length=5000)
+    # Email context forwarded by the extension (for display in the admin dashboard)
+    email_subject: str | None = None
+    email_from: str | None = None
+    email_to: str | None = None
+    all_urls: list[str] = Field(default_factory=list, max_length=50)
 
     @field_validator("url")
     @classmethod

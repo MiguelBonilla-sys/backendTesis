@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class IncidentRecord(BaseModel):
@@ -21,6 +21,12 @@ class IncidentRecord(BaseModel):
     llm_reason: str
     shap_contributions: dict[str, float]
     created_at: datetime
+    # Email context — populated when analysis is triggered via the browser extension
+    email_subject: str = ""
+    email_from: str = ""
+    email_to: str = ""
+    all_urls: list[str] = Field(default_factory=list)
+    reasons: list[str] = Field(default_factory=list)
 
 
 class IncidentListResponse(BaseModel):

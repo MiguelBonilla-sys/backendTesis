@@ -166,9 +166,15 @@ def _decode_header(value: str | None) -> str:
         decoded_parts: list[str] = []
         for part_bytes, charset in parts:
             if isinstance(part_bytes, bytes):
-                decoded_parts.append(
-                    part_bytes.decode(charset or "utf-8", errors="replace")
-                )
+                # 'unknown-8bit' is not a real Python codec; try UTF-8 first,
+                # then fall back to latin-1 to avoid replacement characters.
+                effective_charset = charset or "utf-8"
+                if effective_charset.lower() in ("unknown-8bit", "unknown"):
+                    effective_charset = "utf-8"
+                try:
+                    decoded_parts.append(part_bytes.decode(effective_charset, errors="replace"))
+                except LookupError:
+                    decoded_parts.append(part_bytes.decode("utf-8", errors="replace"))
             else:
                 decoded_parts.append(part_bytes)
         return "".join(decoded_parts).strip()
