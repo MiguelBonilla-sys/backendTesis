@@ -21,7 +21,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Literal
 
-from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
+from core.constants import ALPHA, BETA, GAMMA, HF_WEIGHT, THETA, W_GSB, W_URLSCAN, W_VT
 from core.logger import get_logger
 from schemas.analyze import (
     AgentScores,
@@ -56,6 +56,7 @@ class FusionAgent:
         llm_reason: str,
         start_time: float,
         email_hash: str | None = None,
+        s_hf: float = 0.5,
     ) -> AnalyzeResponse:
         """
         Ejecuta la fusión tardía de los 3 agentes y retorna un
@@ -97,8 +98,14 @@ class FusionAgent:
         s_idn = ALPHA * idn_result.s_idn_local + (1.0 - ALPHA) * ti_result.s_ti
         s_idn = float(min(max(s_idn, 0.0), 1.0))
 
+        # --- Paso 1b: Blend HF classifier into s_llm -------------------------
+        # s_llm_combined = (1-HF_WEIGHT)*s_llm + HF_WEIGHT*s_hf
+        # HF specialized classifier augments Ollama semantic score (HF_WEIGHT=0.40)
+        s_llm_combined = (1.0 - HF_WEIGHT) * s_llm + HF_WEIGHT * s_hf
+        s_llm_combined = float(min(max(s_llm_combined, 0.0), 1.0))
+
         # --- Paso 2: Risk score final ----------------------------------------
-        s_risk = GAMMA * s_idn + (1.0 - GAMMA) * s_llm
+        s_risk = GAMMA * s_idn + (1.0 - GAMMA) * s_llm_combined
         s_risk = float(min(max(s_risk, 0.0), 1.0))
 
         # --- Paso 3: Verdict -------------------------------------------------
@@ -112,6 +119,7 @@ class FusionAgent:
             s_urlscan=ti_result.s_urlscan,
             s_gsb=ti_result.s_gsb,
             s_llm=s_llm,
+            s_hf=s_hf,
             homograph_ratio=idn_result.homograph_ratio,
             visual_similarity=idn_result.visual_similarity,
             is_mixed_script=float(idn_result.is_mixed_script),
@@ -126,6 +134,8 @@ class FusionAgent:
             s_risk=round(s_risk, 4),
             s_idn=round(s_idn, 4),
             s_llm=round(s_llm, 4),
+            s_hf=round(s_hf, 4),
+            s_llm_combined=round(s_llm_combined, 4),
             s_idn_local=round(idn_result.s_idn_local, 4),
             s_ti=round(ti_result.s_ti, 4),
             email_hash=email_hash,
@@ -143,6 +153,7 @@ class FusionAgent:
                 s_ti=round(ti_result.s_ti, 4),
                 s_idn=round(s_idn, 4),
                 s_llm=round(s_llm, 4),
+                s_hf=round(s_hf, 4),
                 s_risk=round(s_risk, 4),
             ),
             idn_result=idn_result,
@@ -185,6 +196,7 @@ class FusionAgent:
         s_urlscan: float,
         s_gsb: float,
         s_llm: float,
+        s_hf: float,
         homograph_ratio: float,
         visual_similarity: float,
         is_mixed_script: float,
@@ -219,14 +231,18 @@ class FusionAgent:
             Diccionario con contribución de cada feature al ``S_risk`` final.
         """
         # Pesos compuestos
-        idn_weight: float = GAMMA * ALPHA           # γα        = 0.30
-        ti_weight: float = GAMMA * (1.0 - ALPHA)    # γ(1-α)   = 0.20
-        llm_weight: float = 1.0 - GAMMA             # (1-γ)    = 0.50
+        idn_weight: float = GAMMA * ALPHA                    # γα        = 0.30
+        ti_weight: float = GAMMA * (1.0 - ALPHA)             # γ(1-α)   = 0.20
+        llm_combined_weight: float = 1.0 - GAMMA             # (1-γ)    = 0.50
+        # s_llm_combined = (1-HF_WEIGHT)*s_llm + HF_WEIGHT*s_hf
+        llm_weight: float = llm_combined_weight * (1.0 - HF_WEIGHT)  # 0.50 * 0.60 = 0.30
+        hf_weight: float = llm_combined_weight * HF_WEIGHT           # 0.50 * 0.40 = 0.20
 
         # Contribuciones principales
         contrib_idn_local: float = idn_weight * s_idn_local
         contrib_ti: float = ti_weight * s_ti
         contrib_llm: float = llm_weight * s_llm
+        contrib_hf: float = hf_weight * s_hf
 
         # Sub-contribuciones de TI (descompone contrib_ti en sus fuentes)
         contrib_vt: float = ti_weight * W_VT * s_vt
@@ -245,6 +261,7 @@ class FusionAgent:
             "s_idn_local": round(contrib_idn_local, 4),
             "s_ti": round(contrib_ti, 4),
             "s_llm": round(contrib_llm, 4),
+            "s_hf": round(contrib_hf, 4),
             "s_vt": round(contrib_vt, 4),
             "s_urlscan": round(contrib_urlscan, 4),
             "s_gsb": round(contrib_gsb, 4),

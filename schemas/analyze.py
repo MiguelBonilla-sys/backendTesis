@@ -48,6 +48,7 @@ class AgentScores(BaseModel):
     s_ti: float
     s_idn: float
     s_llm: float
+    s_hf: float = 0.5   # HuggingFace classifier score; 0.5 (neutral) when key absent
     s_risk: float
 
 

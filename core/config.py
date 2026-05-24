@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     OLLAMA_URL: str = "http://ollama:11434"
     OLLAMA_MODEL: str = "llama3.2:1b"  # lighter model for CPU dev; use llama3.1 with GPU
 
+    # HuggingFace Inference API
+    HUGGINGFACE_API_KEY: str = ""
+    HF_URL_MODEL: str = "pirocheto/phishing-url-detection"
+    HF_EMAIL_MODEL: str = "cybersectony/phishing-email-detection-distilbert_v2.4.1"
+
     # Data paths
     TOP1M_PATH: str = "data/top1m.csv"
     CONFUSABLES_PATH: str = "data/confusables.txt"

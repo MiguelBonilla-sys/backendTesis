@@ -23,6 +23,13 @@ LLM_TIMEOUT_S: float = 45.0
 LLM_FALLBACK_SCORE: float = 0.5
 
 # ---------------------------------------------------------------------------
+# HuggingFace Inference API
+# ---------------------------------------------------------------------------
+HF_WEIGHT: float = 0.40        # weight of HF classifier in blended s_llm
+HF_TIMEOUT_S: float = 10.0
+HF_FALLBACK_SCORE: float = 0.5
+
+# ---------------------------------------------------------------------------
 # ChromaDB collection names
 # ---------------------------------------------------------------------------
 COLLECTION_EMAIL: str = "email_embeddings"

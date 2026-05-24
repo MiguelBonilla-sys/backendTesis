@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
 from agents.fusion_agent import fusion_agent
+from agents.hf_agent import hf_agent
 from agents.idn_agent import idn_agent
 from agents.llm_agent import llm_agent
 from auth.dependencies import require_auth
@@ -91,12 +92,13 @@ async def analyze_url(
     )
 
     # ------------------------------------------------------------------ #
-    # Paso 1: IDN Agent + ThreatIntel en paralelo
+    # Paso 1: IDN Agent + ThreatIntel + HF Agent en paralelo
     # ------------------------------------------------------------------ #
     try:
-        idn_result, ti_result = await asyncio.gather(
+        idn_result, ti_result, s_hf = await asyncio.gather(
             idn_agent.analyze(url),
             threat_intel_service.analyze(url, domain),
+            hf_agent.analyze(url, body.email_body_snippet),
         )
     except IDNAnalysisError as exc:
         logger.error("idn_analysis_failed", url=url, error=str(exc))
@@ -162,6 +164,7 @@ async def analyze_url(
             llm_reason=llm_reason,
             start_time=t_start,
             email_hash=body.email_hash,
+            s_hf=s_hf,
         )
     except Exception as exc:
         logger.error("pipeline_error_stage3", url=url, error=str(exc))

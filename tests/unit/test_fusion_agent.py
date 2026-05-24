@@ -113,8 +113,10 @@ class TestFusionAgentFuse:
     async def test_s_risk_formula_correct(
         self, agent: FusionAgent, phishing_idn: IDNResult, phishing_ti: TIResult
     ):
-        """S_risk = γ * S_IDN + (1-γ) * S_LLM"""
+        """S_risk = γ * S_IDN + (1-γ) * s_llm_combined; s_llm_combined = (1-HF_W)*s_llm + HF_W*s_hf"""
+        from core.constants import HF_WEIGHT
         s_llm = 0.7
+        s_hf = 0.6
         response = await agent.fuse(
             url="https://рaypal.com",
             domain="рaypal.com",
@@ -123,9 +125,11 @@ class TestFusionAgentFuse:
             s_llm=s_llm,
             llm_reason="Test",
             start_time=time.perf_counter(),
+            s_hf=s_hf,
         )
         expected_s_idn = ALPHA * phishing_idn.s_idn_local + (1 - ALPHA) * phishing_ti.s_ti
-        expected_s_risk = GAMMA * expected_s_idn + (1 - GAMMA) * s_llm
+        expected_combined = (1 - HF_WEIGHT) * s_llm + HF_WEIGHT * s_hf
+        expected_s_risk = GAMMA * expected_s_idn + (1 - GAMMA) * expected_combined
         assert abs(response.s_risk - expected_s_risk) < 0.001
 
     @pytest.mark.asyncio
@@ -305,7 +309,7 @@ class TestFusionAgentShap:
     async def test_shap_is_zero_for_zero_scores(
         self, agent: FusionAgent, legit_idn: IDNResult, legit_ti: TIResult
     ):
-        """All zero inputs → all SHAP contributions are zero."""
+        """All zero inputs (including s_hf=0.0) → all SHAP contributions are zero."""
         response = await agent.fuse(
             url="https://paypal.com",
             domain="paypal.com",
@@ -314,6 +318,7 @@ class TestFusionAgentShap:
             s_llm=0.0,
             llm_reason="Clean",
             start_time=time.perf_counter(),
+            s_hf=0.0,
         )
         contribs = response.shap_explanation.feature_contributions
         for key, val in contribs.items():
@@ -328,6 +333,7 @@ class TestFusionAgentShap:
             s_urlscan=0.0,
             s_gsb=0.0,
             s_llm=0.0,
+            s_hf=0.0,
             homograph_ratio=0.0,
             visual_similarity=0.0,
             is_mixed_script=0.0,
@@ -335,7 +341,8 @@ class TestFusionAgentShap:
         assert abs(shap["s_idn_local"] - 0.30) < 0.001
 
     def test_compute_shap_llm_weight(self, agent: FusionAgent):
-        """(1-γ) = 0.50 weight for s_llm."""
+        """(1-γ)*(1-HF_WEIGHT) = 0.50*0.60 = 0.30 weight for s_llm."""
+        from core.constants import HF_WEIGHT
         shap = agent._compute_shap(
             s_idn_local=0.0,
             s_ti=0.0,
@@ -343,11 +350,31 @@ class TestFusionAgentShap:
             s_urlscan=0.0,
             s_gsb=0.0,
             s_llm=1.0,
+            s_hf=0.0,
             homograph_ratio=0.0,
             visual_similarity=0.0,
             is_mixed_script=0.0,
         )
-        assert abs(shap["s_llm"] - 0.50) < 0.001
+        expected = (1.0 - GAMMA) * (1.0 - HF_WEIGHT)   # 0.50 * 0.60 = 0.30
+        assert abs(shap["s_llm"] - expected) < 0.001
+
+    def test_compute_shap_hf_weight(self, agent: FusionAgent):
+        """(1-γ)*HF_WEIGHT = 0.50*0.40 = 0.20 weight for s_hf."""
+        from core.constants import HF_WEIGHT
+        shap = agent._compute_shap(
+            s_idn_local=0.0,
+            s_ti=0.0,
+            s_vt=0.0,
+            s_urlscan=0.0,
+            s_gsb=0.0,
+            s_llm=0.0,
+            s_hf=1.0,
+            homograph_ratio=0.0,
+            visual_similarity=0.0,
+            is_mixed_script=0.0,
+        )
+        expected = (1.0 - GAMMA) * HF_WEIGHT   # 0.50 * 0.40 = 0.20
+        assert abs(shap["s_hf"] - expected) < 0.001
 
     def test_compute_shap_ti_weight(self, agent: FusionAgent):
         """γ*(1-α) = 0.50*0.40 = 0.20 weight for s_ti."""
@@ -358,13 +385,14 @@ class TestFusionAgentShap:
             s_urlscan=0.0,
             s_gsb=0.0,
             s_llm=0.0,
+            s_hf=0.0,
             homograph_ratio=0.0,
             visual_similarity=0.0,
             is_mixed_script=0.0,
         )
         assert abs(shap["s_ti"] - 0.20) < 0.001
 
-    def test_compute_shap_contains_all_nine_keys(self, agent: FusionAgent):
+    def test_compute_shap_contains_all_ten_keys(self, agent: FusionAgent):
         shap = agent._compute_shap(
             s_idn_local=0.5,
             s_ti=0.5,
@@ -372,12 +400,13 @@ class TestFusionAgentShap:
             s_urlscan=0.5,
             s_gsb=0.5,
             s_llm=0.5,
+            s_hf=0.5,
             homograph_ratio=0.5,
             visual_similarity=0.5,
             is_mixed_script=1.0,
         )
         expected_keys = {
-            "s_idn_local", "s_ti", "s_llm",
+            "s_idn_local", "s_ti", "s_llm", "s_hf",
             "s_vt", "s_urlscan", "s_gsb",
             "homograph_ratio", "visual_similarity", "is_mixed_script",
         }
