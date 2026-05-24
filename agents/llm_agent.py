@@ -55,7 +55,7 @@ class LLMAgent:
         logger.info(
             "llm_agent_initialized",
             model=settings.LLAMASTACK_MODEL,
-            llamastack_url=settings.LLAMASTACK_URL,
+            ollama_url=settings.OLLAMA_URL,
         )
 
     # ------------------------------------------------------------------
@@ -264,43 +264,41 @@ Where SCORE=1.0 means definitely phishing, SCORE=0.0 means definitely legitimate
 
     async def _call_llamastack(self, prompt: str) -> str:
         """
-        Invoca la API de LlamaStack para chat completion.
+        Invoca Ollama directamente vía OpenAI-compatible API.
 
-        Endpoint: ``POST {LLAMASTACK_URL}/v1/inference/chat_completion``
+        Endpoint: ``POST {OLLAMA_URL}/v1/chat/completions``
 
-        El timeout del cliente HTTP es ligeramente mayor que ``LLM_TIMEOUT_S``
-        para permitir que ``asyncio.wait_for`` cancele primero y se genere el
-        log correcto antes del cierre de la conexión.
+        Bypasa LlamaStack para evitar overhead en CPU. max_tokens=60 es
+        suficiente para el formato ``SCORE: X | REASON: <text>``.
 
         Returns
         -------
         str
-            Texto del completion extraído del campo
-            ``completion_message.content``.
+            Texto del completion extraído de ``choices[0].message.content``.
         """
         payload: dict = {
-            "model_id": settings.LLAMASTACK_MODEL,
+            "model": settings.OLLAMA_MODEL,
             "messages": [
                 {"role": "user", "content": prompt}
             ],
-            "sampling_params": {
-                "strategy": {"type": "greedy"},
-                "max_tokens": 150,
-            },
+            "max_tokens": 60,
+            "temperature": 0,
         }
 
         async with httpx.AsyncClient(timeout=LLM_TIMEOUT_S + 2.0) as client:
             resp = await client.post(
-                f"{settings.LLAMASTACK_URL}/v1/inference/chat_completion",
+                f"{settings.OLLAMA_URL}/v1/chat/completions",
                 json=payload,
                 headers={"Content-Type": "application/json"},
             )
             resp.raise_for_status()
             data: dict = resp.json()
 
-        # LlamaStack response: {"completion_message": {"role": "...", "content": "..."}}
+        # OpenAI-compatible response: {"choices": [{"message": {"content": "..."}}]}
         content: str = (
-            data.get("completion_message", {}).get("content", "")
+            data.get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
             or str(data)
         )
         return content

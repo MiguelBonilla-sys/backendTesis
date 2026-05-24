@@ -1,5 +1,6 @@
 """
 Incidents router — GET /api/v1/incidents, GET /api/v1/incidents/{incident_id}
+                    GET /api/v1/metrics/summary, GET /api/v1/settings
 
 Lista y consulta incidentes almacenados en PostgreSQL.
 Dashboard read-only — no acciones de bloqueo en v1.
@@ -8,16 +9,40 @@ Dashboard read-only — no acciones de bloqueo en v1.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field, ConfigDict
 
 from auth.dependencies import require_admin
+from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
 from core.exceptions import DatabaseError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from models.database import fetch, fetchrow
 from schemas.incidents import IncidentListResponse, IncidentRecord
+
+
+class MetricsSummary(BaseModel):
+    total_analyses_today: int
+    phishing_today: int
+    suspicious_today: int
+    safe_today: int
+    avg_latency_ms: float
+    cache_hit_rate: float
+
+
+class FusionSettings(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    alpha: float
+    beta: float
+    gamma: float
+    theta: float
+    lambda_: float = Field(alias="lambda")
+    ti_vt_weight: float
+    ti_urlscan_weight: float
+    ti_gsb_weight: float
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["incidents"])
@@ -174,6 +199,76 @@ async def get_incident(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve incident",
         ) from exc
+
+
+# --------------------------------------------------------------------------- #
+# GET /metrics/summary
+# --------------------------------------------------------------------------- #
+
+@router.get(
+    "/metrics/summary",
+    response_model=MetricsSummary,
+    summary="Métricas de análisis del día actual",
+)
+async def get_metrics_summary(
+    current_user: dict = Depends(require_admin),
+) -> MetricsSummary:
+    """Retorna totales de hoy agrupados por veredicto."""
+    try:
+        today_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        rows = await fetch(
+            """
+            SELECT verdict, COUNT(*) AS cnt
+            FROM incidents
+            WHERE created_at >= $1
+            GROUP BY verdict
+            """,
+            today_start,
+        )
+        counts: dict[str, int] = {r["verdict"]: int(r["cnt"]) for r in (rows or [])}
+        total = sum(counts.values())
+        return MetricsSummary(
+            total_analyses_today=total,
+            phishing_today=counts.get("PHISHING", 0),
+            suspicious_today=counts.get("SUSPICIOUS", 0),
+            safe_today=counts.get("LEGITIMATE", 0),
+            avg_latency_ms=0.0,
+            cache_hit_rate=0.0,
+        )
+    except Exception as exc:
+        logger.error("metrics_summary_error", error=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve metrics",
+        ) from exc
+
+
+# --------------------------------------------------------------------------- #
+# GET /settings
+# --------------------------------------------------------------------------- #
+
+@router.get(
+    "/settings",
+    response_model=FusionSettings,
+    response_model_by_alias=True,
+    summary="Parámetros actuales del modelo de fusión",
+)
+async def get_settings(
+    current_user: dict = Depends(require_admin),
+) -> FusionSettings:
+    """Retorna los parámetros de fusión activos (alpha, gamma, theta, etc.)."""
+    return FusionSettings(
+        alpha=ALPHA,
+        beta=BETA,
+        gamma=GAMMA,
+        theta=THETA,
+        lambda_=0.30,
+        ti_vt_weight=W_VT,
+        ti_urlscan_weight=W_URLSCAN,
+        ti_gsb_weight=W_GSB,
+    )
 
 
 # --------------------------------------------------------------------------- #

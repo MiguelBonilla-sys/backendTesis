@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     LLAMASTACK_URL: str = "http://localhost:5001"
     LLAMASTACK_MODEL: str = "llama3.1"
 
+    # Ollama (direct inference — bypasses LlamaStack overhead on CPU)
+    OLLAMA_URL: str = "http://ollama:11434"
+    OLLAMA_MODEL: str = "llama3.2:1b"  # lighter model for CPU dev; use llama3.1 with GPU
+
     # Data paths
     TOP1M_PATH: str = "data/top1m.csv"
     CONFUSABLES_PATH: str = "data/confusables.txt"
