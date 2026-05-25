@@ -25,7 +25,7 @@ from agents.confusables_loader import (
     load_confusables_catalog,
 )
 from agents.bktree import BKTree
-from utils.url_parser import extract_domain, extract_2ld
+from utils.url_parser import extract_domain, extract_2ld, extract_idn_label
 from schemas.analyze import IDNResult
 
 logger = get_logger(__name__)
@@ -112,8 +112,10 @@ class IDNAgent:
 
         try:
             # Stage 1 — extract domain and normalise
+            # For free hosting platforms (vercel.app, github.io, …) the attacker
+            # controls the subdomain — use it as the IDN label instead of the 2LD.
             domain = extract_domain(url)
-            label_2ld = extract_2ld(domain)
+            label_2ld = extract_idn_label(domain)
             unicode_form = _normalize_and_decode(label_2ld)
 
             # Stage 2 — UTR#39 confusable detection

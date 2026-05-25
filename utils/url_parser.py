@@ -20,6 +20,29 @@ _IPV4_RE = re.compile(
 # IPv6 pattern (bare, not including port brackets)
 _IPV6_RE = re.compile(r"^\[?[0-9a-fA-F:]+\]?$")
 
+# Free hosting platforms where the attacker controls the subdomain, not the 2LD.
+# For IDN analysis on these platforms the relevant label is the leftmost subdomain.
+# e.g. оutlоок-098.vercel.app → IDN label = "оutlоок-098", not "vercel"
+_FREE_HOSTING_PLATFORMS: frozenset[str] = frozenset({
+    "vercel.app",
+    "github.io",
+    "netlify.app",
+    "pages.dev",          # Cloudflare Pages
+    "glitch.me",
+    "repl.co",
+    "replit.dev",
+    "web.app",            # Firebase Hosting
+    "firebaseapp.com",
+    "render.com",
+    "onrender.com",
+    "fly.dev",
+    "herokuapp.com",
+    "azurewebsites.net",
+    "azurestaticapps.net",
+    "surge.sh",
+    "tiiny.site",
+})
+
 # CDN/storage hosts that may be abused to host phishing pages
 _KNOWN_CDN_HOSTS: frozenset[str] = frozenset({
     "storage.googleapis.com",
@@ -99,6 +122,29 @@ def normalize_url(url: str) -> str:
     """
     parsed = urlparse(url)
     return urlunparse(parsed._replace(fragment=""))
+
+
+def extract_idn_label(domain: str) -> str:
+    """Return the label to use for IDN homograph analysis.
+
+    For most domains this is the registrable 2LD (``paypal`` in ``login.paypal.com``).
+    For free hosting platforms (Vercel, GitHub Pages, Netlify…) the attacker controls
+    only the *subdomain* — so the relevant label is the leftmost part:
+
+        оutlоок-098.vercel.app  →  "оutlоок-098"   (attacker-controlled)
+        evilpaypal.netlify.app  →  "evilpaypal"
+
+    Falls back to :func:`extract_2ld` for normal domains.
+    """
+    domain = domain.lower().rstrip(".")
+    parts = domain.split(".")
+    # Build the trailing host suffix and check against known platforms
+    for n in (2, 3):  # check 2-part (vercel.app) and 3-part (pages.github.io) suffixes
+        if len(parts) > n:
+            suffix = ".".join(parts[-n:])
+            if suffix in _FREE_HOSTING_PLATFORMS:
+                return parts[0]  # leftmost = attacker subdomain
+    return extract_2ld(domain)
 
 
 def extract_effective_domain(url: str) -> str:
