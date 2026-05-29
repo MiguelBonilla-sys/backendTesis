@@ -17,7 +17,7 @@ import asyncio
 import httpx
 
 from core.config import settings
-from core.constants import W_GSB, W_URLSCAN, W_VT
+from core.constants import W_GSB, W_URLSCAN, W_VT, W_WHOIS
 from core.logger import get_logger
 from data_pipeline.cache_manager import get_ti_cache, set_ti_cache
 from schemas.analyze import TIResult
@@ -96,8 +96,7 @@ class ThreatIntelService:
         s_ti_base = W_VT * vt_score + W_URLSCAN * urlscan_score + W_GSB * gsb_score
 
         # WhoisXML como modificador adicional (no altera los pesos del paper)
-        WHOIS_WEIGHT = 0.10
-        s_ti = min(s_ti_base + WHOIS_WEIGHT * whois_score, 1.0)
+        s_ti = min(s_ti_base + W_WHOIS * whois_score, 1.0)
         s_ti = min(max(s_ti, 0.0), 1.0)
 
         suspicious_days = settings.DOMAIN_AGE_SUSPICIOUS_DAYS

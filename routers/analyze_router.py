@@ -15,14 +15,11 @@ Rate limiting (D.5.6):
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
-from pydantic import BaseModel, Field
 
 from agents.fusion_agent import fusion_agent
 from agents.hf_agent import hf_agent
@@ -33,6 +30,7 @@ from auth.dependencies import require_auth
 from core.exceptions import IDNAnalysisError, LLMTimeoutError, ThreatIntelError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
+from data_pipeline.knowledge_updater import AUTO_INGEST_THRESHOLD, knowledge_updater
 from data_pipeline.threat_intel import threat_intel_service
 from schemas.analyze import (
     AnalyzeEmailRequest,
@@ -43,9 +41,22 @@ from schemas.analyze import (
     BatchAnalyzeResponse,
     EmailAnalysisResponse,
     EmailSignals,
+    ReportRequest,
+    ReportResponse,
+)
+from services.analysis import (
+    _aggregate_email_reasons,
+    _analyze_single_url_for_email,
+    _sender_domain,
+)
+from services.persistence import (
+    _persist_batch_incident,
+    _persist_email_incident,
+    _persist_incident,
+    _persist_manual_report,
 )
 from utils.email_parser import ParsedEmail, _detect_urgency, parse_eml
-from utils.url_parser import extract_domain, extract_effective_domain
+from utils.url_parser import extract_effective_domain
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["analyze"])
@@ -136,10 +147,19 @@ async def analyze_url(
     # ------------------------------------------------------------------ #
     # Paso 2: LLM Agent (usa resumen IDN como contexto adicional)
     # ------------------------------------------------------------------ #
+    _confusable_str = (
+        ", ".join(repr(c) for c in idn_result.confusable_chars[:5])
+        if idn_result.confusable_chars
+        else "none"
+    )
     idn_summary = (
-        f"IDN score={idn_result.s_idn_local:.2f}, "
+        f"domain_unicode={idn_result.domain_unicode!r}, "
+        f"s_idn_local={idn_result.s_idn_local:.2f}, "
+        f"homograph_ratio={idn_result.homograph_ratio:.2f}, "
+        f"visual_similarity={idn_result.visual_similarity:.2f}, "
         f"mixed_script={idn_result.is_mixed_script}, "
-        f"homograph_ratio={idn_result.homograph_ratio:.2f}"
+        f"confusable_chars=[{_confusable_str}], "
+        f"suspicious={idn_result.is_suspicious}"
     )
 
     try:
@@ -196,6 +216,31 @@ async def analyze_url(
         name=f"persist_{response.request_id}",
     )
 
+    # Auto-ingest high-confidence results into ChromaDB for future RAG retrieval
+    if response.s_risk >= AUTO_INGEST_THRESHOLD:
+        asyncio.create_task(
+            knowledge_updater.ingest_from_analysis(
+                url=response.url,
+                domain=response.domain,
+                verdict=response.verdict,
+                s_risk=response.s_risk,
+                s_idn_local=response.idn_result.s_idn_local,
+                s_ti=response.ti_result.s_ti,
+                s_llm=response.agent_scores.s_llm,
+                confusable_chars=response.idn_result.confusable_chars,
+                domain_unicode=response.idn_result.domain_unicode,
+                homograph_ratio=response.idn_result.homograph_ratio,
+                visual_similarity=response.idn_result.visual_similarity,
+                is_mixed_script=response.idn_result.is_mixed_script,
+                reasons=response.reasons,
+                llm_reason=response.llm_reason,
+                s_vt=response.ti_result.s_vt,
+                s_urlscan=response.ti_result.s_urlscan,
+                s_gsb=response.ti_result.s_gsb,
+            ),
+            name=f"autoingest_{response.request_id}",
+        )
+
     logger.info(
         "analyze_complete",
         url=url,
@@ -204,61 +249,6 @@ async def analyze_url(
         processing_ms=response.processing_ms,
     )
     return response
-
-
-# --------------------------------------------------------------------------- #
-# Helpers
-# --------------------------------------------------------------------------- #
-
-async def _persist_incident(
-    response: AnalyzeResponse,
-    body: AnalyzeRequest,
-) -> None:
-    """Inserta el incidente en PostgreSQL de forma asíncrona."""
-    try:
-        from models.database import execute  # late import to avoid circular deps
-
-        await execute(
-            """
-            INSERT INTO incidents (
-                id, email_hash, url, domain, verdict,
-                s_risk, s_idn, s_llm, s_ti,
-                llm_reason, shap_contributions,
-                email_subject, email_from, email_to, all_urls, reasons,
-                created_at
-            ) VALUES (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8, $9,
-                $10, $11,
-                $12, $13, $14, $15, $16,
-                $17
-            ) ON CONFLICT (id) DO NOTHING
-            """,
-            response.request_id,
-            body.email_hash or "",
-            response.url,
-            response.domain,
-            response.verdict,
-            response.s_risk,
-            response.agent_scores.s_idn,
-            response.agent_scores.s_llm,
-            response.agent_scores.s_ti,
-            response.llm_reason,
-            json.dumps(response.shap_explanation.feature_contributions),
-            body.email_subject or "",
-            body.email_from or "",
-            body.email_to or "",
-            json.dumps(body.all_urls),
-            json.dumps(response.reasons),
-            response.timestamp,
-        )
-        logger.info("incident_persisted", request_id=response.request_id)
-    except Exception as exc:
-        logger.error(
-            "persist_incident_failed",
-            request_id=response.request_id,
-            error=str(exc),
-        )
 
 
 # --------------------------------------------------------------------------- #
@@ -398,58 +388,6 @@ async def analyze_email(
     )
 
 
-async def _persist_email_incident(
-    response: AnalyzeResponse,
-    body: AnalyzeEmailRequest,
-) -> None:
-    """Persiste un incidente de análisis de email completo en PostgreSQL (fire-and-forget)."""
-    try:
-        from models.database import execute
-
-        await execute(
-            """
-            INSERT INTO incidents (
-                id, email_hash, url, domain, verdict,
-                s_risk, s_idn, s_llm, s_ti,
-                llm_reason, shap_contributions,
-                email_subject, email_from, email_to, all_urls, reasons,
-                email_body_html, email_images, email_attachments,
-                created_at
-            ) VALUES (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8, $9,
-                $10, $11,
-                $12, $13, $14, $15, $16,
-                $17, $18, $19,
-                $20
-            ) ON CONFLICT (id) DO NOTHING
-            """,
-            response.request_id,
-            body.email_hash or "",
-            response.url,
-            response.domain,
-            response.verdict,
-            response.s_risk,
-            response.agent_scores.s_idn,
-            response.agent_scores.s_llm,
-            response.agent_scores.s_ti,
-            response.llm_reason,
-            json.dumps(response.shap_explanation.feature_contributions),
-            body.email_subject or "",
-            body.email_from or "",
-            body.email_to or "",
-            json.dumps(body.all_urls),
-            json.dumps(response.reasons),
-            body.email_body_html[:200_000] if body.email_body_html else "",
-            json.dumps(body.images),
-            json.dumps(body.attachments),
-            response.timestamp,
-        )
-        logger.info("email_incident_persisted", request_id=response.request_id)
-    except Exception as exc:
-        logger.error("persist_email_incident_failed", request_id=response.request_id, error=str(exc))
-
-
 # --------------------------------------------------------------------------- #
 # POST /analyze_batch — analiza múltiples URLs en paralelo
 # --------------------------------------------------------------------------- #
@@ -557,61 +495,6 @@ async def analyze_url_batch(
         processing_ms=round(processing_ms, 1),
         timestamp=datetime.now(timezone.utc),
     )
-
-
-def _sender_domain(email_from: str | None) -> str:
-    """Extrae el dominio del campo From del email."""
-    if not email_from:
-        return ""
-    import re
-    m = re.search(r"@([\w.\-]+)", email_from)
-    return m.group(1).lower() if m else ""
-
-
-async def _persist_batch_incident(
-    response: AnalyzeResponse,
-    body: BatchAnalyzeRequest,
-) -> None:
-    """Persiste un incidente de batch en PostgreSQL (fire-and-forget)."""
-    try:
-        from models.database import execute
-
-        await execute(
-            """
-            INSERT INTO incidents (
-                id, email_hash, url, domain, verdict,
-                s_risk, s_idn, s_llm, s_ti,
-                llm_reason, shap_contributions,
-                email_subject, email_from, email_to, all_urls, reasons,
-                created_at
-            ) VALUES (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8, $9,
-                $10, $11,
-                $12, $13, $14, $15, $16,
-                $17
-            ) ON CONFLICT (id) DO NOTHING
-            """,
-            response.request_id,
-            body.email_hash or "",
-            response.url,
-            response.domain,
-            response.verdict,
-            response.s_risk,
-            response.agent_scores.s_idn,
-            response.agent_scores.s_llm,
-            response.agent_scores.s_ti,
-            response.llm_reason,
-            json.dumps(response.shap_explanation.feature_contributions),
-            body.email_subject or "",
-            body.email_from or "",
-            body.email_to or "",
-            json.dumps(body.urls),
-            json.dumps(response.reasons),
-            response.timestamp,
-        )
-    except Exception as exc:
-        logger.error("persist_batch_incident_failed", request_id=response.request_id, error=str(exc))
 
 
 # --------------------------------------------------------------------------- #
@@ -763,122 +646,9 @@ async def analyze_eml_file(
     )
 
 
-async def _analyze_single_url_for_email(
-    url: str,
-    email_signals: EmailSignals,
-    email_hash: str,
-    email_body_snippet: str | None,
-    t_start: float,
-) -> AnalyzeResponse:
-    """
-    Ejecuta el pipeline completo para una URL en el contexto de un email.
-
-    Usa ``extract_effective_domain`` en lugar de ``extract_domain`` para
-    resolver abusos de CDN (ej. GCS bucket hosting malware).
-    """
-    domain = extract_effective_domain(url)
-
-    idn_result, ti_result, s_hf, probe_result = await asyncio.gather(
-        idn_agent.analyze(url),
-        threat_intel_service.analyze(url, domain),
-        hf_agent.analyze(url, email_body_snippet),
-        web_probe_agent.analyze(url),
-    )
-
-    idn_summary = (
-        f"IDN score={idn_result.s_idn_local:.2f}, "
-        f"mixed_script={idn_result.is_mixed_script}, "
-        f"homograph_ratio={idn_result.homograph_ratio:.2f}"
-    )
-
-    try:
-        s_llm, llm_reason = await llm_agent.analyze(
-            url=url,
-            domain=domain,
-            email_body_snippet=email_body_snippet,
-            idn_result_summary=idn_summary,
-        )
-    except LLMTimeoutError:
-        s_llm = 0.5
-        llm_reason = "LLM timed out — neutral fallback applied"
-
-    return await fusion_agent.fuse(
-        url=url,
-        domain=domain,
-        idn_result=idn_result,
-        ti_result=ti_result,
-        s_llm=s_llm,
-        llm_reason=llm_reason,
-        start_time=t_start,
-        email_hash=email_hash,
-        s_hf=s_hf,
-        email_signals=email_signals,
-        probe_result=probe_result,
-    )
-
-
-def _aggregate_email_reasons(
-    url_analyses: list[AnalyzeResponse],
-    email_signals: EmailSignals,
-) -> list[str]:
-    """
-    Agrega razones únicas de todas las URLs analizadas más señales del email.
-
-    Elimina duplicados y la razón de fallback "No suspicious indicators detected"
-    cuando existen razones concretas de otras URLs.
-    """
-    seen: set[str] = set()
-    reasons: list[str] = []
-
-    for analysis in url_analyses:
-        for reason in analysis.reasons:
-            if reason not in seen and reason != "No suspicious indicators detected":
-                seen.add(reason)
-                reasons.append(reason)
-
-    def _add(reason: str) -> None:
-        if reason not in seen:
-            seen.add(reason)
-            reasons.append(reason)
-
-    if email_signals.is_urgent and not any("urgency" in r.lower() for r in reasons):
-        _add("Email uses urgency/pressure tactics to coerce immediate action")
-    if email_signals.sender_domain_mismatch:
-        _add(
-            f"Sender domain ({email_signals.sender_domain!r}) does not match "
-            f"return-path domain ({email_signals.return_path_domain!r})"
-        )
-    if email_signals.has_suspicious_attachments:
-        names = ", ".join(email_signals.attachment_names[:3])
-        _add(f"Suspicious attachments detected: {names}")
-    if not email_signals.spf_pass and email_signals.sender_domain:
-        _add(f"SPF authentication failed for {email_signals.sender_domain!r}")
-    if not email_signals.dkim_pass and email_signals.sender_domain:
-        _add(f"DKIM signature verification failed for {email_signals.sender_domain!r}")
-
-    if not reasons:
-        reasons.append("No suspicious indicators detected in email or URLs")
-
-    return reasons
-
-
 # --------------------------------------------------------------------------- #
 # POST /report — reporte manual de URLs (Asset Register A09)
 # --------------------------------------------------------------------------- #
-
-class ReportRequest(BaseModel):
-    url: str = Field(..., min_length=1, max_length=2048)
-    reporter_note: str = Field(default="", max_length=500)
-    reported_verdict: Literal["PHISHING", "SUSPICIOUS"] = "PHISHING"
-
-
-class ReportResponse(BaseModel):
-    report_id: str
-    url: str
-    reported_verdict: str
-    message: str
-    timestamp: datetime
-
 
 @router.post(
     "/report",
@@ -934,47 +704,3 @@ async def report_url(
         message="Report received and queued for processing",
         timestamp=now,
     )
-
-
-async def _persist_manual_report(
-    report_id: str,
-    url: str,
-    verdict: str,
-    reporter: str,
-    note: str,
-    timestamp: datetime,
-) -> None:
-    """Guarda reporte manual en incidents table."""
-    try:
-        from models.database import execute  # late import to avoid circular deps
-
-        domain = extract_domain(url) if url.startswith("http") else url
-        await execute(
-            """
-            INSERT INTO incidents (
-                id, email_hash, url, domain, verdict,
-                s_risk, s_idn, s_llm, s_ti,
-                llm_reason, shap_contributions, analyzed_by, created_at
-            ) VALUES (
-                $1, $2, $3, $4, $5,
-                $6, $7, $8, $9,
-                $10, $11, $12, $13
-            ) ON CONFLICT (id) DO NOTHING
-            """,
-            report_id,
-            "",
-            url,
-            domain,
-            verdict,
-            1.0 if verdict == "PHISHING" else 0.5,
-            0.0,
-            0.0,
-            0.0,
-            f"Manual report: {note}" if note else "Manual report",
-            json.dumps({}),
-            reporter,
-            timestamp,
-        )
-        logger.info("manual_report_persisted", report_id=report_id)
-    except Exception as exc:
-        logger.error("persist_manual_report_failed", report_id=report_id, error=str(exc))

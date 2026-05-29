@@ -30,6 +30,20 @@ class HFAgent:
     Calls HF Inference API text-classification endpoints and returns a
     phishing probability s_hf ∈ [0.0, 1.0].
 
+    Pipeline role
+    -------------
+    Runs concurrently with IDNAgent, ThreatIntelService and WebProbeAgent
+    (Stage 1, ``asyncio.gather``).  The resulting ``s_hf`` is passed to
+    FusionAgent where it is blended with the Ollama LLM score before fusion::
+
+        s_llm_combined = (1 - HF_WEIGHT) * s_llm + HF_WEIGHT * s_hf
+                       = 0.60 * s_llm + 0.40 * s_hf
+
+    SHAP contributions (γ = 0.50)::
+
+        llm_contribution = γ * (1 - HF_WEIGHT) * s_llm  →  0.30 * s_llm
+        hf_contribution  = γ * HF_WEIGHT       * s_hf   →  0.20 * s_hf
+
     No initialization needed — ``analyze()`` is safe to call concurrently.
     """
 

@@ -190,3 +190,17 @@ class AnalyzeEmailResponse(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     processing_ms: float
     timestamp: datetime
+
+
+class ReportRequest(BaseModel):
+    url: str = Field(..., min_length=1, max_length=2048)
+    reporter_note: str = Field(default="", max_length=500)
+    reported_verdict: Literal["PHISHING", "SUSPICIOUS"] = "PHISHING"
+
+
+class ReportResponse(BaseModel):
+    report_id: str
+    url: str
+    reported_verdict: str
+    message: str
+    timestamp: datetime

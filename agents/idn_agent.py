@@ -13,8 +13,6 @@ from core.constants import (
     BETA,
     F_MIX,
     HOMOGRAPH_THRESHOLD,
-    IDN_CACHE_PREFIX,
-    RAG_TOP_K,
     SIM_V_EARLY_EXIT,
 )
 from core.exceptions import IDNAnalysisError
@@ -25,7 +23,7 @@ from agents.confusables_loader import (
     load_confusables_catalog,
 )
 from agents.bktree import BKTree
-from utils.url_parser import extract_domain, extract_2ld, extract_idn_label
+from utils.url_parser import extract_domain, extract_idn_label
 from schemas.analyze import IDNResult
 
 logger = get_logger(__name__)

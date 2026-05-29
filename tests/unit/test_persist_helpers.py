@@ -8,13 +8,27 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from unittest.mock import MagicMock
+
 from schemas.analyze import (
     AgentScores,
+    AnalyzeRequest,
     AnalyzeResponse,
     IDNResult,
     ShapExplanation,
     TIResult,
 )
+
+
+def _make_body(email_hash: str | None = None) -> AnalyzeRequest:
+    """Minimal AnalyzeRequest body for _persist_incident tests."""
+    body = MagicMock(spec=AnalyzeRequest)
+    body.email_hash = email_hash
+    body.email_subject = ""
+    body.email_from = ""
+    body.email_to = ""
+    body.all_urls = []
+    return body
 
 
 def _make_response(verdict: str = "PHISHING", s_risk: float = 0.85) -> AnalyzeResponse:
@@ -58,10 +72,10 @@ class TestPersistIncident:
 
     @pytest.mark.asyncio
     async def test_success_calls_execute(self):
-        from routers.analyze_router import _persist_incident
+        from services.persistence import _persist_incident
         response = _make_response()
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
-            await _persist_incident(response, email_hash="abc123")
+            await _persist_incident(response, _make_body(email_hash="abc123"))
         mock_exec.assert_awaited_once()
         call_args = mock_exec.call_args
         # First positional arg is the SQL, second is the request_id
@@ -69,10 +83,10 @@ class TestPersistIncident:
 
     @pytest.mark.asyncio
     async def test_success_with_none_email_hash(self):
-        from routers.analyze_router import _persist_incident
+        from services.persistence import _persist_incident
         response = _make_response()
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
-            await _persist_incident(response, email_hash=None)
+            await _persist_incident(response, _make_body(email_hash=None))
         mock_exec.assert_awaited_once()
         # email_hash should default to empty string
         call_args = mock_exec.call_args[0]
@@ -81,19 +95,19 @@ class TestPersistIncident:
     @pytest.mark.asyncio
     async def test_db_failure_is_swallowed(self):
         """DB errors must never propagate — fire-and-forget guarantees API response."""
-        from routers.analyze_router import _persist_incident
+        from services.persistence import _persist_incident
         response = _make_response()
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             mock_exec.side_effect = Exception("DB connection lost")
             # Must not raise
-            await _persist_incident(response, email_hash="hash")
+            await _persist_incident(response, _make_body(email_hash="hash"))
 
     @pytest.mark.asyncio
     async def test_legitimate_verdict_persisted_correctly(self):
-        from routers.analyze_router import _persist_incident
+        from services.persistence import _persist_incident
         response = _make_response(verdict="LEGITIMATE", s_risk=0.10)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
-            await _persist_incident(response, email_hash=None)
+            await _persist_incident(response, _make_body(email_hash=None))
         call_args = mock_exec.call_args[0]
         assert call_args[5] == response.verdict  # verdict positional arg
 

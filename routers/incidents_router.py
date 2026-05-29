@@ -8,19 +8,26 @@ Dashboard read-only — no acciones de bloqueo en v1.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
+from typing import TypeVar
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, ConfigDict
 
 from auth.dependencies import require_admin
+from data_pipeline.knowledge_updater import knowledge_updater
+from schemas.feedback import FeedbackRequest, FeedbackResponse
 from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
 from core.exceptions import DatabaseError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from models.database import fetch, fetchrow
 from schemas.incidents import IncidentListResponse, IncidentRecord
+
+_T = TypeVar("_T")
 
 
 class MetricsSummary(BaseModel):
@@ -80,7 +87,8 @@ async def list_incidents(
     Rate limit: 30 req/min por IP (CA-4).
     """
     # Rate limiting: 30 req/min por IP (CA-4)
-    await check_rate_limit(f"rl:incidents:{get_client_ip(http_request)}", limit=30, window_seconds=60)
+    client_ip = get_client_ip(http_request)
+    await check_rate_limit(f"rl:incidents:{client_ip}", limit=30, window_seconds=60)
 
     offset = (page - 1) * page_size
 
@@ -296,7 +304,8 @@ async def get_incidents_by_hash(
     Útil para ver todos los veredictos de URLs dentro de un mismo email
     capturado por la extensión.
     """
-    await check_rate_limit(f"rl:incidents:{get_client_ip(http_request)}", limit=30, window_seconds=60)
+    client_ip = get_client_ip(http_request)
+    await check_rate_limit(f"rl:incidents:{client_ip}", limit=30, window_seconds=60)
 
     offset = (page - 1) * page_size
 
@@ -341,16 +350,16 @@ async def get_incidents_by_hash(
 
 def _row_to_record(row: dict) -> IncidentRecord:
     """Convierte una fila asyncpg en un IncidentRecord Pydantic."""
-    def _parse_jsonb(val: object, default: object) -> object:
+    def _parse_jsonb(val: object, default: _T) -> _T:
         if isinstance(val, str):
-            return json.loads(val) if val else default
-        return val if val is not None else default
+            return json.loads(val) if val else default  # type: ignore[return-value]
+        return val if val is not None else default  # type: ignore[return-value]
 
-    shap_contributions: dict[str, float] = _parse_jsonb(row["shap_contributions"], {})  # type: ignore[assignment]
-    all_urls: list[str] = _parse_jsonb(row.get("all_urls"), [])  # type: ignore[assignment]
-    reasons: list[str] = _parse_jsonb(row.get("reasons"), [])  # type: ignore[assignment]
-    email_images: list[str] = _parse_jsonb(row.get("email_images"), [])  # type: ignore[assignment]
-    email_attachments: list[str] = _parse_jsonb(row.get("email_attachments"), [])  # type: ignore[assignment]
+    shap_contributions: dict[str, float] = _parse_jsonb(row["shap_contributions"], {})
+    all_urls: list[str] = _parse_jsonb(row.get("all_urls"), [])
+    reasons: list[str] = _parse_jsonb(row.get("reasons"), [])
+    email_images: list[str] = _parse_jsonb(row.get("email_images"), [])
+    email_attachments: list[str] = _parse_jsonb(row.get("email_attachments"), [])
 
     return IncidentRecord(
         id=str(row["id"]),
@@ -373,4 +382,96 @@ def _row_to_record(row: dict) -> IncidentRecord:
         email_body_html=row.get("email_body_html") or "",
         email_images=email_images,
         email_attachments=email_attachments,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Admin feedback endpoint — confirm or correct a verdict
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{incident_id}/feedback",
+    response_model=FeedbackResponse,
+    summary="Confirm or correct an incident verdict (admin only)",
+)
+async def submit_feedback(
+    incident_id: UUID,
+    body: FeedbackRequest,
+    request: Request,
+    current_user=Depends(require_admin),
+) -> FeedbackResponse:
+    """
+    Admin confirms or corrects a verdict. Confirmed PHISHING verdicts trigger
+    immediate ChromaDB ingestion so future RAG queries benefit from the pattern.
+    Other verdicts are queued for batch ingestion via process_feedback_queue().
+    """
+    await check_rate_limit(f"rl:feedback:{get_client_ip(request)}", limit=30, window_seconds=60)
+
+    incident = await fetchrow(
+        "SELECT id, url, domain, verdict, s_risk, s_idn, s_llm, s_ti, llm_reason, reasons "
+        "FROM incidents WHERE id = $1",
+        incident_id,
+    )
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    feedback_id = await fetchrow(
+        """
+        INSERT INTO feedback (incident_id, confirmed_verdict, confirmed_by, note)
+        VALUES ($1, $2, $3, $4)
+        RETURNING id
+        """,
+        incident_id,
+        body.confirmed_verdict,
+        getattr(current_user, "id", None),
+        body.note,
+    )
+
+    ingested = False
+    if body.confirmed_verdict == "PHISHING":
+        try:
+            reasons_list: list[str] = (
+                incident["reasons"]
+                if isinstance(incident["reasons"], list)
+                else []
+            )
+            asyncio.create_task(
+                knowledge_updater.ingest_confirmed_feedback(
+                    feedback_id=str(feedback_id["id"]),
+                    incident_id=str(incident_id),
+                    confirmed_verdict=body.confirmed_verdict,
+                    note=body.note,
+                    url=incident["url"],
+                    domain=incident["domain"],
+                    domain_unicode=incident["domain"],
+                    confusable_chars=[],
+                    homograph_ratio=0.0,
+                    visual_similarity=0.0,
+                    is_mixed_script=False,
+                    s_risk=float(incident["s_risk"]),
+                    s_idn_local=float(incident["s_idn"]),
+                    s_ti=float(incident["s_ti"]),
+                    s_llm=float(incident["s_llm"]),
+                    s_vt=0.0,
+                    s_urlscan=0.0,
+                    s_gsb=0.0,
+                    reasons=reasons_list,
+                    llm_reason=incident["llm_reason"] or "",
+                ),
+                name=f"feedback_ingest_{incident_id}",
+            )
+            ingested = True
+        except Exception as exc:
+            logger.warning("feedback_ingest_failed", incident_id=str(incident_id), error=str(exc))
+
+    return FeedbackResponse(
+        feedback_id=feedback_id["id"],
+        incident_id=incident_id,
+        confirmed_verdict=body.confirmed_verdict,
+        ingested=ingested,
+        message=(
+            "Verdict confirmed and ingested into knowledge base"
+            if ingested
+            else "Verdict confirmed and queued for knowledge base ingestion"
+        ),
     )

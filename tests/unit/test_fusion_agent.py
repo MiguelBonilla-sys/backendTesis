@@ -409,6 +409,7 @@ class TestFusionAgentShap:
             "s_idn_local", "s_ti", "s_llm", "s_hf",
             "s_vt", "s_urlscan", "s_gsb",
             "homograph_ratio", "visual_similarity", "is_mixed_script",
+            "s_email", "s_probe",
         }
         assert set(shap.keys()) == expected_keys
 

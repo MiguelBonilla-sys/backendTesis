@@ -262,33 +262,39 @@ class TestLLMAgentRetrieveRagContext:
     @pytest.mark.asyncio
     async def test_returns_empty_list_when_query_raises(self, agent: LLMAgent, mock_chromadb_module):
         mock_chromadb_module.query_collection = AsyncMock(side_effect=Exception("ChromaDB down"))
-        result = await agent._retrieve_rag_context("test query")
+        result = await agent._retrieve_rag_context("https://test.com", "test.com")
         assert isinstance(result, list)
 
     @pytest.mark.asyncio
-    async def test_max_six_chunks_returned(self, agent: LLMAgent, mock_chromadb_module):
+    async def test_max_nine_chunks_returned(self, agent: LLMAgent, mock_chromadb_module):
         many_docs = [{"document": f"doc {i}"} for i in range(10)]
         mock_chromadb_module.query_collection = AsyncMock(return_value=many_docs)
-        result = await agent._retrieve_rag_context("test query")
-        assert len(result) <= 6
+        result = await agent._retrieve_rag_context("https://test.com", "test.com")
+        assert len(result) <= 9
 
     @pytest.mark.asyncio
-    async def test_combines_email_and_idn_results(self, agent: LLMAgent, mock_chromadb_module):
+    async def test_combines_all_three_collections(self, agent: LLMAgent, mock_chromadb_module):
         email_docs = [{"document": "phishing email pattern"}]
         idn_docs = [{"document": "IDN attack pattern"}]
+        ti_docs = [{"document": "TI campaign pattern"}]
 
         async def mock_query(collection, query_texts, n_results):
             if "email" in collection:
                 return email_docs
-            return idn_docs
+            if "idn" in collection:
+                return idn_docs
+            return ti_docs
 
         mock_chromadb_module.query_collection = mock_query
-        result = await agent._retrieve_rag_context("test query")
-        assert len(result) <= 6
+        result = await agent._retrieve_rag_context("https://test.com", "test.com")
+        assert len(result) == 3  # 1 per collection
+        assert any("[Past phishing pattern]" in r for r in result)
+        assert any("[IDN attack pattern]" in r for r in result)
+        assert any("[TI campaign pattern]" in r for r in result)
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_exception(self, agent: LLMAgent, mock_chromadb_module):
         """Any exception from chromadb must not propagate — returns []."""
         mock_chromadb_module.query_collection = AsyncMock(side_effect=RuntimeError("crashed"))
-        result = await agent._retrieve_rag_context("query text")
+        result = await agent._retrieve_rag_context("https://test.com", "test.com")
         assert result == []

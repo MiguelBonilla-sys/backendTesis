@@ -1,7 +1,7 @@
 """
-LLM Agent — análisis semántico con LlamaStack + RAG dual desde ChromaDB.
+LLM Agent — análisis semántico con LlamaStack + RAG triple desde ChromaDB.
 Modelo: Llama-3.1-8B-Instruct-GGUF (local via LlamaStack)
-RAG: email_embeddings (top-3) + idn_patterns (top-3) → prompt injection
+RAG: email_embeddings (top-3) + idn_patterns (top-3) + ti_signals (top-3) → prompt injection
 """
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from core.config import settings
 from core.constants import (
     COLLECTION_EMAIL,
     COLLECTION_IDN,
+    COLLECTION_TI,
     LLM_FALLBACK_SCORE,
     LLM_TIMEOUT_S,
     RAG_TOP_K,
@@ -101,10 +102,12 @@ class LLMAgent:
 
         try:
             # --- 1. RAG retrieval concurrente ----------------------------------
-            query_text = (
-                f"URL: {url}\nDomain: {domain}\n{email_body_snippet or ''}"
+            rag_context = await self._retrieve_rag_context(
+                url=url,
+                domain=domain,
+                email_body_snippet=email_body_snippet,
+                idn_summary=idn_result_summary,
             )
-            rag_context = await self._retrieve_rag_context(query_text)
 
             # --- 2. Construir prompt -------------------------------------------
             prompt = self._build_prompt(
@@ -158,30 +161,48 @@ class LLMAgent:
     # RAG retrieval
     # ------------------------------------------------------------------
 
-    async def _retrieve_rag_context(self, query: str) -> list[str]:
+    async def _retrieve_rag_context(
+        self,
+        url: str,
+        domain: str,
+        email_body_snippet: str | None = None,
+        idn_summary: str | None = None,
+    ) -> list[str]:
         """
-        Dual RAG retrieval concurrente desde ChromaDB:
+        Triple RAG retrieval concurrente desde ChromaDB:
 
         - ``email_embeddings``: top-3 correos phishing similares históricos
         - ``idn_patterns``: top-3 patrones de ataque IDN conocidos
+        - ``ti_signals``: top-3 campañas TI históricas relevantes
 
-        Retorna lista de hasta 6 chunks de texto listos para inyectar en el
-        prompt.  Si ChromaDB no está disponible devuelve lista vacía sin
-        propagar el error (degraded gracefully).
+        La query incluye el resumen IDN cuando está disponible para mejorar
+        la relevancia de los resultados de ``idn_patterns``.
+
+        Retorna lista de hasta 9 chunks listos para inyectar en el prompt.
+        Si ChromaDB no está disponible devuelve lista vacía (graceful degradation).
         """
         try:
             from models.chromadb_client import query_collection
 
+            query_text = f"URL: {url}\nDomain: {domain}\n"
+            if idn_summary:
+                query_text += f"IDN signals: {idn_summary}\n"
+            query_text += email_body_snippet or ""
+
             email_task = query_collection(
-                COLLECTION_EMAIL, [query], n_results=RAG_TOP_K
+                COLLECTION_EMAIL, [query_text], n_results=RAG_TOP_K
             )
             idn_task = query_collection(
-                COLLECTION_IDN, [query], n_results=RAG_TOP_K
+                COLLECTION_IDN, [query_text], n_results=RAG_TOP_K
+            )
+            ti_task = query_collection(
+                COLLECTION_TI, [query_text], n_results=RAG_TOP_K
             )
 
-            email_results, idn_results = await asyncio.gather(
+            email_results, idn_results, ti_results = await asyncio.gather(
                 email_task,
                 idn_task,
+                ti_task,
                 return_exceptions=True,
             )
 
@@ -197,7 +218,12 @@ class LLMAgent:
                     if isinstance(r, dict) and r.get("document"):
                         chunks.append(f"[IDN attack pattern] {r['document']}")
 
-            return chunks[:6]  # máximo 6 chunks (3 + 3)
+            if isinstance(ti_results, list):
+                for r in ti_results:
+                    if isinstance(r, dict) and r.get("document"):
+                        chunks.append(f"[TI campaign pattern] {r['document']}")
+
+            return chunks[:9]  # máximo 9 chunks (3 por collection)
 
         except Exception as exc:
             logger.warning("rag_retrieval_failed", error=str(exc))
@@ -216,27 +242,23 @@ class LLMAgent:
         idn_summary: str | None,
     ) -> str:
         """
-        Construye el prompt para LlamaStack con contexto RAG inyectado.
+        Construye el user prompt para LlamaStack con contexto RAG inyectado.
 
-        Formato de respuesta esperado:
-            ``SCORE: <float> | REASON: <text>``
+        El rol de experto va en el system message (ver ``_call_llamastack``).
+        Formato de respuesta esperado: ``SCORE: <float> | REASON: <text>``
         """
-        context_block = (
-            "\n".join(rag_context) if rag_context else "No similar patterns found."
-        )
+        # Truncate RAG context to ~1500 chars to avoid saturating the 8B model
+        raw_context = "\n".join(rag_context) if rag_context else ""
+        context_block = raw_context[:1500] if raw_context else "No similar patterns found."
 
         idn_line = f"IDN Analysis: {idn_summary}" if idn_summary else ""
         email_line = (
             f"Email content snippet: {email_body[:500]}" if email_body else ""
         )
 
-        extra_lines = "\n".join(
-            line for line in [idn_line, email_line] if line
-        )
+        extra_lines = "\n".join(line for line in [idn_line, email_line] if line)
 
-        prompt = f"""You are a cybersecurity expert specializing in IDN homograph phishing detection.
-
-## Relevant patterns from knowledge base:
+        prompt = f"""## Relevant patterns from knowledge base:
 {context_block}
 
 ## Analysis target:
@@ -246,7 +268,8 @@ Domain: {domain}
 
 ## Task:
 Analyze if this URL/domain is a phishing attempt. Consider:
-1. Visual similarity to legitimate domains (homograph/IDN attacks using Cyrillic, Greek, or other confusable scripts)
+1. Visual similarity to legitimate domains (homograph/IDN attacks using Cyrillic, Greek,
+   or other confusable scripts)
 2. Suspicious URL patterns, unusual TLDs, or deceptive subdomains
 3. Context from email content if provided
 4. Patterns matching known phishing campaigns from the knowledge base
@@ -279,9 +302,17 @@ Where SCORE=1.0 means definitely phishing, SCORE=0.0 means definitely legitimate
         payload: dict = {
             "model": settings.OLLAMA_MODEL,
             "messages": [
-                {"role": "user", "content": prompt}
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a cybersecurity expert specializing in IDN homograph "
+                        "phishing detection. Always respond in the exact format: "
+                        "SCORE: <float 0.0-1.0> | REASON: <1-2 sentences>"
+                    ),
+                },
+                {"role": "user", "content": prompt},
             ],
-            "max_tokens": 60,
+            "max_tokens": 150,
             "temperature": 0,
         }
 

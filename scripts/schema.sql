@@ -154,3 +154,20 @@ CREATE INDEX IF NOT EXISTS idx_sim_event_type ON simulation_events(event_type);
 -- DO NOT insert credentials here — use migrations or env vars
 -- Example: INSERT INTO users (username, password_hash, role)
 --          VALUES ('admin', '$2b$12$...bcrypt_hash...', 'admin');
+
+-- ----------------------------------------------------------------
+-- Feedback table — admin confirmations for the learning loop
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS feedback (
+    id                UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    incident_id       UUID        REFERENCES incidents(id) ON DELETE CASCADE,
+    confirmed_verdict VARCHAR(20) NOT NULL
+                          CHECK (confirmed_verdict IN ('PHISHING', 'SUSPICIOUS', 'LEGITIMATE')),
+    confirmed_by      UUID        REFERENCES users(id),
+    note              TEXT,
+    ingested          BOOLEAN     NOT NULL DEFAULT false,
+    ingested_at       TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_feedback_ingested  ON feedback(ingested, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_feedback_incident  ON feedback(incident_id);

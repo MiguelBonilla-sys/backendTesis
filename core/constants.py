@@ -4,6 +4,7 @@
 W_VT: float = 0.50
 W_URLSCAN: float = 0.30
 W_GSB: float = 0.20
+W_WHOIS: float = 0.10       # additive WhoisXML modifier (domain age) — does not alter paper weights
 
 # ---------------------------------------------------------------------------
 # IDN scoring parameters

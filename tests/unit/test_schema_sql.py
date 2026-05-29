@@ -6,14 +6,14 @@ from pathlib import Path
 class TestSchemaSql:
     @pytest.fixture
     def schema_content(self):
-        path = Path("/home/user/TesisDEV/backendTesis/scripts/schema.sql")
-        assert path.exists(), "schema.sql debe existir en scripts/"
+        path = Path(__file__).parent.parent.parent / "scripts" / "schema.sql"
+        assert path.exists(), f"schema.sql debe existir en scripts/ (buscado en {path})"
         return path.read_text()
 
-    def test_schema_has_7_tables(self, schema_content):
+    def test_schema_has_8_tables(self, schema_content):
         tables = [l.strip() for l in schema_content.split("\n")
                   if l.strip().startswith("CREATE TABLE")]
-        assert len(tables) == 7, f"Se esperan 7 tablas, hay {len(tables)}: {tables}"
+        assert len(tables) == 8, f"Se esperan 8 tablas, hay {len(tables)}: {tables}"
 
     def test_schema_has_users_table(self, schema_content):
         assert "CREATE TABLE IF NOT EXISTS users" in schema_content
@@ -50,9 +50,9 @@ class TestSchemaSql:
 
 class TestInitDbScript:
     def test_init_db_script_exists(self):
-        path = Path("/home/user/TesisDEV/backendTesis/scripts/init_db.py")
-        assert path.exists(), "init_db.py debe existir en scripts/"
+        path = Path(__file__).parent.parent.parent / "scripts" / "init_db.py"
+        assert path.exists(), f"init_db.py debe existir en scripts/ (buscado en {path})"
 
     def test_init_db_imports_asyncpg(self):
-        content = Path("/home/user/TesisDEV/backendTesis/scripts/init_db.py").read_text()
-        assert "asyncpg" in content
+        path = Path(__file__).parent.parent.parent / "scripts" / "init_db.py"
+        assert "asyncpg" in path.read_text()

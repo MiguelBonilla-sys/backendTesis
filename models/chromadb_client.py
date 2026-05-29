@@ -69,6 +69,48 @@ async def get_or_create_collection(name: str) -> chromadb.Collection:
         ) from exc
 
 
+async def upsert_documents(
+    collection_name: str,
+    ids: list[str],
+    documents: list[str],
+    metadatas: list[dict] | None = None,
+) -> None:
+    """Upsert *documents* into *collection_name*. Creates the collection if needed.
+
+    Uses ChromaDB upsert semantics: inserts new documents and overwrites existing
+    ones with the same id. Safe to call repeatedly with the same incident_id.
+    """
+    collection = await get_or_create_collection(collection_name)
+    try:
+        await collection.upsert(
+            ids=ids,
+            documents=documents,
+            metadatas=metadatas or [{} for _ in ids],
+        )
+    except Exception as exc:
+        raise DatabaseError(
+            message=f"ChromaDB upsert failed on collection '{collection_name}'",
+            detail=str(exc),
+        ) from exc
+
+
+async def delete_document(collection_name: str, doc_id: str) -> None:
+    """Delete a single document from *collection_name* by id.
+
+    Silently ignores missing ids so callers don't need to guard existence.
+    """
+    collection = await get_or_create_collection(collection_name)
+    try:
+        await collection.delete(ids=[doc_id])
+    except Exception as exc:
+        logger.warning(
+            "chromadb_delete_failed",
+            collection=collection_name,
+            doc_id=doc_id,
+            error=str(exc),
+        )
+
+
 async def query_collection(
     collection_name: str,
     query_texts: list[str],
