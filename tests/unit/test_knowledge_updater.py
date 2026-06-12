@@ -261,3 +261,32 @@ class TestProcessFeedbackQueue:
 
         # First row failed → only second processed
         assert count == 1
+
+
+# ---------------------------------------------------------------------------
+# purge_incident_documents (T11 — anti-envenenamiento)
+# ---------------------------------------------------------------------------
+
+class TestPurgeIncidentDocuments:
+    @pytest.mark.asyncio
+    async def test_purges_all_three_collections(self):
+        from unittest.mock import AsyncMock, call, patch
+
+        from core.constants import COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI
+        from data_pipeline.knowledge_updater import KnowledgeUpdaterService
+
+        service = KnowledgeUpdaterService()
+        with patch(
+            "data_pipeline.knowledge_updater.delete_document",
+            new_callable=AsyncMock,
+        ) as mock_delete:
+            await service.purge_incident_documents("abc-123")
+
+        assert mock_delete.await_count == 3
+        mock_delete.assert_has_awaits(
+            [
+                call(COLLECTION_EMAIL, "email_abc-123"),
+                call(COLLECTION_IDN, "idn_abc-123"),
+                call(COLLECTION_TI, "ti_abc-123"),
+            ]
+        )

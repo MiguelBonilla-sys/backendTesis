@@ -44,7 +44,22 @@ HF_FALLBACK_SCORE: float = 0.5
 COLLECTION_EMAIL: str = "email_embeddings"
 COLLECTION_IDN: str = "idn_patterns"
 COLLECTION_TI: str = "ti_signals"
+COLLECTION_BASELINE: str = "usb_baseline"
 RAG_TOP_K: int = 3
+
+# ---------------------------------------------------------------------------
+# RAG retrieval — ponderación por procedencia (T11, anti-envenenamiento)
+# ---------------------------------------------------------------------------
+# Los documentos auto-ingestados (sin confirmación humana) pesan menos en el
+# re-ranking del retrieval: un FP auto-ingestado no debe reforzar futuros FPs.
+SOURCE_WEIGHTS: dict[str, float] = {
+    "admin_confirmed": 1.0,
+    "institutional_baseline": 0.9,
+    "seed_corpus": 0.8,
+    "auto_ingest": 0.6,
+}
+SOURCE_WEIGHT_DEFAULT: float = 0.8   # documentos sin metadato source (legacy)
+RAG_CANDIDATE_FACTOR: int = 2        # candidatos pedidos = RAG_TOP_K * factor
 
 # ---------------------------------------------------------------------------
 # Web Probe Agent

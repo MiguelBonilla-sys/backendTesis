@@ -281,3 +281,60 @@ class TestGetIncidentGenericException:
             )
         assert resp.status_code == 500
         assert "Failed to retrieve" in resp.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Feedback FP → purge del conocimiento (T11)
+# ---------------------------------------------------------------------------
+
+class TestFeedbackFalsePositivePurge:
+    def test_legitimate_feedback_purges_knowledge(self, client):
+        """Marcar FP debe remover los docs del incidente en el mismo flujo."""
+        incident_id = str(uuid.uuid4())
+        incident_row = _make_row(incident_id=incident_id, verdict="PHISHING")
+        incident_row["reasons"] = []
+        feedback_row = {"id": str(uuid.uuid4())}
+
+        with patch("routers.incidents_router.fetchrow", new_callable=AsyncMock) as mock_fetchrow, \
+             patch("routers.incidents_router.execute", new_callable=AsyncMock) as mock_execute, \
+             patch("routers.incidents_router.check_rate_limit", new_callable=AsyncMock), \
+             patch.object(
+                 type(__import__("routers.incidents_router", fromlist=["knowledge_updater"]).knowledge_updater),
+                 "purge_incident_documents",
+                 new_callable=AsyncMock,
+             ) as mock_purge:
+            mock_fetchrow.side_effect = [incident_row, feedback_row]
+            resp = client.post(
+                f"/api/v1/incidents/{incident_id}/feedback",
+                json={"confirmed_verdict": "LEGITIMATE"},
+                headers=_auth_headers(),
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ingested"] is True
+        assert "purged" in data["message"]
+        mock_purge.assert_awaited_once_with(incident_id)
+        mock_execute.assert_awaited()  # feedback marcado ingested=true
+
+    def test_phishing_feedback_does_not_purge(self, client):
+        incident_id = str(uuid.uuid4())
+        incident_row = _make_row(incident_id=incident_id, verdict="PHISHING")
+        incident_row["reasons"] = []
+        feedback_row = {"id": str(uuid.uuid4())}
+
+        with patch("routers.incidents_router.fetchrow", new_callable=AsyncMock) as mock_fetchrow, \
+             patch("routers.incidents_router.check_rate_limit", new_callable=AsyncMock), \
+             patch("routers.incidents_router.knowledge_updater") as mock_ku, \
+             patch("routers.incidents_router.asyncio") as mock_asyncio:
+            mock_ku.purge_incident_documents = AsyncMock()
+            mock_asyncio.create_task = MagicMock()
+            mock_fetchrow.side_effect = [incident_row, feedback_row]
+            resp = client.post(
+                f"/api/v1/incidents/{incident_id}/feedback",
+                json={"confirmed_verdict": "PHISHING"},
+                headers=_auth_headers(),
+            )
+
+        assert resp.status_code == 200
+        mock_ku.purge_incident_documents.assert_not_awaited()

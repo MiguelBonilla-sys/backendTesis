@@ -24,7 +24,7 @@ from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
 from core.exceptions import DatabaseError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
-from models.database import fetch, fetchrow
+from models.database import execute, fetch, fetchrow
 from schemas.incidents import IncidentListResponse, IncidentRecord
 
 _T = TypeVar("_T")
@@ -390,7 +390,7 @@ def _row_to_record(row: dict) -> IncidentRecord:
 # ---------------------------------------------------------------------------
 
 @router.post(
-    "/{incident_id}/feedback",
+    "/incidents/{incident_id}/feedback",
     response_model=FeedbackResponse,
     summary="Confirm or correct an incident verdict (admin only)",
 )
@@ -428,6 +428,32 @@ async def submit_feedback(
     )
 
     ingested = False
+    if body.confirmed_verdict == "LEGITIMATE":
+        # Falso positivo confirmado (T11): purgar los documentos auto-ingestados
+        # del incidente en el mismo flujo — un FP en el RAG refuerza futuros FPs.
+        try:
+            await knowledge_updater.purge_incident_documents(str(incident_id))
+            await execute(
+                "UPDATE feedback SET ingested = true, ingested_at = NOW() WHERE id = $1",
+                feedback_id["id"],
+            )
+            ingested = True
+        except Exception as exc:
+            logger.warning(
+                "feedback_purge_failed", incident_id=str(incident_id), error=str(exc)
+            )
+        return FeedbackResponse(
+            feedback_id=feedback_id["id"],
+            incident_id=incident_id,
+            confirmed_verdict=body.confirmed_verdict,
+            ingested=ingested,
+            message=(
+                "False positive confirmed — incident purged from knowledge base"
+                if ingested
+                else "False positive confirmed — knowledge base purge failed (queued)"
+            ),
+        )
+
     if body.confirmed_verdict == "PHISHING":
         try:
             reasons_list: list[str] = (

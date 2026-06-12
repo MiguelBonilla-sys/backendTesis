@@ -245,6 +245,9 @@ async def analyze_url(
                 s_vt=response.ti_result.s_vt,
                 s_urlscan=response.ti_result.s_urlscan,
                 s_gsb=response.ti_result.s_gsb,
+                # incident_id alinea los doc ids de ChromaDB con incidents.id —
+                # permite purgarlos si un admin marca el incidente como FP (T11)
+                incident_id=response.request_id,
             ),
             name=f"autoingest_{response.request_id}",
         )

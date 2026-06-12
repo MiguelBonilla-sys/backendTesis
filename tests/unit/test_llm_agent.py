@@ -298,3 +298,48 @@ class TestLLMAgentRetrieveRagContext:
         mock_chromadb_module.query_collection = AsyncMock(side_effect=RuntimeError("crashed"))
         result = await agent._retrieve_rag_context("https://test.com", "test.com")
         assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _rerank_by_source (T11 — anti-envenenamiento)
+# ---------------------------------------------------------------------------
+
+class TestRerankBySource:
+    @staticmethod
+    def _doc(doc_id, distance, source):
+        return {
+            "id": doc_id,
+            "document": f"doc {doc_id}",
+            "distance": distance,
+            "metadata": {"source": source} if source else {},
+        }
+
+    def test_admin_confirmed_outranks_closer_auto_ingest(self):
+        from agents.llm_agent import LLMAgent
+
+        # auto_ingest más cercano (d=0.10 → sim 0.90*0.6=0.54)
+        # admin_confirmed más lejano (d=0.30 → sim 0.70*1.0=0.70) → gana
+        results = [
+            self._doc("auto", 0.10, "auto_ingest"),
+            self._doc("confirmed", 0.30, "admin_confirmed"),
+        ]
+        ranked = LLMAgent._rerank_by_source(results)
+        assert ranked[0]["id"] == "confirmed"
+
+    def test_returns_at_most_top_k(self):
+        from agents.llm_agent import LLMAgent
+        from core.constants import RAG_TOP_K
+
+        results = [self._doc(str(i), 0.1 * i, "admin_confirmed") for i in range(8)]
+        ranked = LLMAgent._rerank_by_source(results)
+        assert len(ranked) == RAG_TOP_K
+
+    def test_skips_empty_documents_and_handles_missing_source(self):
+        from agents.llm_agent import LLMAgent
+
+        results = [
+            {"id": "empty", "document": "", "distance": 0.0, "metadata": {}},
+            self._doc("legacy", 0.2, None),
+        ]
+        ranked = LLMAgent._rerank_by_source(results)
+        assert [r["id"] for r in ranked] == ["legacy"]

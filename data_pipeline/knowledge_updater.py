@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from core.constants import COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI
 from core.logger import get_logger
-from models.chromadb_client import upsert_documents
+from models.chromadb_client import delete_document, upsert_documents
 from models.database import execute, fetch
 
 logger = get_logger(__name__)
@@ -189,6 +189,28 @@ class KnowledgeUpdaterService:
             "UPDATE feedback SET ingested = true, ingested_at = NOW() WHERE id = $1",
             feedback_id,
         )
+
+    async def purge_incident_documents(self, incident_id: str) -> None:
+        """
+        Remueve los documentos de un incidente de las 3 ChromaDB collections.
+
+        Anti-envenenamiento (T11): cuando un admin marca un incidente como
+        falso positivo (confirmed_verdict=LEGITIMATE), sus documentos
+        auto-ingestados dejan de existir como contexto RAG — un FP en el
+        conocimiento refuerza futuros FPs sobre dominios parecidos.
+
+        Los doc ids siguen la convención ``{email|idn|ti}_{incident_id}``
+        (``ingest_from_analysis`` con ``incident_id`` explícito).
+        ``delete_document`` ignora ids inexistentes, por lo que es seguro
+        llamarlo para incidentes que nunca fueron auto-ingestados.
+        """
+        for collection, prefix in (
+            (COLLECTION_EMAIL, "email_"),
+            (COLLECTION_IDN, "idn_"),
+            (COLLECTION_TI, "ti_"),
+        ):
+            await delete_document(collection, f"{prefix}{incident_id}")
+        logger.info("knowledge_purged", incident_id=incident_id)
 
     async def process_feedback_queue(self, batch_size: int = 50) -> int:
         """

@@ -18,7 +18,10 @@ from core.constants import (
     COLLECTION_TI,
     LLM_FALLBACK_SCORE,
     LLM_TIMEOUT_S,
+    RAG_CANDIDATE_FACTOR,
     RAG_TOP_K,
+    SOURCE_WEIGHT_DEFAULT,
+    SOURCE_WEIGHTS,
 )
 from core.exceptions import LLMTimeoutError
 from core.logger import get_logger
@@ -189,14 +192,19 @@ class LLMAgent:
                 query_text += f"IDN signals: {idn_summary}\n"
             query_text += email_body_snippet or ""
 
+            # Se piden más candidatos de los necesarios para poder re-rankear
+            # por procedencia (T11): un doc auto-ingestado muy cercano no debe
+            # desplazar a uno confirmado por admin apenas más lejano.
+            n_candidates = RAG_TOP_K * RAG_CANDIDATE_FACTOR
+
             email_task = query_collection(
-                COLLECTION_EMAIL, [query_text], n_results=RAG_TOP_K
+                COLLECTION_EMAIL, [query_text], n_results=n_candidates
             )
             idn_task = query_collection(
-                COLLECTION_IDN, [query_text], n_results=RAG_TOP_K
+                COLLECTION_IDN, [query_text], n_results=n_candidates
             )
             ti_task = query_collection(
-                COLLECTION_TI, [query_text], n_results=RAG_TOP_K
+                COLLECTION_TI, [query_text], n_results=n_candidates
             )
 
             email_results, idn_results, ti_results = await asyncio.gather(
@@ -207,27 +215,45 @@ class LLMAgent:
             )
 
             chunks: list[str] = []
-
-            if isinstance(email_results, list):
-                for r in email_results:
-                    if isinstance(r, dict) and r.get("document"):
-                        chunks.append(f"[Past phishing pattern] {r['document']}")
-
-            if isinstance(idn_results, list):
-                for r in idn_results:
-                    if isinstance(r, dict) and r.get("document"):
-                        chunks.append(f"[IDN attack pattern] {r['document']}")
-
-            if isinstance(ti_results, list):
-                for r in ti_results:
-                    if isinstance(r, dict) and r.get("document"):
-                        chunks.append(f"[TI campaign pattern] {r['document']}")
+            for results, tag in (
+                (email_results, "[Past phishing pattern]"),
+                (idn_results, "[IDN attack pattern]"),
+                (ti_results, "[TI campaign pattern]"),
+            ):
+                if isinstance(results, list):
+                    for r in self._rerank_by_source(results):
+                        chunks.append(f"{tag} {r['document']}")
 
             return chunks[:9]  # máximo 9 chunks (3 por collection)
 
         except Exception as exc:
             logger.warning("rag_retrieval_failed", error=str(exc))
             return []
+
+    @staticmethod
+    def _rerank_by_source(results: list[dict]) -> list[dict]:
+        """
+        Re-rankea candidatos de una collection por similitud ponderada por
+        procedencia (T11, anti-envenenamiento):
+
+            score = (1 - distance) * SOURCE_WEIGHTS[metadata.source]
+
+        ``admin_confirmed`` pesa 1.0; ``auto_ingest`` 0.6 — el conocimiento
+        no confirmado por un humano influye menos en el contexto del LLM.
+        Devuelve los RAG_TOP_K mejores con documento no vacío.
+        """
+        scored: list[tuple[float, dict]] = []
+        for r in results:
+            if not (isinstance(r, dict) and r.get("document")):
+                continue
+            distance = r.get("distance")
+            similarity = 1.0 - distance if isinstance(distance, (int, float)) else 0.5
+            metadata = r.get("metadata") or {}
+            source = metadata.get("source", "")
+            weight = SOURCE_WEIGHTS.get(source, SOURCE_WEIGHT_DEFAULT)
+            scored.append((similarity * weight, r))
+        scored.sort(key=lambda pair: pair[0], reverse=True)
+        return [r for _, r in scored[:RAG_TOP_K]]
 
     # ------------------------------------------------------------------
     # Prompt construction
