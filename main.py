@@ -7,7 +7,13 @@ from core.config import settings
 from core.logger import logger
 from models.database import close_db, init_db
 from models.redis_client import close_redis, init_redis
-from routers import analyze_router, auth_router, health_router, incidents_router
+from routers import (
+    analyze_router,
+    auth_router,
+    eml_router,
+    health_router,
+    incidents_router,
+)
 
 
 @asynccontextmanager
@@ -15,17 +21,6 @@ async def lifespan(app: FastAPI):
     logger.info("Starting BackendTesis...")
     await init_db()
     await init_redis()
-
-    # IDN Agent: confusables TR#39 + índice top-1M → BKTree (stage 4 del
-    # algoritmo). Sin esto, sim_v queda en 0 y el gate anti-FP del probe
-    # solo funciona por sufijos. Guarded: el arranque no depende del CSV.
-    try:
-        from agents.idn_agent import idn_agent
-
-        if not idn_agent.ready:  # singleton — no recargar 15 MB por lifespan
-            await idn_agent.initialize()
-    except Exception as exc:
-        logger.warning(f"idn_agent_initialize_failed: {exc}")
 
     # θ efectivo: última recalibración adaptativa persistida (T12)
     try:
@@ -62,6 +57,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
 app.include_router(analyze_router, prefix="/api/v1", tags=["analyze"])
+app.include_router(eml_router, prefix="/api/v1", tags=["analyze"])
 app.include_router(incidents_router, prefix="/api/v1", tags=["incidents"])
 
 

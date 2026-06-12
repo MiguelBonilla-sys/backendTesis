@@ -23,21 +23,25 @@ def _sender_domain(email_from: str | None) -> str:
     return m.group(1).lower() if m else ""
 
 
-async def _analyze_single_url_for_email(
+async def run_pipeline_core(
     url: str,
-    email_signals: EmailSignals,
-    email_hash: str,
-    email_body_snippet: str | None,
+    domain: str,
+    *,
     t_start: float,
+    email_hash: str | None = None,
+    email_body_snippet: str | None = None,
+    email_signals: EmailSignals | None = None,
 ) -> AnalyzeResponse:
     """
-    Ejecuta el pipeline completo para una URL en el contexto de un email.
+    Núcleo compartido del pipeline de una URL (etapas 1–3): agentes en
+    paralelo → LLM con fallback → gate anti-FP del probe → fusión.
 
-    Usa ``extract_effective_domain`` en lugar de ``extract_domain`` para
-    resolver abusos de CDN (ej. GCS bucket hosting malware).
+    Único punto de orquestación reutilizado por ``/analyze`` (router) y por
+    el análisis por-URL de email/batch/eml. Las excepciones de los agentes
+    se propagan: el caller decide (HTTP 500 en /analyze, descarte en batch).
+    El timeout del LLM se degrada acá (score neutral 0.5) — comportamiento
+    idéntico en todos los endpoints.
     """
-    domain = extract_effective_domain(url)
-
     idn_result, ti_result, s_hf, probe_result = await asyncio.gather(
         idn_agent.analyze(url),
         threat_intel_service.analyze(url, domain),
@@ -90,6 +94,71 @@ async def _analyze_single_url_for_email(
         email_signals=email_signals,
         probe_result=probe_result,
         probe_domain_trusted=probe_domain_trusted,
+    )
+
+
+async def _analyze_single_url_for_email(
+    url: str,
+    email_signals: EmailSignals,
+    email_hash: str,
+    email_body_snippet: str | None,
+    t_start: float,
+) -> AnalyzeResponse:
+    """
+    Pipeline completo para una URL en el contexto de un email.
+
+    Usa ``extract_effective_domain`` para resolver abusos de CDN
+    (ej. GCS bucket hosting malware) antes de delegar en ``run_pipeline_core``.
+    """
+    domain = extract_effective_domain(url)
+    return await run_pipeline_core(
+        url,
+        domain,
+        t_start=t_start,
+        email_hash=email_hash,
+        email_body_snippet=email_body_snippet,
+        email_signals=email_signals,
+    )
+
+
+def schedule_autoingest(response: AnalyzeResponse) -> None:
+    """
+    Encola la auto-ingesta de un resultado de alta confianza en ChromaDB
+    (fire-and-forget). Solo cuando ``s_risk >= AUTO_INGEST_THRESHOLD``.
+
+    El ``incident_id`` se alinea con ``incidents.id`` para que los documentos
+    sean purgables si luego se marca como falso positivo (T11).
+    """
+    from data_pipeline.knowledge_updater import (
+        AUTO_INGEST_THRESHOLD,
+        knowledge_updater,
+    )
+
+    if response.s_risk < AUTO_INGEST_THRESHOLD:
+        return
+
+    asyncio.create_task(
+        knowledge_updater.ingest_from_analysis(
+            url=response.url,
+            domain=response.domain,
+            verdict=response.verdict,
+            s_risk=response.s_risk,
+            s_idn_local=response.idn_result.s_idn_local,
+            s_ti=response.ti_result.s_ti,
+            s_llm=response.agent_scores.s_llm,
+            confusable_chars=response.idn_result.confusable_chars,
+            domain_unicode=response.idn_result.domain_unicode,
+            homograph_ratio=response.idn_result.homograph_ratio,
+            visual_similarity=response.idn_result.visual_similarity,
+            is_mixed_script=response.idn_result.is_mixed_script,
+            reasons=response.reasons,
+            llm_reason=response.llm_reason,
+            s_vt=response.ti_result.s_vt,
+            s_urlscan=response.ti_result.s_urlscan,
+            s_gsb=response.ti_result.s_gsb,
+            incident_id=response.request_id,
+        ),
+        name=f"autoingest_{response.request_id}",
     )
 
 

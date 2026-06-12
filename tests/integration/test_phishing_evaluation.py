@@ -78,10 +78,10 @@ def real_pipeline(client):
     from schemas.analyze import WebProbeResult
 
     neutral_probe = WebProbeResult(s_probe=0.0)
-    with patch("routers.analyze_router.threat_intel_service") as mock_ti, \
-         patch("routers.analyze_router.llm_agent") as mock_llm, \
-         patch("routers.analyze_router.hf_agent") as mock_hf, \
-         patch("routers.analyze_router.web_probe_agent") as mock_probe, \
+    with patch("services.analysis.threat_intel_service") as mock_ti, \
+         patch("services.analysis.llm_agent") as mock_llm, \
+         patch("services.analysis.hf_agent") as mock_hf, \
+         patch("services.analysis.web_probe_agent") as mock_probe, \
          patch("routers.analyze_router._persist_incident", new_callable=AsyncMock), \
          patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
         mock_ti.analyze = AsyncMock(return_value=benign_ti)
@@ -109,10 +109,10 @@ def brand_pipeline(client):
     from schemas.analyze import WebProbeResult
 
     neutral_probe = WebProbeResult(s_probe=0.0)
-    with patch("routers.analyze_router.threat_intel_service") as mock_ti, \
-         patch("routers.analyze_router.llm_agent") as mock_llm, \
-         patch("routers.analyze_router.hf_agent") as mock_hf, \
-         patch("routers.analyze_router.web_probe_agent") as mock_probe, \
+    with patch("services.analysis.threat_intel_service") as mock_ti, \
+         patch("services.analysis.llm_agent") as mock_llm, \
+         patch("services.analysis.hf_agent") as mock_hf, \
+         patch("services.analysis.web_probe_agent") as mock_probe, \
          patch("routers.analyze_router._persist_incident", new_callable=AsyncMock), \
          patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
         mock_ti.analyze = AsyncMock(return_value=flagged_ti)

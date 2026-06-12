@@ -97,10 +97,10 @@ def client():
 def mock_pipeline(client):
     """Mock the entire 3-agent pipeline for integration tests."""
     phishing_response = _make_mock_analyze_response()
-    with patch("routers.analyze_router.idn_agent") as mock_idn, \
-         patch("routers.analyze_router.threat_intel_service") as mock_ti, \
-         patch("routers.analyze_router.llm_agent") as mock_llm, \
-         patch("routers.analyze_router.fusion_agent") as mock_fusion, \
+    with patch("services.analysis.idn_agent") as mock_idn, \
+         patch("services.analysis.threat_intel_service") as mock_ti, \
+         patch("services.analysis.llm_agent") as mock_llm, \
+         patch("services.analysis.fusion_agent") as mock_fusion, \
          patch("routers.analyze_router._persist_incident", new_callable=AsyncMock):
         mock_idn.analyze = AsyncMock(
             return_value=IDNResult(
@@ -131,10 +131,10 @@ def mock_pipeline(client):
 def mock_pipeline_legit(client):
     """Mock pipeline returning a LEGITIMATE verdict."""
     legit_response = _make_mock_analyze_response(verdict="LEGITIMATE", s_risk=0.05)
-    with patch("routers.analyze_router.idn_agent") as mock_idn, \
-         patch("routers.analyze_router.threat_intel_service") as mock_ti, \
-         patch("routers.analyze_router.llm_agent") as mock_llm, \
-         patch("routers.analyze_router.fusion_agent") as mock_fusion, \
+    with patch("services.analysis.idn_agent") as mock_idn, \
+         patch("services.analysis.threat_intel_service") as mock_ti, \
+         patch("services.analysis.llm_agent") as mock_llm, \
+         patch("services.analysis.fusion_agent") as mock_fusion, \
          patch("routers.analyze_router._persist_incident", new_callable=AsyncMock):
         mock_idn.analyze = AsyncMock(
             return_value=IDNResult(
@@ -386,8 +386,8 @@ class TestAnalyzeResponse:
 class TestAnalyzeErrorHandling:
     def test_idn_analysis_error_returns_500(self, client):
         from core.exceptions import IDNAnalysisError
-        with patch("routers.analyze_router.idn_agent") as mock_idn, \
-             patch("routers.analyze_router.threat_intel_service") as mock_ti:
+        with patch("services.analysis.idn_agent") as mock_idn, \
+             patch("services.analysis.threat_intel_service") as mock_ti:
             mock_idn.analyze = AsyncMock(
                 side_effect=IDNAnalysisError("IDN failed", "detail")
             )
@@ -403,8 +403,8 @@ class TestAnalyzeErrorHandling:
 
     def test_threat_intel_error_returns_500(self, client):
         from core.exceptions import ThreatIntelError
-        with patch("routers.analyze_router.idn_agent") as mock_idn, \
-             patch("routers.analyze_router.threat_intel_service") as mock_ti:
+        with patch("services.analysis.idn_agent") as mock_idn, \
+             patch("services.analysis.threat_intel_service") as mock_ti:
             mock_idn.analyze = AsyncMock(
                 return_value=IDNResult(
                     domain_unicode="paypal",
@@ -430,10 +430,10 @@ class TestAnalyzeErrorHandling:
         """LLM timeout should not fail the pipeline — fallback 0.5 applied."""
         from core.exceptions import LLMTimeoutError
         phishing_response = _make_mock_analyze_response(verdict="LEGITIMATE", s_risk=0.25)
-        with patch("routers.analyze_router.idn_agent") as mock_idn, \
-             patch("routers.analyze_router.threat_intel_service") as mock_ti, \
-             patch("routers.analyze_router.llm_agent") as mock_llm, \
-             patch("routers.analyze_router.fusion_agent") as mock_fusion, \
+        with patch("services.analysis.idn_agent") as mock_idn, \
+             patch("services.analysis.threat_intel_service") as mock_ti, \
+             patch("services.analysis.llm_agent") as mock_llm, \
+             patch("services.analysis.fusion_agent") as mock_fusion, \
              patch("routers.analyze_router._persist_incident", new_callable=AsyncMock):
             mock_idn.analyze = AsyncMock(
                 return_value=IDNResult(
@@ -496,7 +496,7 @@ class TestNewEndpoints:
 
     def test_report_endpoint_returns_201(self, client):
         """POST /report debe retornar 201."""
-        with patch("routers.analyze_router._persist_manual_report", new_callable=AsyncMock), \
+        with patch("routers.eml_router._persist_manual_report", new_callable=AsyncMock), \
              patch("routers.analyze_router.asyncio") as mock_asyncio:
             mock_asyncio.create_task = MagicMock()
             resp = client.post(
@@ -550,8 +550,8 @@ class TestAnalyzeGenericExceptionPaths:
 
     def test_stage1_generic_exception_returns_500(self, client):
         """Lines 113-115: RuntimeError in asyncio.gather (not IDNAnalysisError/ThreatIntelError)."""
-        with patch("routers.analyze_router.idn_agent") as mock_idn, \
-             patch("routers.analyze_router.threat_intel_service") as mock_ti, \
+        with patch("services.analysis.idn_agent") as mock_idn, \
+             patch("services.analysis.threat_intel_service") as mock_ti, \
              patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
             mock_idn.analyze = AsyncMock(side_effect=RuntimeError("unexpected stage 1 error"))
             mock_ti.analyze = AsyncMock(
@@ -563,13 +563,13 @@ class TestAnalyzeGenericExceptionPaths:
                 headers=_auth_headers(),
             )
         assert resp.status_code == 500
-        assert "stage 1" in resp.json()["detail"]
+        assert "pipeline error" in resp.json()["detail"].lower()
 
     def test_stage2_generic_exception_returns_500(self, client):
         """Lines 145-147: RuntimeError in llm_agent.analyze (not LLMTimeoutError)."""
-        with patch("routers.analyze_router.idn_agent") as mock_idn, \
-             patch("routers.analyze_router.threat_intel_service") as mock_ti, \
-             patch("routers.analyze_router.llm_agent") as mock_llm, \
+        with patch("services.analysis.idn_agent") as mock_idn, \
+             patch("services.analysis.threat_intel_service") as mock_ti, \
+             patch("services.analysis.llm_agent") as mock_llm, \
              patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
             mock_idn.analyze = AsyncMock(
                 return_value=IDNResult(
@@ -588,14 +588,14 @@ class TestAnalyzeGenericExceptionPaths:
                 headers=_auth_headers(),
             )
         assert resp.status_code == 500
-        assert "stage 2" in resp.json()["detail"]
+        assert "pipeline error" in resp.json()["detail"].lower()
 
     def test_stage3_generic_exception_returns_500(self, client):
         """Lines 166-168: RuntimeError in fusion_agent.fuse."""
-        with patch("routers.analyze_router.idn_agent") as mock_idn, \
-             patch("routers.analyze_router.threat_intel_service") as mock_ti, \
-             patch("routers.analyze_router.llm_agent") as mock_llm, \
-             patch("routers.analyze_router.fusion_agent") as mock_fusion, \
+        with patch("services.analysis.idn_agent") as mock_idn, \
+             patch("services.analysis.threat_intel_service") as mock_ti, \
+             patch("services.analysis.llm_agent") as mock_llm, \
+             patch("services.analysis.fusion_agent") as mock_fusion, \
              patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
             mock_idn.analyze = AsyncMock(
                 return_value=IDNResult(
@@ -615,4 +615,4 @@ class TestAnalyzeGenericExceptionPaths:
                 headers=_auth_headers(),
             )
         assert resp.status_code == 500
-        assert "stage 3" in resp.json()["detail"]
+        assert "pipeline error" in resp.json()["detail"].lower()

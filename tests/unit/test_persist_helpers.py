@@ -119,7 +119,7 @@ class TestPersistManualReport:
 
     @pytest.mark.asyncio
     async def test_success_calls_execute(self):
-        from routers.analyze_router import _persist_manual_report
+        from services.persistence import _persist_manual_report
         report_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
@@ -137,7 +137,7 @@ class TestPersistManualReport:
 
     @pytest.mark.asyncio
     async def test_phishing_verdict_sets_s_risk_1(self):
-        from routers.analyze_router import _persist_manual_report
+        from services.persistence import _persist_manual_report
         now = datetime.now(timezone.utc)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             await _persist_manual_report(
@@ -154,7 +154,7 @@ class TestPersistManualReport:
 
     @pytest.mark.asyncio
     async def test_suspicious_verdict_sets_s_risk_half(self):
-        from routers.analyze_router import _persist_manual_report
+        from services.persistence import _persist_manual_report
         now = datetime.now(timezone.utc)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             await _persist_manual_report(
@@ -172,7 +172,7 @@ class TestPersistManualReport:
     @pytest.mark.asyncio
     async def test_non_http_url_uses_url_as_domain(self):
         """When URL has no http scheme, domain = url itself."""
-        from routers.analyze_router import _persist_manual_report
+        from services.persistence import _persist_manual_report
         now = datetime.now(timezone.utc)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             await _persist_manual_report(
@@ -188,7 +188,7 @@ class TestPersistManualReport:
     @pytest.mark.asyncio
     async def test_db_failure_is_swallowed(self):
         """DB failures in manual report persist must never propagate."""
-        from routers.analyze_router import _persist_manual_report
+        from services.persistence import _persist_manual_report
         now = datetime.now(timezone.utc)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             mock_exec.side_effect = RuntimeError("DB down")
@@ -203,7 +203,7 @@ class TestPersistManualReport:
 
     @pytest.mark.asyncio
     async def test_empty_note_uses_default_reason(self):
-        from routers.analyze_router import _persist_manual_report
+        from services.persistence import _persist_manual_report
         now = datetime.now(timezone.utc)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             await _persist_manual_report(
@@ -220,7 +220,7 @@ class TestPersistManualReport:
 
     @pytest.mark.asyncio
     async def test_non_empty_note_included_in_reason(self):
-        from routers.analyze_router import _persist_manual_report
+        from services.persistence import _persist_manual_report
         now = datetime.now(timezone.utc)
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             await _persist_manual_report(
