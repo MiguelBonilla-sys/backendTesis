@@ -622,3 +622,176 @@ class TestComputeReasons:
         )
         assert response.verdict == "PHISHING"
         assert not any("No suspicious" in r for r in response.reasons)
+
+
+# ---------------------------------------------------------------------------
+# SHAP reconstruction property (T2 — docs/tasks.md)
+# ---------------------------------------------------------------------------
+
+class TestShapReconstruction:
+    """La suma de features primarios debe reconstruir s_risk (error < 0.01)."""
+
+    PRIMARY = ("s_idn_local", "s_ti", "s_llm", "s_hf", "s_email", "s_probe")
+
+    @staticmethod
+    def _primary_sum(shap: dict[str, float]) -> float:
+        return sum(shap[k] for k in TestShapReconstruction.PRIMARY)
+
+    @pytest.mark.asyncio
+    async def test_reconstruction_without_boosts(
+        self, agent: FusionAgent, phishing_idn: IDNResult, phishing_ti: TIResult
+    ):
+        response = await agent.fuse(
+            url="https://рaypal.com",
+            domain="рaypal.com",
+            idn_result=phishing_idn,
+            ti_result=phishing_ti,
+            s_llm=0.9,
+            llm_reason="Phishing",
+            start_time=time.perf_counter(),
+            s_hf=0.8,
+        )
+        shap = response.shap_explanation.feature_contributions
+        assert abs(self._primary_sum(shap) - response.s_risk) < 0.01
+
+    @pytest.mark.asyncio
+    async def test_reconstruction_with_boosts_unclamped(
+        self, agent: FusionAgent, legit_idn: IDNResult, legit_ti: TIResult
+    ):
+        signals = EmailSignals(
+            sender_domain="bank-secure.xyz",
+            return_path_domain="other.ru",
+            sender_domain_mismatch=True,
+        )
+        response = await agent.fuse(
+            url="https://bank-secure.xyz",
+            domain="bank-secure.xyz",
+            idn_result=legit_idn,
+            ti_result=legit_ti,
+            s_llm=0.2,
+            llm_reason="Mild",
+            start_time=time.perf_counter(),
+            s_hf=0.3,
+            email_signals=signals,
+        )
+        shap = response.shap_explanation.feature_contributions
+        assert response.s_risk < 1.0
+        assert abs(self._primary_sum(shap) - response.s_risk) < 0.01
+
+    @pytest.mark.asyncio
+    async def test_reconstruction_when_clamp_saturates(
+        self, agent: FusionAgent, phishing_idn: IDNResult, phishing_ti: TIResult
+    ):
+        """Boosts empujan s_risk_pre > 1.0 → clamp → SHAP reescalado."""
+        from schemas.analyze import WebProbeResult
+
+        signals = EmailSignals(
+            sender_domain="рaypal.com",
+            return_path_domain="evil.ru",
+            sender_domain_mismatch=True,
+            has_suspicious_attachments=True,
+            attachment_names=["invoice.exe"],
+        )
+        probe = WebProbeResult(s_probe=0.60)
+        response = await agent.fuse(
+            url="https://рaypal.com",
+            domain="рaypal.com",
+            idn_result=phishing_idn,
+            ti_result=phishing_ti,
+            s_llm=0.9,
+            llm_reason="Phishing",
+            start_time=time.perf_counter(),
+            s_hf=0.9,
+            email_signals=signals,
+            probe_result=probe,
+        )
+        shap = response.shap_explanation.feature_contributions
+        assert response.s_risk == 1.0
+        assert abs(self._primary_sum(shap) - 1.0) < 0.01
+        # las contribuciones reescaladas conservan el orden relativo
+        assert shap["s_probe"] > 0.0
+        assert shap["s_email"] > 0.0
+
+
+# ---------------------------------------------------------------------------
+# Probe boost gating (T3 — docs/tasks.md)
+# ---------------------------------------------------------------------------
+
+class TestProbeBoostGate:
+    """El boost del probe solo aplica con sospecha pasiva previa y nunca
+    sobre dominios confiables (allowlist institucional / top-1M)."""
+
+    @staticmethod
+    def _login_probe():
+        from schemas.analyze import WebProbeResult
+
+        return WebProbeResult(
+            final_url="https://login.microsoftonline.com/",
+            final_domain="login.microsoftonline.com",
+            status_code=200,
+            has_password_field=True,
+            has_login_form=True,
+            s_probe=0.45,
+            probe_signals=["Login form with password field detected"],
+        )
+
+    @pytest.mark.asyncio
+    async def test_trusted_domain_zeroes_probe_boost(
+        self, agent: FusionAgent, legit_idn: IDNResult, legit_ti: TIResult
+    ):
+        """Página legítima de login → LEGITIMATE aunque tenga password field."""
+        response = await agent.fuse(
+            url="https://login.microsoftonline.com",
+            domain="login.microsoftonline.com",
+            idn_result=legit_idn,
+            ti_result=legit_ti,
+            s_llm=0.1,
+            llm_reason="Legitimate login page",
+            start_time=time.perf_counter(),
+            s_hf=0.1,
+            probe_result=self._login_probe(),
+            probe_domain_trusted=True,
+        )
+        assert response.verdict == "LEGITIMATE"
+        assert response.agent_scores.s_probe == 0.0
+        assert response.shap_explanation.feature_contributions["s_probe"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_no_passive_suspicion_zeroes_probe_boost(
+        self, agent: FusionAgent, legit_idn: IDNResult, legit_ti: TIResult
+    ):
+        """Sin sospecha base (s_base < gate), el probe no suma por sí solo."""
+        response = await agent.fuse(
+            url="https://unknown-login-page.com",
+            domain="unknown-login-page.com",
+            idn_result=legit_idn,
+            ti_result=legit_ti,
+            s_llm=0.1,
+            llm_reason="Nothing semantic",
+            start_time=time.perf_counter(),
+            s_hf=0.1,
+            probe_result=self._login_probe(),
+            probe_domain_trusted=False,
+        )
+        assert response.agent_scores.s_probe == 0.0
+        assert response.verdict == "LEGITIMATE"
+
+    @pytest.mark.asyncio
+    async def test_probe_boost_applies_with_passive_suspicion(
+        self, agent: FusionAgent, phishing_idn: IDNResult, legit_ti: TIResult
+    ):
+        """Con sospecha IDN previa, el probe corrobora y sí suma."""
+        response = await agent.fuse(
+            url="https://рaypal.com",
+            domain="рaypal.com",
+            idn_result=phishing_idn,
+            ti_result=legit_ti,
+            s_llm=0.5,
+            llm_reason="Suspicious",
+            start_time=time.perf_counter(),
+            s_hf=0.5,
+            probe_result=self._login_probe(),
+            probe_domain_trusted=False,
+        )
+        assert response.agent_scores.s_probe == pytest.approx(0.45, abs=1e-6)
+        assert response.verdict == "PHISHING"

@@ -1,18 +1,27 @@
 """
-Fusion Agent — late fusion de scores IDN, TI y LLM con SHAP explanation.
+Fusion Agent — late fusion de las 5 fuentes de señal con SHAP explanation.
 
-Fórmulas (CLAUDE.md spec):
-    S_TI   = W_VT*S_VT + W_URLSCAN*S_URLScan + W_GSB*S_GSB
-    S_IDN  = α*S_IDN_local + (1-α)*S_TI           (α=0.60)
-    S_risk = γ*S_IDN + (1-γ)*S_LLM                 (γ=0.50)
+Fórmulas (as-built — ver docs/spec.md F3):
+    S_TI    = W_VT*S_VT + W_URLSCAN*S_URLScan + W_GSB*S_GSB
+    S_IDN   = α*S_IDN_local + (1-α)*S_TI                    (α=0.60)
+    S_LLM'  = (1-HF_WEIGHT)*S_LLM + HF_WEIGHT*S_HF          (HF_WEIGHT=0.40)
+    S_base  = γ*S_IDN + (1-γ)*S_LLM'                         (γ=0.50)
+    S_risk  = clamp(S_base + boost_email + boost_probe, 0, 1)
+              boost_email ≤ EMAIL_BOOST_CAP (0.50)
+              boost_probe ≤ PROBE_BOOST_CAP (0.60)
     verdict = PHISHING    if S_risk >= θ (0.70)
               SUSPICIOUS  if 0.40 <= S_risk < 0.70
               LEGITIMATE  otherwise
 
 SHAP: ``dict[str, float]`` con contribuciones lineales de cada feature
-sobre ``S_risk``.  Los features son:
-    s_idn_local, s_ti, s_llm, s_vt, s_urlscan, s_gsb,
-    homograph_ratio, visual_similarity, is_mixed_script
+sobre ``S_risk``.  Features primarios (su suma reconstruye S_risk):
+    s_idn_local, s_ti, s_llm, s_hf, s_email, s_probe
+Sub-features informativos (descomponen s_ti y s_idn_local, no se suman
+a los primarios):
+    s_vt, s_urlscan, s_gsb, homograph_ratio, visual_similarity,
+    is_mixed_script
+Cuando el clamp a 1.0 satura, todas las contribuciones se reescalan
+proporcionalmente para que los primarios sigan sumando S_risk.
 """
 from __future__ import annotations
 
@@ -31,6 +40,7 @@ from core.constants import (
     GAMMA,
     HF_WEIGHT,
     HOMOGRAPH_THRESHOLD,
+    PROBE_GATE_THRESHOLD,
     THETA,
     W_GSB,
     W_URLSCAN,
@@ -75,6 +85,7 @@ class FusionAgent:
         s_hf: float = 0.5,
         email_signals: EmailSignals | None = None,
         probe_result: WebProbeResult | None = None,
+        probe_domain_trusted: bool = False,
     ) -> AnalyzeResponse:
         """
         Ejecuta la fusión tardía de los 3 agentes y retorna un
@@ -131,12 +142,32 @@ class FusionAgent:
         # Capped at EMAIL_BOOST_CAP (0.50) to preserve relative IDN/LLM weights.
         s_email = self._compute_email_signal(email_signals)
 
-        # --- Paso 2c: Web probe boost (additive) ----------------------------
+        # --- Paso 2c: Web probe boost (additive, gated) ----------------------
         # Active page-content signals: login forms, redirects, brand impersonation.
         # Capped at PROBE_BOOST_CAP (0.60). Fails silently (s_probe=0.0).
+        # Gate anti-FP (T3): el probe solo corrobora sospecha pasiva existente.
+        # Sin gate, cualquier página legítima de login (password field) dispara
+        # PROBE_LOGIN_WEIGHT=0.45 y produce falsos positivos estructurales.
         s_probe = probe_result.s_probe if probe_result is not None else 0.0
+        if s_probe > 0.0:
+            if probe_domain_trusted:
+                logger.info(
+                    "probe_boost_gated", url=url, reason="trusted_domain",
+                    s_probe_raw=round(s_probe, 4),
+                )
+                s_probe = 0.0
+            elif (s_risk + s_email) < PROBE_GATE_THRESHOLD:
+                logger.info(
+                    "probe_boost_gated", url=url, reason="no_passive_suspicion",
+                    s_base=round(s_risk + s_email, 4), s_probe_raw=round(s_probe, 4),
+                )
+                s_probe = 0.0
 
-        s_risk = float(min(s_risk + s_email + s_probe, 1.0))
+        s_risk_pre = s_risk + s_email + s_probe
+        s_risk = float(min(s_risk_pre, 1.0))
+        # Factor de reescalado SHAP: cuando el clamp satura, las contribuciones
+        # se escalan para que los features primarios sigan sumando s_risk.
+        shap_scale = s_risk / s_risk_pre if s_risk_pre > 1.0 else 1.0
 
         # --- Paso 3: Verdict -------------------------------------------------
         verdict = self._compute_verdict(s_risk)
@@ -165,6 +196,7 @@ class FusionAgent:
             is_mixed_script=float(idn_result.is_mixed_script),
             s_email=s_email,
             s_probe=s_probe,
+            scale=shap_scale,
         )
 
         processing_ms = (time.perf_counter() - start_time) * 1000.0
@@ -377,6 +409,7 @@ class FusionAgent:
         is_mixed_script: float,
         s_email: float = 0.0,
         s_probe: float = 0.0,
+        scale: float = 1.0,
     ) -> dict[str, float]:
         """
         Calcula contribuciones lineales tipo SHAP para explicabilidad XAI.
@@ -434,19 +467,21 @@ class FusionAgent:
         # aquí se representa como un bonus proporcional pequeño (0.1 calibrado).
         contrib_mixed: float = idn_weight * 0.1 * is_mixed_script
 
+        # ``scale`` < 1.0 solo cuando el clamp de S_risk a 1.0 saturó: reescala
+        # todas las contribuciones para que los primarios sumen el S_risk final.
         return {
-            "s_idn_local": round(contrib_idn_local, 4),
-            "s_ti": round(contrib_ti, 4),
-            "s_llm": round(contrib_llm, 4),
-            "s_hf": round(contrib_hf, 4),
-            "s_vt": round(contrib_vt, 4),
-            "s_urlscan": round(contrib_urlscan, 4),
-            "s_gsb": round(contrib_gsb, 4),
-            "homograph_ratio": round(contrib_homograph, 4),
-            "visual_similarity": round(contrib_visual, 4),
-            "is_mixed_script": round(contrib_mixed, 4),
-            "s_email": round(s_email, 4),
-            "s_probe": round(s_probe, 4),
+            "s_idn_local": round(contrib_idn_local * scale, 4),
+            "s_ti": round(contrib_ti * scale, 4),
+            "s_llm": round(contrib_llm * scale, 4),
+            "s_hf": round(contrib_hf * scale, 4),
+            "s_vt": round(contrib_vt * scale, 4),
+            "s_urlscan": round(contrib_urlscan * scale, 4),
+            "s_gsb": round(contrib_gsb * scale, 4),
+            "homograph_ratio": round(contrib_homograph * scale, 4),
+            "visual_similarity": round(contrib_visual * scale, 4),
+            "is_mixed_script": round(contrib_mixed * scale, 4),
+            "s_email": round(s_email * scale, 4),
+            "s_probe": round(s_probe * scale, 4),
         }
 
 
