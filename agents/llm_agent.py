@@ -13,6 +13,7 @@ import httpx
 
 from core.config import settings
 from core.constants import (
+    COLLECTION_BASELINE,
     COLLECTION_EMAIL,
     COLLECTION_IDN,
     COLLECTION_TI,
@@ -177,11 +178,12 @@ class LLMAgent:
         - ``email_embeddings``: top-3 correos phishing similares históricos
         - ``idn_patterns``: top-3 patrones de ataque IDN conocidos
         - ``ti_signals``: top-3 campañas TI históricas relevantes
+        - ``usb_baseline``: top-3 patrones de correo institucional legítimo (T10)
 
         La query incluye el resumen IDN cuando está disponible para mejorar
         la relevancia de los resultados de ``idn_patterns``.
 
-        Retorna lista de hasta 9 chunks listos para inyectar en el prompt.
+        Retorna lista de hasta 12 chunks listos para inyectar en el prompt.
         Si ChromaDB no está disponible devuelve lista vacía (graceful degradation).
         """
         try:
@@ -206,12 +208,21 @@ class LLMAgent:
             ti_task = query_collection(
                 COLLECTION_TI, [query_text], n_results=n_candidates
             )
+            # Baseline benigno institucional (T10): contexto de "correo USB
+            # normal" — el LLM contrasta el email analizado contra lo legítimo,
+            # no solo contra ataques. Reduce FPs sobre comunicaciones internas.
+            baseline_task = query_collection(
+                COLLECTION_BASELINE, [query_text], n_results=RAG_TOP_K
+            )
 
-            email_results, idn_results, ti_results = await asyncio.gather(
-                email_task,
-                idn_task,
-                ti_task,
-                return_exceptions=True,
+            email_results, idn_results, ti_results, baseline_results = (
+                await asyncio.gather(
+                    email_task,
+                    idn_task,
+                    ti_task,
+                    baseline_task,
+                    return_exceptions=True,
+                )
             )
 
             chunks: list[str] = []
@@ -224,7 +235,14 @@ class LLMAgent:
                     for r in self._rerank_by_source(results):
                         chunks.append(f"{tag} {r['document']}")
 
-            return chunks[:9]  # máximo 9 chunks (3 por collection)
+            # El baseline va sin re-ranking por source (todo es institucional)
+            # y al final: marca explícitamente qué se considera legítimo.
+            if isinstance(baseline_results, list):
+                for r in baseline_results[:RAG_TOP_K]:
+                    if isinstance(r, dict) and r.get("document"):
+                        chunks.append(f"[USB legitimate baseline] {r['document']}")
+
+            return chunks[:12]  # 3 por collection × 4 collections
 
         except Exception as exc:
             logger.warning("rag_retrieval_failed", error=str(exc))

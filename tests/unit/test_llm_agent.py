@@ -266,31 +266,31 @@ class TestLLMAgentRetrieveRagContext:
         assert isinstance(result, list)
 
     @pytest.mark.asyncio
-    async def test_max_nine_chunks_returned(self, agent: LLMAgent, mock_chromadb_module):
-        many_docs = [{"document": f"doc {i}"} for i in range(10)]
+    async def test_max_twelve_chunks_returned(self, agent: LLMAgent, mock_chromadb_module):
+        # 4 colecciones × 3 (RAG_TOP_K) = 12 chunks máx (T10 agregó usb_baseline)
+        many_docs = [{"document": f"doc {i}", "distance": 0.1} for i in range(10)]
         mock_chromadb_module.query_collection = AsyncMock(return_value=many_docs)
         result = await agent._retrieve_rag_context("https://test.com", "test.com")
-        assert len(result) <= 9
+        assert len(result) <= 12
 
     @pytest.mark.asyncio
-    async def test_combines_all_three_collections(self, agent: LLMAgent, mock_chromadb_module):
-        email_docs = [{"document": "phishing email pattern"}]
-        idn_docs = [{"document": "IDN attack pattern"}]
-        ti_docs = [{"document": "TI campaign pattern"}]
-
+    async def test_combines_all_four_collections(self, agent: LLMAgent, mock_chromadb_module):
         async def mock_query(collection, query_texts, n_results):
             if "email" in collection:
-                return email_docs
+                return [{"document": "phishing email pattern", "distance": 0.1}]
             if "idn" in collection:
-                return idn_docs
-            return ti_docs
+                return [{"document": "IDN attack pattern", "distance": 0.1}]
+            if "baseline" in collection:
+                return [{"document": "legitimate USB email", "distance": 0.1}]
+            return [{"document": "TI campaign pattern", "distance": 0.1}]
 
         mock_chromadb_module.query_collection = mock_query
         result = await agent._retrieve_rag_context("https://test.com", "test.com")
-        assert len(result) == 3  # 1 per collection
+        assert len(result) == 4  # 1 per collection
         assert any("[Past phishing pattern]" in r for r in result)
         assert any("[IDN attack pattern]" in r for r in result)
         assert any("[TI campaign pattern]" in r for r in result)
+        assert any("[USB legitimate baseline]" in r for r in result)
 
     @pytest.mark.asyncio
     async def test_returns_empty_on_exception(self, agent: LLMAgent, mock_chromadb_module):
