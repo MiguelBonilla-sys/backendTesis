@@ -39,6 +39,15 @@ class MetricsSummary(BaseModel):
     cache_hit_rate: float
 
 
+class ThetaCalibrationInfo(BaseModel):
+    """Última recalibración adaptativa de θ (T12) — auditoría visible."""
+
+    old_theta: float
+    new_theta: float
+    n_feedback: int
+    created_at: datetime
+
+
 class FusionSettings(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -50,6 +59,8 @@ class FusionSettings(BaseModel):
     ti_vt_weight: float
     ti_urlscan_weight: float
     ti_gsb_weight: float
+    effective_theta: float | None = None
+    last_calibration: ThetaCalibrationInfo | None = None
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["incidents"])
@@ -270,7 +281,29 @@ async def get_metrics_summary(
 async def get_settings(
     current_user: dict = Depends(require_admin),
 ) -> FusionSettings:
-    """Retorna los parámetros de fusión activos (alpha, gamma, theta, etc.)."""
+    """Retorna los parámetros de fusión activos (alpha, gamma, theta, etc.).
+
+    Incluye el θ efectivo en runtime y la última recalibración adaptativa
+    (T12) cuando existe — auditoría visible para el admin.
+    """
+    from core.calibration import get_effective_theta
+
+    last_calibration: ThetaCalibrationInfo | None = None
+    try:
+        row = await fetchrow(
+            "SELECT old_theta, new_theta, n_feedback, created_at "
+            "FROM theta_calibrations ORDER BY created_at DESC LIMIT 1"
+        )
+        if row is not None:
+            last_calibration = ThetaCalibrationInfo(
+                old_theta=float(row["old_theta"]),
+                new_theta=float(row["new_theta"]),
+                n_feedback=int(row["n_feedback"]),
+                created_at=row["created_at"],
+            )
+    except Exception:
+        pass  # tabla ausente (instalación previa a T12) — campo queda en None
+
     return FusionSettings(
         alpha=ALPHA,
         beta=BETA,
@@ -280,6 +313,8 @@ async def get_settings(
         ti_vt_weight=W_VT,
         ti_urlscan_weight=W_URLSCAN,
         ti_gsb_weight=W_GSB,
+        effective_theta=get_effective_theta(),
+        last_calibration=last_calibration,
     )
 
 

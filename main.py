@@ -15,6 +15,26 @@ async def lifespan(app: FastAPI):
     logger.info("Starting BackendTesis...")
     await init_db()
     await init_redis()
+
+    # IDN Agent: confusables TR#39 + índice top-1M → BKTree (stage 4 del
+    # algoritmo). Sin esto, sim_v queda en 0 y el gate anti-FP del probe
+    # solo funciona por sufijos. Guarded: el arranque no depende del CSV.
+    try:
+        from agents.idn_agent import idn_agent
+
+        if not idn_agent.ready:  # singleton — no recargar 15 MB por lifespan
+            await idn_agent.initialize()
+    except Exception as exc:
+        logger.warning(f"idn_agent_initialize_failed: {exc}")
+
+    # θ efectivo: última recalibración adaptativa persistida (T12)
+    try:
+        from core.calibration import load_effective_theta_from_db
+
+        await load_effective_theta_from_db()
+    except Exception as exc:
+        logger.warning(f"effective_theta_load_failed: {exc}")
+
     yield
     logger.info("Shutting down BackendTesis...")
     await close_db()

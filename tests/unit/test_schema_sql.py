@@ -10,10 +10,14 @@ class TestSchemaSql:
         assert path.exists(), f"schema.sql debe existir en scripts/ (buscado en {path})"
         return path.read_text()
 
-    def test_schema_has_8_tables(self, schema_content):
+    def test_schema_has_9_tables(self, schema_content):
+        # 8 base + theta_calibrations (T12: auditoría de recalibración adaptativa)
         tables = [l.strip() for l in schema_content.split("\n")
                   if l.strip().startswith("CREATE TABLE")]
-        assert len(tables) == 8, f"Se esperan 8 tablas, hay {len(tables)}: {tables}"
+        assert len(tables) == 9, f"Se esperan 9 tablas, hay {len(tables)}: {tables}"
+
+    def test_schema_has_theta_calibrations_table(self, schema_content):
+        assert "CREATE TABLE IF NOT EXISTS theta_calibrations" in schema_content
 
     def test_schema_has_users_table(self, schema_content):
         assert "CREATE TABLE IF NOT EXISTS users" in schema_content

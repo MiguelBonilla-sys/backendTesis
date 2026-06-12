@@ -171,3 +171,18 @@ CREATE TABLE IF NOT EXISTS feedback (
 );
 CREATE INDEX IF NOT EXISTS ix_feedback_ingested  ON feedback(ingested, created_at DESC);
 CREATE INDEX IF NOT EXISTS ix_feedback_incident  ON feedback(incident_id);
+
+-- ----------------------------------------------------------------
+-- Theta calibrations — auditoría de recalibración adaptativa (T12)
+-- ----------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS theta_calibrations (
+    id          UUID             PRIMARY KEY DEFAULT gen_random_uuid(),
+    old_theta   DOUBLE PRECISION NOT NULL,
+    new_theta   DOUBLE PRECISION NOT NULL,
+    n_feedback  INTEGER          NOT NULL,
+    loss        DOUBLE PRECISION NOT NULL,
+    reason      TEXT             NOT NULL,
+    created_at  TIMESTAMPTZ      NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS ix_theta_calibrations_created
+    ON theta_calibrations(created_at DESC);

@@ -57,6 +57,11 @@ class IDNAgent:
     # Lifecycle
     # ------------------------------------------------------------------
 
+    @property
+    def ready(self) -> bool:
+        """True cuando catálogo + índice de referencia ya fueron cargados."""
+        return self._ready
+
     async def initialize(
         self,
         confusables_path: str | None = None,

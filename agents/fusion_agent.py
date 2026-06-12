@@ -381,11 +381,14 @@ class FusionAgent:
         """
         Clasifica el riesgo en uno de los tres verdicts por umbrales:
 
-        - ``PHISHING``   : ``s_risk >= θ``   (θ=0.70)
-        - ``SUSPICIOUS`` : ``0.40 <= s_risk < 0.70``
+        - ``PHISHING``   : ``s_risk >= θ``   (θ efectivo — base 0.70,
+          ajustable por el job de recalibración adaptativa, T12)
+        - ``SUSPICIOUS`` : ``0.40 <= s_risk < θ``
         - ``LEGITIMATE`` : ``s_risk < 0.40``
         """
-        if s_risk >= THETA:
+        from core.calibration import get_effective_theta
+
+        if s_risk >= get_effective_theta():
             return "PHISHING"
         if s_risk >= 0.40:
             return "SUSPICIOUS"

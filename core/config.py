@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     HF_EMAIL_MODEL: str = "cybersectony/phishing-email-detection-distilbert_v2.4.1"
 
     # Data paths
-    TOP1M_PATH: str = "data/top1m.csv"
+    TOP1M_PATH: str = "data/top1m.txt"
     CONFUSABLES_PATH: str = "data/confusables.txt"
 
     # Cache
