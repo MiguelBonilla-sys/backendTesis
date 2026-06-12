@@ -289,3 +289,41 @@ class TestIDNAgentAnalyze:
         with patch("agents.idn_agent.extract_domain", side_effect=Exception("bad url")):
             with pytest.raises(IDNAnalysisError):
                 await agent.analyze("https://bad.url")
+
+
+# ---------------------------------------------------------------------------
+# is_trusted_domain (T3 — docs/tasks.md)
+# ---------------------------------------------------------------------------
+
+class TestIsTrustedDomain:
+    @pytest.fixture
+    def initialized_agent(self):
+        from agents.idn_agent import IDNAgent
+
+        agent = IDNAgent()
+        agent._reference_domains = {"google.com", "paypal.com", "vercel.app"}
+        return agent
+
+    def test_institutional_suffix_is_trusted(self, initialized_agent):
+        assert initialized_agent.is_trusted_domain("correo.usbbog.edu.co") is True
+        assert initialized_agent.is_trusted_domain("usbbog.edu.co") is True
+
+    def test_microsoft_login_is_trusted(self, initialized_agent):
+        assert initialized_agent.is_trusted_domain("login.microsoftonline.com") is True
+
+    def test_top1m_2ld_is_trusted(self, initialized_agent):
+        assert initialized_agent.is_trusted_domain("mail.google.com") is True
+        assert initialized_agent.is_trusted_domain("paypal.com") is True
+
+    def test_unknown_domain_not_trusted(self, initialized_agent):
+        assert initialized_agent.is_trusted_domain("evil-login.tk") is False
+        assert initialized_agent.is_trusted_domain("рaypal.com") is False
+
+    def test_lookalike_suffix_not_trusted(self, initialized_agent):
+        """evil-usbbog.edu.co.attacker.com no debe matchear por sufijo."""
+        assert (
+            initialized_agent.is_trusted_domain("usbbog.edu.co.attacker.com") is False
+        )
+
+    def test_empty_domain_not_trusted(self, initialized_agent):
+        assert initialized_agent.is_trusted_domain("") is False

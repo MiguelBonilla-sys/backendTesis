@@ -188,6 +188,13 @@ async def analyze_url(
     # ------------------------------------------------------------------ #
     # Paso 3: Fusion Agent
     # ------------------------------------------------------------------ #
+    # Gate anti-FP del probe (T3): el dominio efectivo post-redirect manda —
+    # un acortador top-1M que redirige a un dominio desconocido NO es confiable.
+    probe_final_domain = (
+        probe_result.final_domain if probe_result and probe_result.final_domain else domain
+    )
+    probe_domain_trusted = idn_agent.is_trusted_domain(probe_final_domain)
+
     try:
         response = await fusion_agent.fuse(
             url=url,
@@ -200,6 +207,7 @@ async def analyze_url(
             email_hash=body.email_hash,
             s_hf=s_hf,
             probe_result=probe_result,
+            probe_domain_trusted=probe_domain_trusted,
         )
     except Exception as exc:
         logger.error("pipeline_error_stage3", url=url, error=str(exc))

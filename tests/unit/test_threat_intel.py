@@ -320,10 +320,15 @@ class TestQueryWhoisXML:
     @pytest.mark.asyncio
     async def test_new_domain_returns_high_score(self, service: ThreatIntelService):
         """Domain registered < DOMAIN_AGE_SUSPICIOUS_DAYS → score 0.8."""
+        from datetime import datetime, timedelta, timezone
+
+        created = (datetime.now(timezone.utc) - timedelta(days=10)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "WhoisRecord": {"createdDateNormalized": "2026-05-01T00:00:00Z"}
+            "WhoisRecord": {"createdDateNormalized": created}
         }
         mock_client = _make_async_client_mock("get", response=mock_response)
         with patch("data_pipeline.threat_intel.settings") as s, \
@@ -337,10 +342,15 @@ class TestQueryWhoisXML:
     @pytest.mark.asyncio
     async def test_moderate_domain_returns_medium_score(self, service: ThreatIntelService):
         """Domain 30–90 days old → score 0.4."""
+        from datetime import datetime, timedelta, timezone
+
+        created = (datetime.now(timezone.utc) - timedelta(days=45)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            "WhoisRecord": {"createdDateNormalized": "2026-03-01T00:00:00Z"}
+            "WhoisRecord": {"createdDateNormalized": created}
         }
         mock_client = _make_async_client_mock("get", response=mock_response)
         with patch("data_pipeline.threat_intel.settings") as s, \

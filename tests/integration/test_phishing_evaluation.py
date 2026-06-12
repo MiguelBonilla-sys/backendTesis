@@ -75,12 +75,19 @@ def real_pipeline(client):
         s_vt=0.0, s_urlscan=0.0, s_gsb=0.0, s_ti=0.0,
         domain_age_days=365, is_newly_registered=False, whois_registrar=None,
     )
+    from schemas.analyze import WebProbeResult
+
+    neutral_probe = WebProbeResult(s_probe=0.0)
     with patch("routers.analyze_router.threat_intel_service") as mock_ti, \
          patch("routers.analyze_router.llm_agent") as mock_llm, \
+         patch("routers.analyze_router.hf_agent") as mock_hf, \
+         patch("routers.analyze_router.web_probe_agent") as mock_probe, \
          patch("routers.analyze_router._persist_incident", new_callable=AsyncMock), \
          patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
         mock_ti.analyze = AsyncMock(return_value=benign_ti)
         mock_llm.analyze = AsyncMock(return_value=(0.5, "neutral — mocked for evaluation"))
+        mock_hf.analyze = AsyncMock(return_value=0.5)
+        mock_probe.analyze = AsyncMock(return_value=neutral_probe)
         yield client
 
 
@@ -99,12 +106,19 @@ def brand_pipeline(client):
         s_vt=1.0, s_urlscan=1.0, s_gsb=1.0, s_ti=1.0,
         domain_age_days=7, is_newly_registered=True, whois_registrar=None,
     )
+    from schemas.analyze import WebProbeResult
+
+    neutral_probe = WebProbeResult(s_probe=0.0)
     with patch("routers.analyze_router.threat_intel_service") as mock_ti, \
          patch("routers.analyze_router.llm_agent") as mock_llm, \
+         patch("routers.analyze_router.hf_agent") as mock_hf, \
+         patch("routers.analyze_router.web_probe_agent") as mock_probe, \
          patch("routers.analyze_router._persist_incident", new_callable=AsyncMock), \
          patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
         mock_ti.analyze = AsyncMock(return_value=flagged_ti)
         mock_llm.analyze = AsyncMock(return_value=(0.5, "suspicious — mocked TI positive"))
+        mock_hf.analyze = AsyncMock(return_value=0.5)
+        mock_probe.analyze = AsyncMock(return_value=neutral_probe)
         yield client
 
 

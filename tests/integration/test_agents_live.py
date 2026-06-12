@@ -20,6 +20,21 @@ import httpx
 BASE_URL = os.getenv("TEST_BACKEND_URL", "http://localhost:8000")
 TIMEOUT = 20.0
 
+
+def _backend_available() -> bool:
+    """True si el backend live responde — evita 22 fallos cuando el stack está abajo."""
+    try:
+        resp = httpx.get(f"{BASE_URL}/api/v1/health", timeout=2.0)
+        return resp.status_code == 200
+    except httpx.HTTPError:
+        return False
+
+
+pytestmark = pytest.mark.skipif(
+    not _backend_available(),
+    reason=f"live backend not reachable at {BASE_URL} — start docker-compose first",
+)
+
 ADMIN_EMAIL = "mabonillat@academia.usbbog.edu.co"
 ADMIN_PASSWORD = "admin1234"
 

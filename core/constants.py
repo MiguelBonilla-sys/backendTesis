@@ -49,6 +49,24 @@ RAG_TOP_K: int = 3
 # ---------------------------------------------------------------------------
 # Web Probe Agent
 # ---------------------------------------------------------------------------
+# Gate anti-FP (T3, docs/tasks.md): el boost del probe solo aplica cuando ya
+# existe sospecha pasiva (s_base + s_email >= gate). Una página legítima de
+# login tiene password field — sin este gate, PROBE_LOGIN_WEIGHT dispara FPs.
+# Debe ser > 0.25: con LLM neutral (0.5) y resto en 0, la base es exactamente
+# (1-γ)·0.5 = 0.25 — el estado "no sé nada" no cuenta como sospecha.
+PROBE_GATE_THRESHOLD: float = 0.30
+# Dominios confiables por sufijo: el boost del probe se anula para ellos.
+# El top-1M (Tranco/Majestic) se chequea aparte vía IDNAgent.is_trusted_domain.
+TRUSTED_DOMAIN_SUFFIXES: frozenset[str] = frozenset(
+    {
+        "usbbog.edu.co",
+        "usb.edu.co",
+        "microsoftonline.com",
+        "google.com",
+        "outlook.com",
+        "office.com",
+    }
+)
 PROBE_TIMEOUT_S: float = 8.0
 PROBE_MAX_RESPONSE_BYTES: int = 65_536     # 64 KB — enough to find login forms
 PROBE_MAX_REDIRECTS: int = 5

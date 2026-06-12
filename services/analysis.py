@@ -71,6 +71,12 @@ async def _analyze_single_url_for_email(
         s_llm = 0.5
         llm_reason = "LLM timed out — neutral fallback applied"
 
+    # Gate anti-FP del probe (T3): manda el dominio efectivo post-redirect.
+    probe_final_domain = (
+        probe_result.final_domain if probe_result and probe_result.final_domain else domain
+    )
+    probe_domain_trusted = idn_agent.is_trusted_domain(probe_final_domain)
+
     return await fusion_agent.fuse(
         url=url,
         domain=domain,
@@ -83,6 +89,7 @@ async def _analyze_single_url_for_email(
         s_hf=s_hf,
         email_signals=email_signals,
         probe_result=probe_result,
+        probe_domain_trusted=probe_domain_trusted,
     )
 
 

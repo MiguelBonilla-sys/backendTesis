@@ -14,6 +14,7 @@ from core.constants import (
     F_MIX,
     HOMOGRAPH_THRESHOLD,
     SIM_V_EARLY_EXIT,
+    TRUSTED_DOMAIN_SUFFIXES,
 )
 from core.exceptions import IDNAnalysisError
 from core.logger import get_logger
@@ -49,6 +50,7 @@ class IDNAgent:
     def __init__(self) -> None:
         self._confusables: dict[str, list[str]] = {}
         self._bktree: BKTree | None = None
+        self._reference_domains: set[str] = set()
         self._ready: bool = False
 
     # ------------------------------------------------------------------
@@ -78,12 +80,14 @@ class IDNAgent:
         self._bktree = BKTree(self._confusables)
 
         if reference_domains is not None:
+            self._reference_domains = set(reference_domains)
             self._bktree.build_from_set(reference_domains)
             logger.info("idn_agent_initialized", bktree_size=self._bktree.size)
         else:
             top1m_path = Path(settings.TOP1M_PATH)
             if top1m_path.exists():
                 domains = await _load_top1m(top1m_path)
+                self._reference_domains = domains
                 self._bktree.build_from_set(domains)
                 logger.info("idn_agent_initialized", bktree_size=self._bktree.size)
             else:
@@ -92,6 +96,31 @@ class IDNAgent:
                 )
 
         self._ready = True
+
+    # ------------------------------------------------------------------
+    # Domain reputation helpers
+    # ------------------------------------------------------------------
+
+    def is_trusted_domain(self, domain: str) -> bool:
+        """
+        True si el dominio pertenece a la allowlist institucional
+        (``TRUSTED_DOMAIN_SUFFIXES``, match por sufijo) o si su 2LD está en
+        el índice de referencia top-1M cargado en ``initialize()``.
+
+        Usado por el gate anti-FP del WebProbeAgent (T3): el boost del probe
+        se anula para dominios confiables — una página legítima de login no
+        debe disparar veredicto por tener un password field.
+        """
+        d = domain.strip().lower().rstrip(".")
+        if not d:
+            return False
+        for suffix in TRUSTED_DOMAIN_SUFFIXES:
+            if d == suffix or d.endswith("." + suffix):
+                return True
+        labels = d.split(".")
+        if len(labels) >= 2:
+            return f"{labels[-2]}.{labels[-1]}" in self._reference_domains
+        return False
 
     # ------------------------------------------------------------------
     # Main analysis entry point

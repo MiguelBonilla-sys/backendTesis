@@ -468,14 +468,31 @@ class TestAnalyzeErrorHandling:
 
 class TestNewEndpoints:
     def test_analyze_email_alias_returns_200(self, client, mock_pipeline):
-        """El alias /analyze_email debe funcionar igual que /analyze."""
-        resp = client.post(
-            "/api/v1/analyze_email",
-            json={"url": "https://рaypal.com/login"},
-            headers=_auth_headers(),
-        )
+        """POST /analyze_email con el schema completo de la extensión → 200."""
+        with patch(
+            "routers.analyze_router._analyze_single_url_for_email",
+            new_callable=AsyncMock,
+            return_value=mock_pipeline["response"],
+        ), patch(
+            "routers.analyze_router._persist_email_incident",
+            new_callable=AsyncMock,
+        ), patch(
+            "routers.analyze_router.check_rate_limit", new_callable=AsyncMock
+        ):
+            resp = client.post(
+                "/api/v1/analyze_email",
+                json={
+                    "email_subject": "Verifique su cuenta",
+                    "email_from": "soporte@рaypal.com",
+                    "email_to": "victima@usbbog.edu.co",
+                    "email_body_html": "<a href='https://рaypal.com/login'>entrar</a>",
+                    "email_text_snippet": "Su cuenta será suspendida",
+                    "all_urls": ["https://рaypal.com/login"],
+                },
+                headers=_auth_headers(),
+            )
         assert resp.status_code == 200
-        assert resp.json()["verdict"] == "PHISHING"
+        assert resp.json()["email_verdict"] == "PHISHING"
 
     def test_report_endpoint_returns_201(self, client):
         """POST /report debe retornar 201."""
@@ -520,7 +537,7 @@ class TestAnalyzeGenericExceptionPaths:
 
     def test_domain_extraction_failure_returns_422(self, client):
         """Lines 80-81: extract_domain raises → 422."""
-        with patch("routers.analyze_router.extract_domain",
+        with patch("routers.analyze_router.extract_effective_domain",
                    side_effect=ValueError("malformed host")), \
              patch("routers.analyze_router.check_rate_limit", new_callable=AsyncMock):
             resp = client.post(
