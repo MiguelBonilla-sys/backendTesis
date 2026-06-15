@@ -20,6 +20,12 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     expires_in: int  # segundos (900 = 15 min)
     role: Literal["admin", "student", "viewer"]
+    refresh_token: str | None = None
+    refresh_expires_in: int | None = None  # segundos
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str = Field(..., min_length=1)
 
 
 class UserInfo(BaseModel):

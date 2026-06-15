@@ -10,6 +10,15 @@ from core.config import settings
 from core.exceptions import AuthenticationError
 
 
+def create_refresh_token(data: dict) -> str:
+    """Encode *data* into a signed refresh JWT (longer-lived, type=refresh)."""
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.JWT_REFRESH_EXPIRE_MINUTES)
+    to_encode["exp"] = expire
+    to_encode["type"] = "refresh"
+    return jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
 def create_access_token(data: dict) -> str:
     """Encode *data* into a signed JWT with an expiry claim.
 
