@@ -127,9 +127,13 @@ class TestFusionAgentFuse:
             start_time=time.perf_counter(),
             s_hf=s_hf,
         )
+        from core.constants import GAMMA_IDN_BOOST, GAMMA_IDN_MAX, IDN_DOMINANCE_THRESHOLD
         expected_s_idn = ALPHA * phishing_idn.s_idn_local + (1 - ALPHA) * phishing_ti.s_ti
         expected_combined = (1 - HF_WEIGHT) * s_llm + HF_WEIGHT * s_hf
-        expected_s_risk = GAMMA * expected_s_idn + (1 - GAMMA) * expected_combined
+        # IDN dominance applies: phishing_idn is mixed-script with s_idn_local >= threshold
+        idn_dominance = phishing_idn.is_mixed_script and phishing_idn.s_idn_local >= IDN_DOMINANCE_THRESHOLD
+        gamma_eff = min(GAMMA + GAMMA_IDN_BOOST, GAMMA_IDN_MAX) if idn_dominance else GAMMA
+        expected_s_risk = gamma_eff * expected_s_idn + (1 - gamma_eff) * expected_combined
         assert abs(response.s_risk - expected_s_risk) < 0.001
 
     @pytest.mark.asyncio

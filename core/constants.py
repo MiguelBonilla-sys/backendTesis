@@ -12,7 +12,13 @@ W_WHOIS: float = 0.10       # additive WhoisXML modifier (domain age) — does n
 BETA: float = 0.40          # weight of homograph ratio in S_IDN_local
 F_MIX: float = 1.6          # mixed-script multiplier
 ALPHA: float = 0.60         # weight of S_IDN_local vs S_TI when computing S_IDN
-GAMMA: float = 0.50         # weight of S_IDN vs S_LLM when computing S_risk
+GAMMA: float = 0.50         # weight of S_IDN vs S_LLM when computing S_risk (base)
+GAMMA_IDN_BOOST: float = 0.25  # added to GAMMA when IDN dominance is triggered
+GAMMA_IDN_MAX: float = 0.80    # cap for effective gamma under IDN dominance
+# IDN dominance: activated when is_mixed_script=True AND s_idn_local >= threshold
+# Rationale: LLM receives Punycode URLs and cannot decode homoglyphs — its score
+# is structurally unreliable for IDN attacks. IDN Agent has domain-specific authority.
+IDN_DOMINANCE_THRESHOLD: float = 0.50  # min s_idn_local to trigger dominance
 THETA: float = 0.70         # risk threshold above which verdict = PHISHING
 HOMOGRAPH_THRESHOLD: float = 0.30   # r_h alert threshold
 SIM_V_EARLY_EXIT: float = 0.95      # early-exit visual-similarity cutoff in BKTree

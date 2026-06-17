@@ -38,6 +38,9 @@ from core.constants import (
     EMAIL_MISMATCH_WEIGHT,
     EMAIL_URGENCY_WEIGHT,
     GAMMA,
+    GAMMA_IDN_BOOST,
+    GAMMA_IDN_MAX,
+    IDN_DOMINANCE_THRESHOLD,
     HF_WEIGHT,
     HOMOGRAPH_THRESHOLD,
     PROBE_GATE_THRESHOLD,
@@ -133,8 +136,28 @@ class FusionAgent:
         s_llm_combined = (1.0 - HF_WEIGHT) * s_llm + HF_WEIGHT * s_hf
         s_llm_combined = float(min(max(s_llm_combined, 0.0), 1.0))
 
+        # --- Paso 1c: IDN dominance — γ dinámico ----------------------------
+        # LLMs receive Punycode-encoded URLs and cannot decode Unicode homoglyphs;
+        # their score is structurally unreliable for IDN attacks.  When the IDN
+        # Agent signals a confirmed homograph (mixed-script + high s_idn_local),
+        # we boost γ so that domain-specific evidence dominates the LLM signal.
+        gamma_eff = GAMMA
+        idn_dominance = (
+            idn_result.is_mixed_script
+            and idn_result.s_idn_local >= IDN_DOMINANCE_THRESHOLD
+        )
+        if idn_dominance:
+            gamma_eff = min(GAMMA + GAMMA_IDN_BOOST, GAMMA_IDN_MAX)
+            logger.info(
+                "idn_dominance_activated",
+                url=url,
+                s_idn_local=round(idn_result.s_idn_local, 4),
+                gamma_base=GAMMA,
+                gamma_eff=round(gamma_eff, 4),
+            )
+
         # --- Paso 2: Risk score final ----------------------------------------
-        s_risk = GAMMA * s_idn + (1.0 - GAMMA) * s_llm_combined
+        s_risk = gamma_eff * s_idn + (1.0 - gamma_eff) * s_llm_combined
         s_risk = float(min(max(s_risk, 0.0), 1.0))
 
         # --- Paso 2b: Email context boost (additive) -------------------------
@@ -197,6 +220,7 @@ class FusionAgent:
             s_email=s_email,
             s_probe=s_probe,
             scale=shap_scale,
+            gamma_eff=gamma_eff,
         )
 
         processing_ms = (time.perf_counter() - start_time) * 1000.0
@@ -413,6 +437,7 @@ class FusionAgent:
         s_email: float = 0.0,
         s_probe: float = 0.0,
         scale: float = 1.0,
+        gamma_eff: float = GAMMA,
     ) -> dict[str, float]:
         """
         Calcula contribuciones lineales tipo SHAP para explicabilidad XAI.
@@ -443,13 +468,13 @@ class FusionAgent:
         dict[str, float]
             Diccionario con contribución de cada feature al ``S_risk`` final.
         """
-        # Pesos compuestos
-        idn_weight: float = GAMMA * ALPHA                    # γα        = 0.30
-        ti_weight: float = GAMMA * (1.0 - ALPHA)             # γ(1-α)   = 0.20
-        llm_combined_weight: float = 1.0 - GAMMA             # (1-γ)    = 0.50
+        # Pesos compuestos — usa gamma_eff (puede diferir de GAMMA bajo IDN dominance)
+        idn_weight: float = gamma_eff * ALPHA                          # γ_eff·α
+        ti_weight: float = gamma_eff * (1.0 - ALPHA)                   # γ_eff·(1-α)
+        llm_combined_weight: float = 1.0 - gamma_eff                   # (1-γ_eff)
         # s_llm_combined = (1-HF_WEIGHT)*s_llm + HF_WEIGHT*s_hf
-        llm_weight: float = llm_combined_weight * (1.0 - HF_WEIGHT)  # 0.50 * 0.60 = 0.30
-        hf_weight: float = llm_combined_weight * HF_WEIGHT           # 0.50 * 0.40 = 0.20
+        llm_weight: float = llm_combined_weight * (1.0 - HF_WEIGHT)
+        hf_weight: float = llm_combined_weight * HF_WEIGHT
 
         # Contribuciones principales
         contrib_idn_local: float = idn_weight * s_idn_local
