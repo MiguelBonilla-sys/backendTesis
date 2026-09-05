@@ -84,6 +84,7 @@ def build_usb_homograph_docs(n_per_target: int, seed: int) -> tuple[list, list, 
     catalog = load_confusables_catalog(Path(settings.CONFUSABLES_PATH))
     reverse = build_reverse_catalog(catalog)
     ids, docs, metas = [], [], []
+    seen: set[str] = set()  # dominios cortos -> pocas variantes -> colisiones de id
     for target in USB_HOMOGRAPH_TARGETS:
         made = 0
         for _ in range(n_per_target * 20):  # margen para descartes
@@ -107,7 +108,11 @@ def build_usb_homograph_docs(n_per_target: int, seed: int) -> tuple[list, list, 
                 f"Confusable substitutions: {subs}\n"
                 f"High-value: a credential-phishing page for USB staff/students."
             )
-            ids.append(_id("usb_idn", doc))
+            doc_id = _id("usb_idn", doc)
+            if doc_id in seen:
+                continue
+            seen.add(doc_id)
+            ids.append(doc_id)
             docs.append(doc)
             metas.append({
                 "source": "seed_corpus", "verdict": "PHISHING",
