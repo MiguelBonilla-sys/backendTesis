@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     LLM_MODEL_FALLBACK: str = "deepseek-v4-flash"  # text-only, mismo proveedor/precio
     LLM_PROVIDER: str = "opencode-go"  # etiqueta para trazas
     LLM_REDACT_PROMPT: bool = True  # redactar PII del contenido antes de enviar
-    LLM_MAX_TOKENS: int = 400  # holgura para el bloque REASON (150 truncaba)
+    LLM_MAX_TOKENS: int = 800  # DeepSeek V4 antepone razonamiento; 400 truncaba antes del SCORE
 
     # IDN dominance (fusion): γ dinámico que silencia al LLM en ataques IDN.
     # El motivo original —"el LLM recibe Punycode y no decodifica homoglifos"—

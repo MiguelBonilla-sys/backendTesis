@@ -46,6 +46,26 @@ class TestLLMAgentParsers:
         text = "SCORE:   0.75 | REASON: Test"
         assert agent._parse_score(text) == 0.75
 
+    def test_parse_score_markdown_bold(self, agent: LLMAgent):
+        assert agent._parse_score("**SCORE:** 0.9 | REASON: x") == 0.9
+
+    def test_parse_score_equals_sign(self, agent: LLMAgent):
+        assert agent._parse_score('json: {"score": 0.42}') == 0.42
+
+    def test_parse_score_probability_phrasing(self, agent: LLMAgent):
+        assert agent._parse_score("Phishing probability: 0.8 based on ...") == 0.8
+
+    def test_parse_score_takes_last_match_after_reasoning(self, agent: LLMAgent):
+        text = (
+            "Let me think. An initial score might be 0.3 but on reflection the "
+            "Cyrillic swap is decisive.\nSCORE: 0.95 | REASON: homograph of paypal"
+        )
+        assert agent._parse_score(text) == 0.95
+
+    def test_parse_score_leading_float_without_label_is_fallback(self, agent: LLMAgent):
+        # sin etiqueta reconocible → no se adivina un float suelto
+        assert agent._parse_score("I think this is 0.7 phishing") == LLM_FALLBACK_SCORE
+
     def test_parse_reason_standard_format(self, agent: LLMAgent):
         text = "SCORE: 0.9 | REASON: Domain uses Cyrillic characters"
         reason = agent._parse_reason(text)
