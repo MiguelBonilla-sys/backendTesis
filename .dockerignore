@@ -1,0 +1,18 @@
+# Build context hygiene — keep the image slim and never bake local secrets in.
+.git
+.gitignore
+.venv
+.env
+.env.*
+!.env.example
+.pytest_cache
+.ruff_cache
+.coverage
+.coverage*
+htmlcov
+**/__pycache__
+**/*.pyc
+tests
+docs
+*.md
+!README.md

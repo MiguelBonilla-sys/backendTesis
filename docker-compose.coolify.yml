@@ -1,0 +1,150 @@
+# Despliegue completo del backend en Coolify (build pack: Docker Compose).
+# Coolify clona este repo, buildea `backend` desde ./Dockerfile y levanta el
+# resto desde imágenes. El dominio se asigna al servicio `backend` (puerto 8000)
+# desde la config del recurso en Coolify — Traefik genera las labels solo.
+#
+# Secrets y credenciales: se cargan como variables de entorno del recurso en
+# Coolify (encriptadas), NUNCA en este archivo. Ver deploy/README no aplica —
+# la lista está en el flujo de creación vía API.
+
+services:
+  # ── Aplicación ────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    expose:
+      - "8000"
+    environment:
+      # Coolify: marca este servicio como web en el puerto 8000
+      SERVICE_FQDN_BACKEND_8000: "/"
+      APP_ENV: production
+      DEBUG: "false"
+      # Topología interna del stack
+      DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-phishing_detector}"
+      REDIS_URL: "redis://redis:6379/0"
+      CHROMADB_HOST: chromadb
+      CHROMADB_PORT: "8000"
+      EMBED_PROVIDER: ollama
+      EMBED_MODEL: embeddinggemma
+      EMBED_BASE_URL: "http://ollama:11434"
+      # Persistir la descarga del model.onnx de HF entre redeploys
+      HF_HOME: /root/.cache/huggingface
+      TOP1M_PATH: data/top1m.txt
+      CONFUSABLES_PATH: data/confusables.txt
+      # Secrets — vienen del entorno del recurso Coolify
+      LLM_BASE_URL: "${LLM_BASE_URL:-https://opencode.ai/zen/go/v1}"
+      LLM_API_KEY: "${LLM_API_KEY}"
+      LLM_MODEL: "${LLM_MODEL:-deepseek-v4-flash-vision-exp}"
+      LLM_MODEL_FALLBACK: "${LLM_MODEL_FALLBACK:-deepseek-v4-flash}"
+      LLM_PROVIDER: "${LLM_PROVIDER:-opencode-go}"
+      LLM_REDACT_PROMPT: "true"
+      HUGGINGFACE_API_KEY: "${HUGGINGFACE_API_KEY}"
+      VIRUSTOTAL_API_KEY: "${VIRUSTOTAL_API_KEY}"
+      URLSCAN_API_KEY: "${URLSCAN_API_KEY}"
+      GOOGLE_SAFE_BROWSING_API_KEY: "${GOOGLE_SAFE_BROWSING_API_KEY}"
+      WHOISXML_API_KEY: "${WHOISXML_API_KEY}"
+      SECRET_KEY: "${SECRET_KEY}"
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+      CORS_ORIGINS: "${CORS_ORIGINS:-[\"chrome-extension://*\"]}"
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      chromadb:
+        condition: service_started
+      ollama:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "python3 -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status==200 else 1)\""
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 300s   # el IDN agent construye un BK-tree de ~850k nodos al arrancar (~90s+)
+
+  # ── Datos ─────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB:-phishing_detector}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./deploy/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./deploy/seed_users.sql:/docker-entrypoint-initdb.d/02-seed_users.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-phishing_detector}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  chromadb:
+    image: chromadb/chroma:1.5.5
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /data
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - chroma_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8000' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ── Embeddings del RAG (solo esto — la inferencia generativa es remota) ───
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  ollama-pull-embed:
+    image: ollama/ollama:latest
+    environment:
+      OLLAMA_HOST: "ollama:11434"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "until ollama list >/dev/null 2>&1; do sleep 3; done; ollama list | grep -q embeddinggemma || ollama pull embeddinggemma"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+volumes:
+  pgdata:
+  redisdata:
+  chroma_data:
+  ollama_models:
+  hf_cache:
