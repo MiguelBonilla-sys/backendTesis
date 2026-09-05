@@ -119,6 +119,10 @@ class Settings(BaseSettings):
     # Data paths
     TOP1M_PATH: str = "data/top1m.txt"
     CONFUSABLES_PATH: str = "data/confusables.txt"
+    # Máx. de dominios del índice top-1M a cargar en el BK-tree al arrancar.
+    # El default carga todo (~927k → build de varios minutos en CPU lenta).
+    # Bajarlo acelera el arranque a costa de cobertura para dominios de rank alto.
+    TOP1M_LIMIT: int = 1_000_000
 
     # Cache
     TI_CACHE_TTL: int = 3600

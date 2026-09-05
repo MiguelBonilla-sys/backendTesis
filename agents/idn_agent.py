@@ -104,7 +104,9 @@ class IDNAgent:
         else:
             top1m_path = Path(settings.TOP1M_PATH)
             if top1m_path.exists():
-                self._reference_domains = await _load_top1m(top1m_path)
+                self._reference_domains = await _load_top1m(
+                    top1m_path, limit=settings.TOP1M_LIMIT
+                )
             else:
                 logger.warning(
                     "idn_agent_no_reference_index", top1m_path=str(top1m_path)

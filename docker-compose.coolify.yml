@@ -33,6 +33,9 @@ services:
       HF_HOME: /root/.cache/huggingface
       TOP1M_PATH: data/top1m.txt
       CONFUSABLES_PATH: data/confusables.txt
+      # El build del BK-tree es O(n) pure-python; en CPU lenta 927k dominios = ~8 min.
+      # 150k cubre los objetivos de impersonation reales y arranca en ~75s.
+      TOP1M_LIMIT: "150000"
       # Secrets — vienen del entorno del recurso Coolify
       LLM_BASE_URL: "${LLM_BASE_URL:-https://opencode.ai/zen/go/v1}"
       LLM_API_KEY: "${LLM_API_KEY}"
@@ -66,7 +69,7 @@ services:
       interval: 15s
       timeout: 10s
       retries: 15
-      start_period: 300s   # el IDN agent construye un BK-tree de ~850k nodos al arrancar (~90s+)
+      start_period: 240s   # el IDN agent construye el BK-tree del índice de referencia al arrancar
 
   # ── Datos ─────────────────────────────────────────────────────────────────
   postgres:
@@ -78,8 +81,11 @@ services:
       POSTGRES_DB: "${POSTGRES_DB:-phishing_detector}"
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./deploy/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./deploy/seed_users.sql:/docker-entrypoint-initdb.d/02-seed_users.sql:ro
+      # El schema NO se monta acá: Coolify pre-crea los bind mounts a archivos del
+      # repo como directorios vacíos. En un volumen `pgdata` nuevo, cargar una vez:
+      #   docker exec -i <postgres> psql -U postgres -d phishing_detector < deploy/schema.sql
+      #   docker exec -i <postgres> psql -U postgres -d phishing_detector < deploy/seed_users.sql
+      # Ver deploy/README.md.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-phishing_detector}"]
       interval: 10s
