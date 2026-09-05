@@ -77,20 +77,54 @@ def extract_domain(url: str) -> str:
 
 
 def extract_2ld(domain: str) -> str:
-    """Extract the second-level domain (registrable domain) from *domain*.
+    """Extract the registrant label from *domain*.
 
-    The second-level domain is the part immediately before the public TLD,
-    e.g. ``"login.paypal.com"`` → ``"paypal"``.
+    The label immediately before the public TLD, e.g.
+    ``"login.paypal.com"`` → ``"paypal"`` and
+    ``"portal.usbbog.edu.co"`` → ``"usbbog"``. Used by the IDN Agent as the string
+    to run homograph analysis on. NOT a registrable domain — for that (WhoisXML,
+    cache keys) use :func:`extract_registrable_domain`.
 
-    For IP addresses or bare hostnames the input is returned unchanged.
+    Uses the bounded suffix list in :func:`extract_registrable_domain`, not a
+    complete Public Suffix List. IP addresses and bare hostnames are unchanged.
     """
     domain = domain.lower().rstrip(".")
     if is_ip_address(domain):
         return domain
+    return extract_registrable_domain(domain).split(".", 1)[0]
+
+
+# Sufijos públicos de dos niveles frecuentes en este contexto (Colombia + globales
+# comunes). Sin lista completa PSL: alcanza para no cortar `.edu.co`, `.co.uk`, etc.
+_TWO_LEVEL_SUFFIXES: frozenset[str] = frozenset({
+    "com.co", "edu.co", "gov.co", "org.co", "net.co", "mil.co", "nom.co",
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "me.uk",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au",
+    "com.br", "com.mx", "com.ar", "com.pe", "com.ec", "com.ve",
+    "co.jp", "co.kr", "co.in", "co.nz", "co.za",
+})
+
+
+def extract_registrable_domain(domain: str) -> str:
+    """Registrable domain (eTLD+1) from *domain*.
+
+    ``"email.mg.abdataclassactionmail.com"`` → ``"abdataclassactionmail.com"``
+    ``"portal.academia.usbbog.edu.co"``      → ``"usbbog.edu.co"``
+    ``"paypal.com"``                         → ``"paypal.com"``
+
+    Usa un allowlist acotado de sufijos de dos niveles (``_TWO_LEVEL_SUFFIXES``);
+    para todo lo demás toma los dos últimos labels. IPs / hostnames sin punto se
+    devuelven sin cambios.
+    """
+    domain = domain.lower().rstrip(".").strip("[]")
+    if is_ip_address(domain):
+        return domain
     parts = domain.split(".")
-    if len(parts) >= 2:
-        return parts[-2]
-    return domain
+    if len(parts) < 2:
+        return domain
+    if len(parts) >= 3 and ".".join(parts[-2:]) in _TWO_LEVEL_SUFFIXES:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
 
 
 def is_ip_address(domain: str) -> bool:
@@ -124,6 +158,16 @@ def normalize_url(url: str) -> str:
     return urlunparse(parsed._replace(fragment=""))
 
 
+def is_shared_hosting_subdomain(domain: str) -> bool:
+    """Whether a hostname is under a known tenant-controlled hosting suffix.
+
+    The provider's own hostname is excluded. Tenants must not inherit that
+    provider's domain reputation. This is a bounded platform list, not the PSL.
+    """
+    domain = domain.strip().lower().rstrip(".")
+    return any(domain.endswith("." + platform) for platform in _FREE_HOSTING_PLATFORMS)
+
+
 def extract_idn_label(domain: str) -> str:
     """Return the label to use for IDN homograph analysis.
 
@@ -137,13 +181,8 @@ def extract_idn_label(domain: str) -> str:
     Falls back to :func:`extract_2ld` for normal domains.
     """
     domain = domain.lower().rstrip(".")
-    parts = domain.split(".")
-    # Build the trailing host suffix and check against known platforms
-    for n in (2, 3):  # check 2-part (vercel.app) and 3-part (pages.github.io) suffixes
-        if len(parts) > n:
-            suffix = ".".join(parts[-n:])
-            if suffix in _FREE_HOSTING_PLATFORMS:
-                return parts[0]  # leftmost = attacker subdomain
+    if is_shared_hosting_subdomain(domain):
+        return domain.split(".", 1)[0]
     return extract_2ld(domain)
 
 

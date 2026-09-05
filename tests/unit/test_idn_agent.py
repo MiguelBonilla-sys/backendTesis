@@ -107,12 +107,39 @@ class TestLoadTop1m:
         result = await _load_top1m(f)
         assert len(result) == 1
 
+    @pytest.mark.asyncio
+    async def test_preserves_compound_suffix_registrants(self, tmp_path):
+        f = tmp_path / "domains.csv"
+        f.write_text(
+            "1,portal.usbbog.edu.co\n2,WWW.BBC.CO.UK.\n"
+            "3,news.bbc.co.uk\n4,evil.co.uk\n",
+            encoding="utf-8",
+        )
+        assert await _load_top1m(f) == {"usbbog.edu.co", "bbc.co.uk", "evil.co.uk"}
+
 
 # ---------------------------------------------------------------------------
 # IDNAgent
 # ---------------------------------------------------------------------------
 
 class TestIDNAgentInitialize:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("catalog", "references", "expected"),
+        [
+            ({"о": ["o"]}, {"usbbog.edu.co"}, True),
+            ({}, {"usbbog.edu.co"}, False),
+            ({"о": ["o"]}, set(), False),
+        ],
+    )
+    async def test_reference_knowledge_requires_catalog_and_index(self, catalog, references, expected):
+        agent = IDNAgent()
+        assert agent.has_reference_knowledge is False
+        with patch("agents.idn_agent.load_confusables_catalog", return_value=catalog):
+            await agent.initialize(reference_domains=references)
+        assert agent.ready is True
+        assert agent.has_reference_knowledge is expected
+
     @pytest.mark.asyncio
     async def test_initialize_sets_ready_true(self):
         agent = IDNAgent()
@@ -138,14 +165,54 @@ class TestIDNAgentInitialize:
     @pytest.mark.asyncio
     async def test_initialize_loads_top1m_when_exists(self, tmp_path):
         csv = tmp_path / "top1m.csv"
-        csv.write_text("1,paypal.com\n", encoding="utf-8")
+        csv.write_text("1,paypal.com\n2,bbc.co.uk\n", encoding="utf-8")
         agent = IDNAgent()
         with patch("agents.idn_agent.load_confusables_catalog", return_value={}):
-            with patch("core.config.settings") as mock_settings:
-                mock_settings.CONFUSABLES_PATH = "/fake/path"
-                mock_settings.TOP1M_PATH = str(csv)
+            with patch("agents.idn_agent.settings.TOP1M_PATH", str(csv)):
                 await agent.initialize(confusables_path="/fake/path")
         assert agent._ready is True
+        assert agent._reference_domains == {"paypal.com", "bbc.co.uk"}
+        assert (await agent.analyze("https://paypa1.com")).visual_similarity > 0.8
+        assert agent.is_trusted_domain("news.bbc.co.uk") is True
+        assert agent.is_trusted_domain("evil.co.uk") is False
+
+    @pytest.mark.asyncio
+    async def test_reference_domains_are_normalized_separately_from_labels(self):
+        agent = IDNAgent()
+        with patch("agents.idn_agent.load_confusables_catalog", return_value={}):
+            await agent.initialize(reference_domains={" LOGIN.PAYPAL.COM. ", "www.bbc.co.uk"})
+        assert agent._reference_domains == {"paypal.com", "bbc.co.uk"}
+        assert (await agent.analyze("https://paypa1.net")).visual_similarity > 0.8
+        assert agent.is_trusted_domain("mail.paypal.com") is True
+        assert agent.is_trusted_domain("paypal.net") is False
+        assert agent.is_trusted_domain("evil.co.uk") is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("use_punycode", [False, True])
+    async def test_compound_suffix_homograph_matches_full_reference_domain(self, use_punycode):
+        agent = IDNAgent()
+        label = "usbbоg"  # Cyrillic о, not Latin o
+        with patch("agents.idn_agent.load_confusables_catalog", return_value={"о": ["o"]}):
+            await agent.initialize(reference_domains={"usbbog.edu.co"})
+        host_label = label.encode("idna").decode("ascii") if use_punycode else label
+        result = await agent.analyze(f"https://login.{host_label}.edu.co")
+        assert result.domain_unicode == label
+        assert result.confusable_chars == ["о"]
+        assert result.homograph_ratio == pytest.approx(1 / 6, abs=0.0001)
+        assert result.visual_similarity == 1.0
+        assert result.is_mixed_script is True
+        assert result.is_suspicious is True
+        assert result.s_idn_local >= 0.85
+        assert agent.is_trusted_domain(f"{host_label}.edu.co") is False
+
+    @pytest.mark.asyncio
+    async def test_punycode_reference_uses_unicode_label_for_similarity(self):
+        agent = IDNAgent()
+        with patch("agents.idn_agent.load_confusables_catalog", return_value={}):
+            await agent.initialize(reference_domains={"xn--bcher-kva.de"})
+        result = await agent.analyze("https://bücher.example")
+        assert result.visual_similarity == 1.0
+        assert agent.is_trusted_domain("bücher.example") is False
 
 
 class TestIDNAgentAnalyze:
@@ -315,6 +382,23 @@ class TestIsTrustedDomain:
         assert initialized_agent.is_trusted_domain("mail.google.com") is True
         assert initialized_agent.is_trusted_domain("paypal.com") is True
 
+    @pytest.mark.parametrize(
+        "domain",
+        ["attacker.vercel.app", "login.attacker.vercel.app", "ATTACKER.VERCEL.APP."],
+    )
+    def test_shared_hosting_tenants_do_not_inherit_provider_trust(self, initialized_agent, domain):
+        assert initialized_agent.is_trusted_domain(domain) is False
+        assert initialized_agent.is_trusted_domain("vercel.app") is True
+
+    def test_shared_hosting_tenants_do_not_inherit_configured_suffix_trust(self, initialized_agent):
+        with patch("agents.idn_agent.TRUSTED_DOMAIN_SUFFIXES", {"vercel.app"}):
+            assert initialized_agent.is_trusted_domain("attacker.vercel.app") is False
+
+    def test_compound_suffix_does_not_grant_sibling_domain_trust(self, initialized_agent):
+        initialized_agent._reference_domains.add("bbc.co.uk")
+        assert initialized_agent.is_trusted_domain("www.bbc.co.uk") is True
+        assert initialized_agent.is_trusted_domain("evil.co.uk") is False
+
     def test_unknown_domain_not_trusted(self, initialized_agent):
         assert initialized_agent.is_trusted_domain("evil-login.tk") is False
         assert initialized_agent.is_trusted_domain("рaypal.com") is False
@@ -327,3 +411,16 @@ class TestIsTrustedDomain:
 
     def test_empty_domain_not_trusted(self, initialized_agent):
         assert initialized_agent.is_trusted_domain("") is False
+
+
+@pytest.mark.asyncio
+async def test_known_owner_is_not_an_idn_attack_but_same_label_elsewhere_is():
+    agent = IDNAgent()
+    await agent.initialize(reference_domains={"paypal.com", "usbbog.edu.co"})
+    for url in ("https://paypal.com", "https://usbbog.edu.co"):
+        result = await agent.analyze(url)
+        assert result.s_idn_local == 0.0 and not result.is_suspicious
+    same_label = await agent.analyze("https://paypal.example")
+    assert same_label.visual_similarity == 1.0 and same_label.is_suspicious
+    homograph = await agent.analyze("https://usbbоg.edu.co")
+    assert homograph.s_idn_local >= 0.85 and homograph.is_suspicious

@@ -20,20 +20,45 @@ from routers import (
 async def lifespan(app: FastAPI):
     logger.info("Starting BackendTesis...")
     await init_db()
-    await init_redis()
+    from agents.idn_agent import idn_agent
+    from agents.llm_agent import llm_agent
+    from core.llm_gateway import llm_gateway
+    from models.chromadb_client import init_chromadb
 
-    # θ efectivo: última recalibración adaptativa persistida (T12)
     try:
-        from core.calibration import load_effective_theta_from_db
+        await init_redis()
 
-        await load_effective_theta_from_db()
-    except Exception as exc:
-        logger.warning(f"effective_theta_load_failed: {exc}")
+        # El detector local necesita su catálogo y referencias antes de servir
+        # solicitudes. Un fallo aquí debe impedir analizar con señales vacías.
+        await idn_agent.initialize()
+        if not idn_agent.ready or not idn_agent.has_reference_knowledge:
+            raise RuntimeError("IDN agent did not initialize its reference knowledge")
 
-    yield
-    logger.info("Shutting down BackendTesis...")
-    await close_db()
-    await close_redis()
+        # ChromaDB es una dependencia recuperable: sin ella sigue disponible el
+        # análisis, pero se informa expresamente que el RAG está degradado.
+        try:
+            await init_chromadb()
+        except Exception as exc:
+            logger.warning("rag_startup_degraded", error=str(exc))
+
+        # θ + pesos efectivos: última calibración adaptativa persistida (T12).
+        try:
+            from core.calibration import load_effective_theta_from_db
+            from core.online_calibration import load_effective_weights_from_db
+
+            await load_effective_theta_from_db()
+            await load_effective_weights_from_db()
+        except Exception as exc:
+            logger.warning("effective_calibration_load_failed", error=str(exc))
+
+        # El gateway admite degradación neutral ante fallo de red.
+        await llm_agent.initialize()
+        yield
+    finally:
+        logger.info("Shutting down BackendTesis...")
+        await close_db()
+        await close_redis()
+        await llm_gateway.aclose()
 
 
 app = FastAPI(
@@ -48,7 +73,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"https://.*\.ngrok-free\.(app|dev)",
+    allow_origin_regex=r"https://.*\.ngrok-free\.(app|dev)|chrome-extension://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

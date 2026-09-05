@@ -7,9 +7,12 @@ from utils.url_parser import (
     extract_2ld,
     extract_domain,
     extract_effective_domain,
+    extract_idn_label,
+    extract_registrable_domain,
     extract_urls_from_html,
     extract_urls_from_text,
     is_ip_address,
+    is_shared_hosting_subdomain,
     normalize_url,
     sanitize_path,
 )
@@ -66,6 +69,74 @@ class TestExtract2ld:
 
     def test_deep_subdomain(self):
         assert extract_2ld("a.b.c.paypal.com") == "paypal"
+
+    @pytest.mark.parametrize(
+        ("domain", "label"),
+        [
+            ("portal.academia.usbbog.edu.co", "usbbog"),
+            ("login.usbbоg.edu.co", "usbbоg"),  # Cyrillic о
+            ("WWW.BBC.CO.UK.", "bbc"),
+            ("login.evil.co.uk", "evil"),
+            ("[::1]", "[::1]"),
+            ("", ""),
+        ],
+    )
+    def test_registrant_label_with_known_compound_suffixes(self, domain, label):
+        assert extract_2ld(domain) == label
+
+
+class TestHostingDomains:
+    @pytest.mark.parametrize(
+        ("domain", "shared", "label"),
+        [
+            ("оutlоок-098.vercel.app", True, "оutlоок-098"),
+            ("LOGIN.ATTACKER.VERCEL.APP.", True, "login"),
+            ("evilpaypal.github.io", True, "evilpaypal"),
+            ("vercel.app", False, "vercel"),
+            ("fakevercel.app", False, "fakevercel"),
+            ("vercel.app.attacker.com", False, "attacker"),
+            ("portal.usbbоg.edu.co", False, "usbbоg"),
+        ],
+    )
+    def test_hosting_boundary_and_analysis_label(self, domain, shared, label):
+        assert is_shared_hosting_subdomain(domain) is shared
+        assert extract_idn_label(domain) == label
+
+
+class TestExtractRegistrableDomain:
+    def test_bare_domain_unchanged(self):
+        assert extract_registrable_domain("paypal.com") == "paypal.com"
+
+    def test_subdomain_stripped(self):
+        assert extract_registrable_domain("login.paypal.com") == "paypal.com"
+
+    def test_deep_subdomain(self):
+        assert (
+            extract_registrable_domain("email.mg.abdataclassactionmail.com")
+            == "abdataclassactionmail.com"
+        )
+
+    def test_two_level_suffix_edu_co(self):
+        assert (
+            extract_registrable_domain("portal.academia.usbbog.edu.co")
+            == "usbbog.edu.co"
+        )
+
+    def test_two_level_suffix_co_uk(self):
+        assert extract_registrable_domain("www.bbc.co.uk") == "bbc.co.uk"
+
+    def test_plain_co_is_single_tld(self):
+        # `.co` solo (no `.com.co`) → eTLD+1 son los dos últimos labels
+        assert extract_registrable_domain("shop.mercadolibre.co") == "mercadolibre.co"
+
+    def test_lowercase_and_trailing_dot(self):
+        assert extract_registrable_domain("Login.PayPal.COM.") == "paypal.com"
+
+    def test_ip_unchanged(self):
+        assert extract_registrable_domain("192.168.1.1") == "192.168.1.1"
+
+    def test_single_label_unchanged(self):
+        assert extract_registrable_domain("localhost") == "localhost"
 
 
 class TestIsIpAddress:

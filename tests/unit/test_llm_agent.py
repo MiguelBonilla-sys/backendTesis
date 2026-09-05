@@ -168,8 +168,94 @@ class TestLLMAgentInitialize:
     async def test_initialize_sets_ready_true(self):
         agent = LLMAgent()
         assert not agent._ready
-        await agent.initialize()
+        with patch("agents.llm_agent.llm_gateway.initialize", new_callable=AsyncMock):
+            await agent.initialize()
         assert agent._ready is True
+
+
+class TestLLMAgentCallLLM:
+    @pytest.fixture
+    def agent(self) -> LLMAgent:
+        a = LLMAgent()
+        a._ready = True
+        return a
+
+    @pytest.mark.asyncio
+    async def test_call_llm_delegates_to_gateway(self, agent: LLMAgent):
+        from core.llm_gateway import LLMResult
+
+        fake = LLMResult(
+            text="SCORE: 0.9 | REASON: homograph",
+            model="deepseek-v4-flash-vision-exp",
+            provider="opencode-go",
+            latency_ms=12.3,
+        )
+        with patch(
+            "agents.llm_agent.llm_gateway.chat", new_callable=AsyncMock, return_value=fake
+        ) as mock_chat:
+            out = await agent._call_llm("some prompt")
+
+        assert out == "SCORE: 0.9 | REASON: homograph"
+        messages = mock_chat.call_args.args[0]
+        assert messages[0]["role"] == "system"
+        assert "untrusted data" in messages[0]["content"].lower()
+        assert messages[1] == {"role": "user", "content": "some prompt"}
+
+    @pytest.mark.asyncio
+    async def test_call_llm_propagates_gateway_error(self, agent: LLMAgent):
+        with patch(
+            "agents.llm_agent.llm_gateway.chat",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("gateway down"),
+        ):
+            with pytest.raises(RuntimeError):
+                await agent._call_llm("p")
+
+
+class TestLLMAgentAdjudicate:
+    @pytest.fixture
+    def agent(self) -> LLMAgent:
+        a = LLMAgent()
+        a._ready = True
+        return a
+
+    @pytest.mark.asyncio
+    async def test_parses_verdict_and_reason(self, agent: LLMAgent):
+        from core.llm_gateway import LLMResult
+
+        fake = LLMResult(
+            text="VERDICT: PHISHING | REASON: Cyrillic homograph of a bank.",
+            model="m", provider="p", latency_ms=1.0,
+        )
+        with patch(
+            "agents.llm_agent.llm_gateway.chat", new_callable=AsyncMock, return_value=fake
+        ) as mock_chat:
+            verdict, reason = await agent.adjudicate("all the evidence")
+        assert verdict == "PHISHING"
+        assert "Cyrillic homograph" in reason
+        # thinking on for the deliberate pass; evidence fenced
+        assert mock_chat.call_args.kwargs["thinking"] is True
+        assert "<<<UNTRUSTED_CONTENT>>>" in mock_chat.call_args.args[0][1]["content"]
+
+    @pytest.mark.asyncio
+    async def test_unparseable_verdict_returns_empty(self, agent: LLMAgent):
+        from core.llm_gateway import LLMResult
+
+        fake = LLMResult(text="I think it's fine", model="m", provider="p", latency_ms=1.0)
+        with patch(
+            "agents.llm_agent.llm_gateway.chat", new_callable=AsyncMock, return_value=fake
+        ):
+            verdict, _ = await agent.adjudicate("evidence")
+        assert verdict == ""
+
+    @pytest.mark.asyncio
+    async def test_gateway_error_returns_empty_tuple(self, agent: LLMAgent):
+        with patch(
+            "agents.llm_agent.llm_gateway.chat",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("down"),
+        ):
+            assert await agent.adjudicate("evidence") == ("", "")
 
 
 class TestLLMAgentAnalyze:
@@ -182,7 +268,7 @@ class TestLLMAgentAnalyze:
     @pytest.mark.asyncio
     async def test_analyze_returns_fallback_on_llamastack_error(self, agent: LLMAgent):
         with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
-             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+             patch.object(agent, "_call_llm", new_callable=AsyncMock) as mock_call:
             mock_rag.return_value = []
             mock_call.side_effect = Exception("Connection refused")
             score, reason = await agent.analyze(
@@ -194,7 +280,7 @@ class TestLLMAgentAnalyze:
     @pytest.mark.asyncio
     async def test_analyze_parses_score_from_response(self, agent: LLMAgent):
         with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
-             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+             patch.object(agent, "_call_llm", new_callable=AsyncMock) as mock_call:
             mock_rag.return_value = []
             mock_call.return_value = "SCORE: 0.92 | REASON: Phishing detected"
             score, reason = await agent.analyze(
@@ -208,7 +294,7 @@ class TestLLMAgentAnalyze:
     async def test_analyze_returns_fallback_on_timeout(self, agent: LLMAgent):
         import asyncio
         with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
-             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+             patch.object(agent, "_call_llm", new_callable=AsyncMock) as mock_call:
             mock_rag.return_value = []
             mock_call.side_effect = asyncio.TimeoutError()
             score, reason = await agent.analyze(
@@ -221,7 +307,7 @@ class TestLLMAgentAnalyze:
     async def test_analyze_rag_retrieval_failure_graceful(self, agent: LLMAgent):
         """RAG failure must not crash the analysis."""
         with patch.object(agent, "_retrieve_rag_context", new_callable=AsyncMock) as mock_rag, \
-             patch.object(agent, "_call_llamastack", new_callable=AsyncMock) as mock_call:
+             patch.object(agent, "_call_llm", new_callable=AsyncMock) as mock_call:
             mock_rag.return_value = []
             mock_call.return_value = "SCORE: 0.5 | REASON: Neutral"
             score, reason = await agent.analyze(

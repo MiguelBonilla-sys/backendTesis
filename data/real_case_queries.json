@@ -1,0 +1,8 @@
+[
+  ["Caso real de KeePass con dominio homógrafo punycode ķeepass y FakeBat", ["https://www.malwarebytes.com/blog/threat-intel/2023/10/clever-malvertising-attack-uses-punycode-to-look-like-legitimate-website"]],
+  ["Campaña real AiTM Microsoft 365 roba cookies de sesión y realiza fraude BEC", ["https://www.microsoft.com/en-us/security/blog/2022/07/12/from-cookie-theft-to-bec-attackers-use-aitm-phishing-sites-as-entry-point-to-further-financial-fraud/"]],
+  ["Storm-2372 invitación de Teams pide un código de dispositivo en una página legítima", ["https://www.microsoft.com/en-us/security/blog/2025/02/13/storm-2372-conducts-device-code-phishing-campaign/"]],
+  ["Phishing con códigos de dispositivo dinámicos y redirecciones Vercel Cloudflare Workers", ["https://www.microsoft.com/en-us/security/blog/2026/04/06/ai-enabled-device-code-phishing-campaign-april-2026/"]],
+  ["INCIBE correos corporativos piden escanear QR para verificar identidad Microsoft", ["https://www.incibe.es/empresas/avisos/nueva-campana-de-phishing-utilizando-codigos-qr"]],
+  ["Colombia DIAN correo falso amenaza embargo por impuestos pendientes y adjuntos", ["https://www.dian.gov.co/Prensa/ComunicadosPrensa/156_Comunicado_de_prensa_17102017.pdf"]]
+]

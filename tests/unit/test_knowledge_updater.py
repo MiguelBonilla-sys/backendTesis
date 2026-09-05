@@ -6,7 +6,36 @@ from unittest.mock import AsyncMock, call, patch
 import pytest
 
 from core.constants import COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI
-from data_pipeline.knowledge_updater import AUTO_INGEST_THRESHOLD, KnowledgeUpdaterService
+from data_pipeline.knowledge_updater import (
+    AUTO_INGEST_THRESHOLD,
+    KnowledgeUpdaterService,
+    context_header,
+)
+
+
+class TestContextHeader:
+    def test_basic(self):
+        h = context_header(verdict="PHISHING", domain="paypa1.com")
+        assert h == "[ctx verdict=PHISHING domain=paypa1.com]"
+
+    def test_decoded_and_impersonates_and_source(self):
+        h = context_header(
+            verdict="PHISHING", domain="xn--pypal-4ve.com",
+            domain_unicode="pаypal.com", impersonates="paypal.com",
+            source="seed_corpus",
+        )
+        assert h == (
+            "[ctx verdict=PHISHING domain=pаypal.com "
+            "impersonates=paypal.com source=seed_corpus]"
+        )
+
+    def test_impersonates_equal_to_domain_is_omitted(self):
+        h = context_header(
+            verdict="LEGITIMATE", domain="usbbog.edu.co",
+            impersonates="usbbog.edu.co", source="institutional_baseline",
+        )
+        assert "impersonates=" not in h
+        assert h == "[ctx verdict=LEGITIMATE domain=usbbog.edu.co source=institutional_baseline]"
 
 _BASE_ANALYSIS = dict(
     url="https://paypa1.com/login",
@@ -50,6 +79,9 @@ class TestIngestFromAnalysis:
         assert mock_upsert.call_count == 3
         collections_used = {c.args[0] for c in mock_upsert.call_args_list}
         assert collections_used == {COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI}
+        # cada doc arranca con el header de contexto (contextual retrieval)
+        for c in mock_upsert.call_args_list:
+            assert c.kwargs["documents"][0].startswith("[ctx verdict=PHISHING")
 
     @pytest.mark.asyncio
     async def test_doc_ids_use_incident_id_when_provided(self):
@@ -128,6 +160,40 @@ class TestAutoIngestThreshold:
 # ---------------------------------------------------------------------------
 
 class TestIngestConfirmedFeedback:
+    async def test_failed_upsert_leaves_feedback_pending(self):
+        with patch("data_pipeline.knowledge_updater.upsert_documents",
+                   side_effect=RuntimeError("storage down")), \
+             patch("data_pipeline.knowledge_updater.execute", new_callable=AsyncMock) as execute:
+            with pytest.raises(RuntimeError, match="storage down"):
+                await KnowledgeUpdaterService().ingest_confirmed_feedback(
+                    feedback_id="fb", incident_id="inc", confirmed_verdict="PHISHING",
+                    note=None, **_FEEDBACK_ANALYSIS,
+                )
+        execute.assert_not_awaited()
+
+    async def test_legitimate_retry_purges_without_reintroducing_phishing_docs(self):
+        with patch("data_pipeline.knowledge_updater.delete_document", new_callable=AsyncMock) as delete, \
+             patch("data_pipeline.knowledge_updater.upsert_documents", new_callable=AsyncMock) as upsert, \
+             patch("data_pipeline.knowledge_updater.execute", new_callable=AsyncMock) as execute:
+            await KnowledgeUpdaterService().ingest_confirmed_feedback(
+                feedback_id="fb", incident_id="inc", confirmed_verdict="LEGITIMATE",
+                note=None, **_FEEDBACK_ANALYSIS,
+            )
+        assert delete.await_count == 3
+        upsert.assert_not_awaited()
+        execute.assert_awaited_once()
+
+    async def test_failed_purge_leaves_feedback_pending(self):
+        with patch("data_pipeline.knowledge_updater.delete_document",
+                   side_effect=RuntimeError("storage down")), \
+             patch("data_pipeline.knowledge_updater.execute", new_callable=AsyncMock) as execute:
+            with pytest.raises(RuntimeError):
+                await KnowledgeUpdaterService().ingest_confirmed_feedback(
+                    feedback_id="fb", incident_id="inc", confirmed_verdict="LEGITIMATE",
+                    note=None, **_FEEDBACK_ANALYSIS,
+                )
+        execute.assert_not_awaited()
+
     @pytest.mark.asyncio
     async def test_calls_ingest_from_analysis_and_marks_ingested(self):
         svc = KnowledgeUpdaterService()

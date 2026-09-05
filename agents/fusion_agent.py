@@ -27,9 +27,10 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
+from core.config import settings
 from core.constants import (
     ALPHA,
     BETA,
@@ -40,11 +41,10 @@ from core.constants import (
     GAMMA,
     GAMMA_IDN_BOOST,
     GAMMA_IDN_MAX,
-    IDN_DOMINANCE_THRESHOLD,
     HF_WEIGHT,
     HOMOGRAPH_THRESHOLD,
+    IDN_DOMINANCE_THRESHOLD,
     PROBE_GATE_THRESHOLD,
-    THETA,
     W_GSB,
     W_URLSCAN,
     W_VT,
@@ -126,33 +126,45 @@ class FusionAgent:
         AnalyzeResponse
             Respuesta completa con scores, verdict, SHAP y metadata.
         """
+        # Pesos efectivos: constantes de tesis, o los calibrados online si el
+        # kill-switch está activo (ver core/online_calibration.py).
+        if settings.ONLINE_CALIBRATION_ENABLED:
+            from core.online_calibration import get_effective_weights
+
+            _w = get_effective_weights()
+            alpha, gamma, w_hf = _w["alpha"], _w["gamma"], _w["w_hf"]
+        else:
+            alpha, gamma, w_hf = ALPHA, GAMMA, HF_WEIGHT
+
         # --- Paso 1: IDN score combinado -------------------------------------
-        s_idn = ALPHA * idn_result.s_idn_local + (1.0 - ALPHA) * ti_result.s_ti
+        s_idn = alpha * idn_result.s_idn_local + (1.0 - alpha) * ti_result.s_ti
         s_idn = float(min(max(s_idn, 0.0), 1.0))
 
         # --- Paso 1b: Blend HF classifier into s_llm -------------------------
-        # s_llm_combined = (1-HF_WEIGHT)*s_llm + HF_WEIGHT*s_hf
-        # HF specialized classifier augments Ollama semantic score (HF_WEIGHT=0.40)
-        s_llm_combined = (1.0 - HF_WEIGHT) * s_llm + HF_WEIGHT * s_hf
+        # s_llm_combined = (1-w_hf)*s_llm + w_hf*s_hf
+        s_llm_combined = (1.0 - w_hf) * s_llm + w_hf * s_hf
         s_llm_combined = float(min(max(s_llm_combined, 0.0), 1.0))
 
         # --- Paso 1c: IDN dominance — γ dinámico ----------------------------
-        # LLMs receive Punycode-encoded URLs and cannot decode Unicode homoglyphs;
-        # their score is structurally unreliable for IDN attacks.  When the IDN
-        # Agent signals a confirmed homograph (mixed-script + high s_idn_local),
-        # we boost γ so that domain-specific evidence dominates the LLM signal.
-        gamma_eff = GAMMA
+        # Cuando el IDN Agent confirma un homógrafo (mixed-script + s_idn_local
+        # alto) se sube γ para que la evidencia de dominio domine sobre el LLM.
+        # Motivo original: el LLM recibía Punycode y no decodificaba homoglifos.
+        # Con DeepSeek V4 (decodifica xn-- solo, y recibe domain_unicode en el
+        # prompt) ese motivo se debilita — de ahí el flag IDN_DOMINANCE_ENABLED,
+        # candidato a re-calibrar/desactivar según el eval con el nuevo LLM.
+        gamma_eff = gamma
         idn_dominance = (
-            idn_result.is_mixed_script
+            settings.IDN_DOMINANCE_ENABLED
+            and idn_result.is_mixed_script
             and idn_result.s_idn_local >= IDN_DOMINANCE_THRESHOLD
         )
         if idn_dominance:
-            gamma_eff = min(GAMMA + GAMMA_IDN_BOOST, GAMMA_IDN_MAX)
+            gamma_eff = min(gamma + GAMMA_IDN_BOOST, GAMMA_IDN_MAX)
             logger.info(
                 "idn_dominance_activated",
                 url=url,
                 s_idn_local=round(idn_result.s_idn_local, 4),
-                gamma_base=GAMMA,
+                gamma_base=round(gamma, 4),
                 gamma_eff=round(gamma_eff, 4),
             )
 
@@ -221,6 +233,8 @@ class FusionAgent:
             s_probe=s_probe,
             scale=shap_scale,
             gamma_eff=gamma_eff,
+            alpha=alpha,
+            w_hf=w_hf,
         )
 
         processing_ms = (time.perf_counter() - start_time) * 1000.0
@@ -264,7 +278,7 @@ class FusionAgent:
             shap_explanation=ShapExplanation(feature_contributions=shap),
             reasons=reasons,
             processing_ms=round(processing_ms, 1),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
 
     # ------------------------------------------------------------------
@@ -438,6 +452,8 @@ class FusionAgent:
         s_probe: float = 0.0,
         scale: float = 1.0,
         gamma_eff: float = GAMMA,
+        alpha: float = ALPHA,
+        w_hf: float = HF_WEIGHT,
     ) -> dict[str, float]:
         """
         Calcula contribuciones lineales tipo SHAP para explicabilidad XAI.
@@ -468,13 +484,14 @@ class FusionAgent:
         dict[str, float]
             Diccionario con contribución de cada feature al ``S_risk`` final.
         """
-        # Pesos compuestos — usa gamma_eff (puede diferir de GAMMA bajo IDN dominance)
-        idn_weight: float = gamma_eff * ALPHA                          # γ_eff·α
-        ti_weight: float = gamma_eff * (1.0 - ALPHA)                   # γ_eff·(1-α)
+        # Pesos compuestos — usa gamma_eff/alpha/w_hf efectivos (pueden diferir
+        # de las constantes bajo IDN dominance o calibración online).
+        idn_weight: float = gamma_eff * alpha                          # γ_eff·α
+        ti_weight: float = gamma_eff * (1.0 - alpha)                   # γ_eff·(1-α)
         llm_combined_weight: float = 1.0 - gamma_eff                   # (1-γ_eff)
-        # s_llm_combined = (1-HF_WEIGHT)*s_llm + HF_WEIGHT*s_hf
-        llm_weight: float = llm_combined_weight * (1.0 - HF_WEIGHT)
-        hf_weight: float = llm_combined_weight * HF_WEIGHT
+        # s_llm_combined = (1-w_hf)*s_llm + w_hf*s_hf
+        llm_weight: float = llm_combined_weight * (1.0 - w_hf)
+        hf_weight: float = llm_combined_weight * w_hf
 
         # Contribuciones principales
         contrib_idn_local: float = idn_weight * s_idn_local

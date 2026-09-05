@@ -11,16 +11,57 @@ or any call fails — never blocks the main analysis pipeline.
 from __future__ import annotations
 
 import asyncio
+from threading import Lock
 
 import httpx
 
 from core.config import settings
 from core.constants import HF_FALLBACK_SCORE, HF_TIMEOUT_S
 from core.logger import get_logger
+from core.redaction import redact
 
 logger = get_logger(__name__)
 
-_HF_BASE = "https://api-inference.huggingface.co/models"
+# HF migró la Inference API a "Inference Providers". El endpoint viejo
+# (api-inference.huggingface.co) está muerto. `hf-inference` sirve el modelo de
+# email (cybersectony/…, transformers). El de URL (pirocheto/…, sklearn/ONNX) NO
+# lo sirve ningún provider → se corre LOCAL vía onnxruntime (ver _url_onnx_score).
+_HF_BASE = "https://router.huggingface.co/hf-inference/models"
+
+# Sesión ONNX del clasificador de URL — carga perezosa, una sola vez.
+_url_onnx_session = None
+_url_onnx_tried = False
+_url_onnx_lock = Lock()
+
+
+def _get_url_onnx():
+    """InferenceSession del modelo de URL (pirocheto/…). None si no disponible.
+
+    Path: ``settings.HF_URL_ONNX_PATH`` si está seteado (bundle offline), si no
+    se descarga de HF (``model.onnx``, ~22 MB, público) y se cachea.
+    """
+    global _url_onnx_session, _url_onnx_tried
+    # La carga ocurre en un worker; serializarla evita que otra solicitud vea
+    # una sesión todavía vacía mientras se descarga el modelo compartido.
+    with _url_onnx_lock:
+        if _url_onnx_tried:
+            return _url_onnx_session
+        _url_onnx_tried = True
+        try:
+            import onnxruntime
+
+            path = settings.HF_URL_ONNX_PATH
+            if not path:
+                from huggingface_hub import hf_hub_download
+
+                path = hf_hub_download(repo_id=settings.HF_URL_MODEL, filename="model.onnx")
+            _url_onnx_session = onnxruntime.InferenceSession(
+                path, providers=["CPUExecutionProvider"]
+            )
+            logger.info("hf_url_onnx_loaded", path=path)
+        except Exception as exc:  # noqa: BLE001 — degrada a la API / fallback
+            logger.warning("hf_url_onnx_unavailable", error=str(exc))
+        return _url_onnx_session
 
 
 class HFAgent:
@@ -57,12 +98,11 @@ class HFAgent:
 
         Runs URL and content classifiers concurrently when email body
         is provided; otherwise returns URL-only score.  Falls back to
-        HF_FALLBACK_SCORE (0.5) on any error or missing API key.
-        """
-        if not settings.HUGGINGFACE_API_KEY:
-            logger.debug("hf_agent_skipped", reason="no api key configured")
-            return HF_FALLBACK_SCORE
+        HF_FALLBACK_SCORE (0.5) on any error.
 
+        El clasificador de URL corre local (ONNX) y no necesita API key; el de
+        contenido usa la Inference API y degrada a 0.5 sin key.
+        """
         tasks: list = [self._classify_url(url)]
         if email_body_snippet:
             tasks.append(self._classify_content(email_body_snippet))
@@ -93,10 +133,40 @@ class HFAgent:
     # ------------------------------------------------------------------
 
     async def _classify_url(self, url: str) -> float:
-        return await self._call_hf_api(settings.HF_URL_MODEL, url)
+        """Score de phishing de la URL. Prioriza el modelo ONNX local; si no
+        está disponible cae a la API, dentro de un único presupuesto de tiempo."""
+        try:
+            async with asyncio.timeout(HF_TIMEOUT_S):
+                score = await self._url_onnx_score(url)
+                if score is not None:
+                    return score
+                return await self._call_hf_api(settings.HF_URL_MODEL, url)
+        except TimeoutError:
+            logger.warning("hf_url_timeout", timeout_s=HF_TIMEOUT_S)
+            return HF_FALLBACK_SCORE
+
+    async def _url_onnx_score(self, url: str) -> float | None:
+        """Inferencia ONNX local (LinearSVM). ``None`` si el modelo no cargó o
+        la inferencia falla. Salida: ``run(...)[1]`` = ``[[p_legit, p_phish]]``."""
+        sess = await asyncio.to_thread(_get_url_onnx)
+        if sess is None:
+            return None
+        try:
+            import numpy as np
+
+            probs = await asyncio.to_thread(
+                sess.run, None, {"inputs": np.array([url], dtype="str")}
+            )
+            p_phish = float(probs[1][0][1])
+            return min(max(p_phish, 0.0), 1.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("hf_url_onnx_infer_failed", error=str(exc))
+            return None
 
     async def _classify_content(self, text: str) -> float:
-        return await self._call_hf_api(settings.HF_EMAIL_MODEL, text[:512])
+        if not settings.HUGGINGFACE_API_KEY:
+            return HF_FALLBACK_SCORE
+        return await self._call_hf_api(settings.HF_EMAIL_MODEL, text)
 
     async def _call_hf_api(self, model: str, text: str) -> float:
         """
@@ -109,7 +179,12 @@ class HFAgent:
             "Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}",
             "Content-Type": "application/json",
         }
-        payload = {"inputs": text}
+        # Redactar en la frontera HTTP cubre contenido y fallback de URL.
+        # Se hace antes de truncar para no dejar fragmentos de un identificador.
+        outbound = redact(text) if settings.LLM_REDACT_PROMPT else text
+        if model == settings.HF_EMAIL_MODEL:
+            outbound = outbound[:512]
+        payload = {"inputs": outbound}
 
         try:
             async with httpx.AsyncClient(timeout=HF_TIMEOUT_S) as client:

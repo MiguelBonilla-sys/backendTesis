@@ -8,6 +8,12 @@ import time
 import unicodedata
 from pathlib import Path
 
+from agents.bktree import BKTree
+from agents.confusables_loader import (
+    detect_confusables,
+    is_mixed_script,
+    load_confusables_catalog,
+)
 from core.config import settings
 from core.constants import (
     BETA,
@@ -18,14 +24,13 @@ from core.constants import (
 )
 from core.exceptions import IDNAnalysisError
 from core.logger import get_logger
-from agents.confusables_loader import (
-    detect_confusables,
-    is_mixed_script,
-    load_confusables_catalog,
-)
-from agents.bktree import BKTree
-from utils.url_parser import extract_domain, extract_idn_label
 from schemas.analyze import IDNResult
+from utils.url_parser import (
+    extract_domain,
+    extract_idn_label,
+    extract_registrable_domain,
+    is_shared_hosting_subdomain,
+)
 
 logger = get_logger(__name__)
 
@@ -59,8 +64,13 @@ class IDNAgent:
 
     @property
     def ready(self) -> bool:
-        """True cuando catálogo + índice de referencia ya fueron cargados."""
+        """True cuando initialize terminó, incluso usando fallback sin archivos."""
         return self._ready
+
+    @property
+    def has_reference_knowledge(self) -> bool:
+        """Whether both the confusables catalog and reference index are populated."""
+        return bool(self._confusables) and self._bktree is not None and self._bktree.size > 0
 
     async def initialize(
         self,
@@ -83,23 +93,31 @@ class IDNAgent:
         self._confusables = load_confusables_catalog(path)
 
         self._bktree = BKTree(self._confusables)
+        self._reference_domains = set()
 
         if reference_domains is not None:
-            self._reference_domains = set(reference_domains)
-            self._bktree.build_from_set(reference_domains)
-            logger.info("idn_agent_initialized", bktree_size=self._bktree.size)
+            self._reference_domains = {
+                extract_registrable_domain(domain.strip())
+                for domain in reference_domains
+                if domain.strip()
+            }
         else:
             top1m_path = Path(settings.TOP1M_PATH)
             if top1m_path.exists():
-                domains = await _load_top1m(top1m_path)
-                self._reference_domains = domains
-                self._bktree.build_from_set(domains)
-                logger.info("idn_agent_initialized", bktree_size=self._bktree.size)
+                self._reference_domains = await _load_top1m(top1m_path)
             else:
                 logger.warning(
                     "idn_agent_no_reference_index", top1m_path=str(top1m_path)
                 )
 
+        # Reputation needs complete registrable domains; homograph matching
+        # must use the same normalised labels as analyze(), without the suffix.
+        reference_labels = {
+            _normalize_and_decode(extract_idn_label(domain))
+            for domain in self._reference_domains
+        }
+        self._bktree.build_from_set(reference_labels)
+        logger.info("idn_agent_initialized", bktree_size=self._bktree.size)
         self._ready = True
 
     # ------------------------------------------------------------------
@@ -109,8 +127,11 @@ class IDNAgent:
     def is_trusted_domain(self, domain: str) -> bool:
         """
         True si el dominio pertenece a la allowlist institucional
-        (``TRUSTED_DOMAIN_SUFFIXES``, match por sufijo) o si su 2LD está en
+        (``TRUSTED_DOMAIN_SUFFIXES``, match por sufijo) o si su dominio registrable está en
         el índice de referencia top-1M cargado en ``initialize()``.
+
+        Los tenants de hosting compartido conocido no heredan confianza del
+        proveedor. La resolución registrable usa una lista acotada de sufijos.
 
         Usado por el gate anti-FP del WebProbeAgent (T3): el boost del probe
         se anula para dominios confiables — una página legítima de login no
@@ -119,13 +140,12 @@ class IDNAgent:
         d = domain.strip().lower().rstrip(".")
         if not d:
             return False
+        if is_shared_hosting_subdomain(d):
+            return False
         for suffix in TRUSTED_DOMAIN_SUFFIXES:
             if d == suffix or d.endswith("." + suffix):
                 return True
-        labels = d.split(".")
-        if len(labels) >= 2:
-            return f"{labels[-2]}.{labels[-1]}" in self._reference_domains
-        return False
+        return "." in d and extract_registrable_domain(d) in self._reference_domains
 
     # ------------------------------------------------------------------
     # Main analysis entry point
@@ -163,6 +183,12 @@ class IDNAgent:
             if self._bktree is not None and self._bktree.size > 0:
                 matches = self._bktree.search(unicode_form, max_dist=3, limit=1000)
                 sim_v = matches[0][1] if matches else 0.0
+
+            # An exact known ASCII owner is not impersonating itself. Keep TI,
+            # email and web signals active for compromised legitimate sites.
+            # A different TLD or a shared-hosting tenant does not inherit this.
+            if not confusable_chars and not mixed and self.is_trusted_domain(domain):
+                sim_v = 0.0
 
             # Stage 5 — compute S_IDN_local
             f_mix_val = F_MIX if mixed else 1.0
@@ -227,7 +253,7 @@ def _normalize_and_decode(label: str) -> str:
 
 async def _load_top1m(path: Path, limit: int = 1_000_000) -> set[str]:
     """
-    Load a Majestic Million / Tranco top-1M CSV into a set of 2LD strings.
+    Load a top-1M file into a set of registrable domains (bounded suffix list).
 
     Supports both plain-text (one domain per line) and CSV formats where the
     domain is the last comma-separated field.
@@ -241,12 +267,12 @@ async def _load_top1m(path: Path, limit: int = 1_000_000) -> set[str]:
                 raw = line.strip()
                 if not raw:
                     continue
-                # CSV: rank,domain  or  rank,domain,category,...
+                # CSV: rank,domain (the final field must contain the domain).
                 parts = raw.split(",")
                 domain = parts[-1].strip().lower() if len(parts) > 1 else parts[0].strip().lower()
-                labels = domain.split(".")
-                if len(labels) >= 2:
-                    domains.add(f"{labels[-2]}.{labels[-1]}")
+                domain = domain.rstrip(".")
+                if "." in domain:
+                    domains.add(extract_registrable_domain(domain))
     except OSError as exc:
         logger.warning("top1m_load_failed", path=str(path), error=str(exc))
 

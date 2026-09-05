@@ -1,0 +1,89 @@
+{
+  "retrieved_at": "2026-09-05",
+  "purpose": "Public security references, not labeled incidents or evaluation examples",
+  "sources": [
+    {
+      "url": "https://www.unicode.org/reports/tr39/",
+      "snapshot": "search-rag-unicode.json",
+      "title": "Unicode Security Mechanisms — UTS #39, revision 32, Unicode 17.0",
+      "publisher": "Unicode Consortium",
+      "language": "en",
+      "topic": "homógrafos IDN, confusables Unicode, punycode, mixed-script detection",
+      "start_heading": "^## 4 ",
+      "stop_heading": "^## 6 "
+    },
+    {
+      "url": "https://attack.mitre.org/techniques/T1566/",
+      "snapshot": "search-rag-mitre.json",
+      "publisher": "MITRE ATT&CK",
+      "language": "en",
+      "topic": "phishing, ingeniería social, initial access, T1566",
+      "stop_heading": "^## Procedure Examples"
+    },
+    {
+      "url": "https://attack.mitre.org/techniques/T1566/001/",
+      "snapshot": "search-rag-mitre.json",
+      "publisher": "MITRE ATT&CK",
+      "language": "en",
+      "topic": "spearphishing attachment, adjuntos maliciosos, T1566.001",
+      "stop_heading": "^## Procedure Examples"
+    },
+    {
+      "url": "https://attack.mitre.org/techniques/T1566/002/",
+      "snapshot": "search-rag-mitre.json",
+      "publisher": "MITRE ATT&CK",
+      "language": "en",
+      "topic": "spearphishing link, enlaces, homógrafos IDN, OAuth, device code phishing, T1566.002",
+      "stop_heading": "^## Procedure Examples"
+    },
+    {
+      "url": "https://www.cisa.gov/secure-our-world/recognize-and-report-phishing",
+      "snapshot": "search-rag-cisa.json",
+      "publisher": "CISA",
+      "language": "en",
+      "topic": "recognize report phishing, urgencia, solicitudes de información, CISA archived guidance",
+      "start_heading": "^# Recognize",
+      "stop_heading": "^## Other Ways"
+    },
+    {
+      "url": "https://www.cisa.gov/audiences/small-and-medium-businesses/secure-your-business/teach-employees-avoid-phishing",
+      "snapshot": "search-rag-cisa.json",
+      "publisher": "CISA",
+      "language": "en",
+      "topic": "phishing awareness training, enlaces sospechosos, verificación por canal independiente",
+      "stop_heading": "^## Printable Tips"
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/defender-office-365/email-authentication-about",
+      "snapshot": "search-rag-authentication.json",
+      "publisher": "Microsoft Learn",
+      "language": "en",
+      "topic": "SPF DKIM DMARC, email authentication alignment, forwarding, false positives",
+      "stop_heading": "^## Feedback"
+    },
+    {
+      "url": "https://learn.microsoft.com/es-es/defender-office-365/email-authentication-about",
+      "snapshot": "rag-authentication-es.json",
+      "publisher": "Microsoft Learn",
+      "language": "es",
+      "topic": "SPF DKIM DMARC, autenticación del correo, alineación, reenvío, falsos positivos",
+      "stop_heading": "^## Comentarios"
+    },
+    {
+      "url": "https://learn.microsoft.com/en-us/defender-xdr/session-cookie-theft-alert",
+      "snapshot": "search-rag-aitm.json",
+      "publisher": "Microsoft Learn",
+      "language": "en",
+      "topic": "adversary in the middle AiTM phishing, session cookie theft, MFA bypass",
+      "stop_heading": "^## Related content"
+    },
+    {
+      "url": "https://www.incibe.es/incibe/protegete-conoce-a-fondo-phishing",
+      "snapshot": "rag-incibe-phishing.json",
+      "publisher": "INCIBE",
+      "language": "es",
+      "topic": "phishing, suplantación, enlaces fraudulentos, remitente, urgencia, prevención",
+      "start_heading": "^## Cómo reconocer"
+    }
+  ]
+}

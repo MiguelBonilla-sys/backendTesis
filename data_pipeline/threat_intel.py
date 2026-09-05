@@ -13,6 +13,7 @@ Cache Redis: key = ti:{domain_2ld}, TTL = settings.TI_CACHE_TTL (3600s).
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC
 
 import httpx
 
@@ -21,7 +22,7 @@ from core.constants import W_GSB, W_URLSCAN, W_VT, W_WHOIS
 from core.logger import get_logger
 from data_pipeline.cache_manager import get_ti_cache, set_ti_cache
 from schemas.analyze import TIResult
-from utils.url_parser import extract_2ld
+from utils.url_parser import extract_registrable_domain
 
 logger = get_logger(__name__)
 
@@ -58,7 +59,9 @@ class ThreatIntelService:
         Returns:
             TIResult con s_vt, s_urlscan, s_gsb y s_ti.
         """
-        domain_2ld = extract_2ld(domain)
+        # Dominio registrable (eTLD+1) — clave de cache y `domainName` de WhoisXML.
+        # `email.mg.abdataclassactionmail.com` → `abdataclassactionmail.com`.
+        domain_2ld = extract_registrable_domain(domain)
 
         # --- 1. Cache check ---------------------------------------------------
         cached = await get_ti_cache(domain_2ld)
@@ -349,19 +352,30 @@ class ThreatIntelService:
             if resp.status_code == 200:
                 data = resp.json()
                 whois_record: dict = data.get("WhoisRecord", {})
+                registry: dict = whois_record.get("registryData", {}) or {}
+                # `createdDate` es ISO 8601 real ("…Z"); `createdDateNormalized`
+                # trae sufijo " UTC" que `fromisoformat` no entiende. Se prueba
+                # el ISO primero y `registryData` como último recurso.
                 created_date: str | None = (
-                    whois_record.get("createdDateNormalized")
-                    or whois_record.get("createdDate")
+                    whois_record.get("createdDate")
+                    or registry.get("createdDate")
+                    or whois_record.get("createdDateNormalized")
+                    or registry.get("createdDateNormalized")
                 )
 
                 if created_date:
-                    from datetime import datetime, timezone
+                    from datetime import datetime
 
+                    raw = (
+                        created_date.strip()
+                        .replace("Z", "+00:00")
+                        .replace(" UTC", "+00:00")
+                    )
                     try:
-                        created = datetime.fromisoformat(
-                            created_date.replace("Z", "+00:00")
-                        )
-                        age_days = (datetime.now(timezone.utc) - created).days
+                        created = datetime.fromisoformat(raw)
+                        if created.tzinfo is None:
+                            created = created.replace(tzinfo=UTC)
+                        age_days = (datetime.now(UTC) - created).days
 
                         suspicious_days = settings.DOMAIN_AGE_SUSPICIOUS_DAYS
                         if age_days < suspicious_days:
@@ -371,13 +385,18 @@ class ThreatIntelService:
                         else:
                             return 0.0, age_days   # dominio maduro = no agrega riesgo
                     except (ValueError, TypeError):
-                        pass
-
-            logger.warning(
-                "whoisxml_unexpected_status",
-                status=resp.status_code,
-                domain=domain,
-            )
+                        logger.warning(
+                            "whoisxml_created_date_unparseable",
+                            domain=domain, value=created_date,
+                        )
+                else:
+                    logger.warning("whoisxml_no_created_date", domain=domain)
+            else:
+                logger.warning(
+                    "whoisxml_unexpected_status",
+                    status=resp.status_code,
+                    domain=domain,
+                )
 
         except httpx.TimeoutException:
             logger.warning("whoisxml_timeout", domain=domain)

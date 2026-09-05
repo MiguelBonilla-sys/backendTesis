@@ -81,7 +81,7 @@ async def run_pipeline_core(
     )
     probe_domain_trusted = idn_agent.is_trusted_domain(probe_final_domain)
 
-    return await fusion_agent.fuse(
+    response = await fusion_agent.fuse(
         url=url,
         domain=domain,
         idn_result=idn_result,
@@ -95,6 +95,11 @@ async def run_pipeline_core(
         probe_result=probe_result,
         probe_domain_trusted=probe_domain_trusted,
     )
+
+    # Conductor: segunda pasada deliberada para casos borderline (opt-in).
+    from services.orchestrator import apply_conductor
+
+    return await apply_conductor(response)
 
 
 async def _analyze_single_url_for_email(
@@ -123,22 +128,32 @@ async def _analyze_single_url_for_email(
 
 def schedule_autoingest(response: AnalyzeResponse) -> None:
     """
-    Encola la auto-ingesta de un resultado de alta confianza en ChromaDB
-    (fire-and-forget). Solo cuando ``s_risk >= AUTO_INGEST_THRESHOLD``.
+    Encola la ingesta del resultado en ChromaDB (fire-and-forget).
+
+    Con ``LEARN_FROM_EVERY_ANALYSIS`` (default) se ingesta *cada* análisis con
+    un ``tier`` de confianza (``auto_high``/``auto_mid``/``auto_low``) que fija
+    su peso en el re-ranking — el RAG aprende también qué es benigno, sin que un
+    caso incierto pese como uno confirmado. Sin el flag, solo
+    ``s_risk >= AUTO_INGEST_THRESHOLD``.
 
     El ``incident_id`` se alinea con ``incidents.id`` para que los documentos
     sean purgables si luego se marca como falso positivo (T11).
     """
+    from core.config import settings
     from data_pipeline.knowledge_updater import (
         AUTO_INGEST_THRESHOLD,
         knowledge_updater,
+        tier_for,
     )
 
-    if response.s_risk < AUTO_INGEST_THRESHOLD:
+    if not settings.LEARN_FROM_EVERY_ANALYSIS and response.s_risk < AUTO_INGEST_THRESHOLD:
         return
+
+    tier = tier_for(response.verdict, response.s_risk)
 
     asyncio.create_task(
         knowledge_updater.ingest_from_analysis(
+            tier=tier,
             url=response.url,
             domain=response.domain,
             verdict=response.verdict,

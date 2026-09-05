@@ -1,8 +1,9 @@
 """Tests for WhoisXML integration in ThreatIntelService"""
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
-from datetime import datetime, timezone, timedelta
+import pytest
 
 
 class TestQueryWhoisXML:
@@ -22,7 +23,7 @@ class TestQueryWhoisXML:
         from data_pipeline.threat_intel import ThreatIntelService
         service = ThreatIntelService()
 
-        ten_days_ago = (datetime.now(timezone.utc) - timedelta(days=10)).isoformat()
+        ten_days_ago = (datetime.now(UTC) - timedelta(days=10)).isoformat()
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -51,7 +52,7 @@ class TestQueryWhoisXML:
         from data_pipeline.threat_intel import ThreatIntelService
         service = ThreatIntelService()
 
-        old_date = (datetime.now(timezone.utc) - timedelta(days=1825)).isoformat()
+        old_date = (datetime.now(UTC) - timedelta(days=1825)).isoformat()
 
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -71,6 +72,56 @@ class TestQueryWhoisXML:
 
         assert score == 0.0
         assert age == 1825
+
+    @pytest.mark.asyncio
+    async def test_parses_real_api_utc_suffix_format(self):
+        """La API real devuelve `createdDate` "…Z" y `createdDateNormalized`
+        con sufijo " UTC" (que `fromisoformat` no entiende). Debe parsear igual."""
+        from data_pipeline.threat_intel import ThreatIntelService
+        service = ThreatIntelService()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "WhoisRecord": {
+                "createdDate": "2021-09-16T15:43:13Z",
+                "createdDateNormalized": "2021-09-16 15:43:13 UTC",
+            }
+        }
+        with patch("data_pipeline.threat_intel.settings") as mock_settings, \
+             patch("httpx.AsyncClient") as mock_client:
+            mock_settings.WHOISXML_API_KEY = "test_key"
+            mock_settings.DOMAIN_AGE_SUSPICIOUS_DAYS = 30
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
+                get=AsyncMock(return_value=mock_response)
+            ))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+            score, age = await service._query_whoisxml("abdataclassactionmail.com")
+
+        assert score == 0.0          # dominio de 2021 → maduro
+        assert age is not None and age > 1000
+
+    @pytest.mark.asyncio
+    async def test_parses_normalized_only_with_utc_suffix(self):
+        from data_pipeline.threat_intel import ThreatIntelService
+        service = ThreatIntelService()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "WhoisRecord": {"createdDateNormalized": "2026-08-20 00:00:00 UTC"}
+        }
+        with patch("data_pipeline.threat_intel.settings") as mock_settings, \
+             patch("httpx.AsyncClient") as mock_client:
+            mock_settings.WHOISXML_API_KEY = "test_key"
+            mock_settings.DOMAIN_AGE_SUSPICIOUS_DAYS = 30
+            mock_client.return_value.__aenter__ = AsyncMock(return_value=MagicMock(
+                get=AsyncMock(return_value=mock_response)
+            ))
+            mock_client.return_value.__aexit__ = AsyncMock(return_value=None)
+            score, age = await service._query_whoisxml("newish.com")
+
+        assert age is not None  # ~pocos días → parseado, no None
 
     @pytest.mark.asyncio
     async def test_returns_zero_on_timeout(self):

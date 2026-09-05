@@ -1,24 +1,96 @@
-"""Async ChromaDB client — manages the three vector collections."""
+"""Async ChromaDB client — observed patterns, baseline and public references."""
 
 from __future__ import annotations
+
+import asyncio
 
 import chromadb
 from chromadb import AsyncHttpClient
 
 from core.config import settings
-from core.constants import COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI
+from core.constants import (
+    COLLECTION_BASELINE,
+    COLLECTION_EMAIL,
+    COLLECTION_IDN,
+    COLLECTION_KNOWLEDGE,
+    COLLECTION_TI,
+)
 from core.exceptions import DatabaseError
 from core.logger import get_logger
 
 logger = get_logger(__name__)
 
 _client: AsyncHttpClient | None = None
+_embed_fn = None  # cache de la EmbeddingFunction (None = default de ChromaDB)
+_embed_fn_resolved = False
+
+
+class _OllamaEmbedder:
+    """EmbeddingFunction de ChromaDB respaldada por Ollama local
+    (``POST {base}/api/embed``). httpx en vez del paquete ``ollama`` — cero deps
+    nuevas. Corre client-side: los embeddings se calculan acá y se envían al
+    servidor de ChromaDB."""
+
+    def __init__(self, base_url: str, model: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+
+    @staticmethod
+    def name() -> str:
+        return "ollama"
+
+    def get_config(self) -> dict:
+        return {"base_url": self._base_url, "model": self._model}
+
+    @classmethod
+    def build_from_config(cls, config: dict) -> _OllamaEmbedder:
+        return cls(config["base_url"], config["model"])
+
+    def __call__(self, input: list[str]) -> list[list[float]]:  # noqa: A002 — firma de ChromaDB
+        import httpx
+
+        resp = httpx.post(
+            f"{self._base_url}/api/embed",
+            json={"model": self._model, "input": list(input)},
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        return resp.json()["embeddings"]
+
+    # ChromaDB 1.5.x llama estos en upsert/query respectivamente
+    def embed_documents(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        return self(input)
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        return self(input)
+
+
+def _embedding_function():
+    """EmbeddingFunction para las colecciones.
+
+    Preserve the configured model even during outages. Silently switching to
+    MiniLM would mix incompatible dimensions/semantic spaces in existing data.
+    """
+    global _embed_fn, _embed_fn_resolved
+    if _embed_fn_resolved:
+        return _embed_fn
+    _embed_fn_resolved = True
+
+    if settings.EMBED_PROVIDER.lower() != "ollama":
+        return _embed_fn  # None → default
+
+    _embed_fn = _OllamaEmbedder(settings.EMBED_BASE_URL, settings.EMBED_MODEL)
+    logger.info("chromadb_embedder", provider="ollama", model=settings.EMBED_MODEL)
+    return _embed_fn
+
 
 # Collections that must exist at startup
 _REQUIRED_COLLECTIONS: list[str] = [
     COLLECTION_EMAIL,
     COLLECTION_IDN,
     COLLECTION_TI,
+    COLLECTION_BASELINE,
+    COLLECTION_KNOWLEDGE,
 ]
 
 
@@ -60,7 +132,12 @@ def get_client() -> AsyncHttpClient:
 async def get_or_create_collection(name: str) -> chromadb.Collection:
     """Return the named collection, creating it if it does not exist."""
     client = get_client()
+    ef = _embedding_function()
     try:
+        if ef is not None:
+            return await client.get_or_create_collection(
+                name=name, embedding_function=ef
+            )
         return await client.get_or_create_collection(name=name)
     except Exception as exc:
         raise DatabaseError(
@@ -80,13 +157,21 @@ async def upsert_documents(
     Uses ChromaDB upsert semantics: inserts new documents and overwrites existing
     ones with the same id. Safe to call repeatedly with the same incident_id.
     """
+    if not ids:
+        return
     collection = await get_or_create_collection(collection_name)
     try:
+        ef = _embedding_function()
+        extra = {"embeddings": await asyncio.to_thread(ef, documents)} if ef else {}
         await collection.upsert(
             ids=ids,
             documents=documents,
             metadatas=metadatas or [{} for _ in ids],
+            **extra,
         )
+        from data_pipeline.hybrid_retrieval import hybrid_retriever
+
+        hybrid_retriever.invalidate(collection_name)
     except Exception as exc:
         raise DatabaseError(
             message=f"ChromaDB upsert failed on collection '{collection_name}'",
@@ -97,18 +182,19 @@ async def upsert_documents(
 async def delete_document(collection_name: str, doc_id: str) -> None:
     """Delete a single document from *collection_name* by id.
 
-    Silently ignores missing ids so callers don't need to guard existence.
+    Missing ids are harmless; storage errors propagate so feedback stays pending.
     """
     collection = await get_or_create_collection(collection_name)
     try:
         await collection.delete(ids=[doc_id])
+        from data_pipeline.hybrid_retrieval import hybrid_retriever
+
+        hybrid_retriever.invalidate(collection_name)
     except Exception as exc:
-        logger.warning(
-            "chromadb_delete_failed",
-            collection=collection_name,
-            doc_id=doc_id,
-            error=str(exc),
-        )
+        raise DatabaseError(
+            message=f"ChromaDB delete failed on collection '{collection_name}'",
+            detail=str(exc),
+        ) from exc
 
 
 async def query_collection(
@@ -122,13 +208,18 @@ async def query_collection(
     Returns a flat list of result dicts, each containing:
     - ``id``: document id
     - ``document``: the stored text
-    - ``distance``: cosine distance
+    - ``distance``: collection metric distance (default: squared L2)
     - ``metadata``: associated metadata dict
     """
     collection = await get_or_create_collection(collection_name)
     try:
+        ef = _embedding_function()
+        query = (
+            {"query_embeddings": await asyncio.to_thread(ef, query_texts)}
+            if ef else {"query_texts": query_texts}
+        )
         results = await collection.query(
-            query_texts=query_texts,
+            **query,
             n_results=n_results,
             include=["documents", "distances", "metadatas"],
         )
@@ -160,3 +251,29 @@ async def query_collection(
             )
 
     return flat
+
+
+async def get_all_documents(collection_name: str) -> list[dict]:
+    """Todos los documentos de una colección — ``[{id, document, metadata}]``.
+
+    Usado por el retriever híbrido para construir el índice BM25 (canal léxico).
+    Ante cualquier fallo devuelve ``[]`` (el híbrido cae a denso-solo).
+    """
+    try:
+        collection = await get_or_create_collection(collection_name)
+        res = await collection.get(include=["documents", "metadatas"])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("chromadb_get_all_failed", collection=collection_name, error=str(exc))
+        return []
+
+    ids = res.get("ids") or []
+    docs = res.get("documents") or []
+    metas = res.get("metadatas") or []
+    return [
+        {
+            "id": ids[i],
+            "document": docs[i] if i < len(docs) else "",
+            "metadata": metas[i] if i < len(metas) else {},
+        }
+        for i in range(len(ids))
+    ]

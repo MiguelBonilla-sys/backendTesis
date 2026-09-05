@@ -13,8 +13,23 @@ from core.constants import (
     PROBE_BRAND_WEIGHT,
     PROBE_FORM_ACTION_WEIGHT,
     PROBE_LOGIN_WEIGHT,
+    PROBE_MAX_REDIRECTS,
+    PROBE_MAX_RESPONSE_BYTES,
     PROBE_REDIRECT_WEIGHT,
 )
+
+
+def _dns_addresses(*addresses: str):
+    return [
+        (
+            socket.AF_INET6 if ":" in address else socket.AF_INET,
+            socket.SOCK_STREAM,
+            socket.IPPROTO_TCP,
+            "",
+            (address, 0),
+        )
+        for address in addresses
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -44,19 +59,50 @@ class TestSSRFBlocking:
         assert _is_ssrf_blocked("8.8.8.8") is False
 
     def test_dns_resolves_to_private_blocked(self):
-        with patch("agents.web_probe_agent.socket.gethostbyname", return_value="10.0.0.1"):
+        with patch("agents.web_probe_agent.socket.getaddrinfo", return_value=_dns_addresses("10.0.0.1")):
             assert _is_ssrf_blocked("internal.corp") is True
 
     def test_dns_failure_fail_closed(self):
         with patch(
-            "agents.web_probe_agent.socket.gethostbyname",
+            "agents.web_probe_agent.socket.getaddrinfo",
             side_effect=socket.gaierror("NXDOMAIN"),
         ):
             assert _is_ssrf_blocked("nonexistent.host.invalid") is True
 
     def test_dns_resolves_to_public_allowed(self):
-        with patch("agents.web_probe_agent.socket.gethostbyname", return_value="93.184.216.34"):
+        with patch("agents.web_probe_agent.socket.getaddrinfo", return_value=_dns_addresses("93.184.216.34")):
             assert _is_ssrf_blocked("example.com") is False
+
+    @pytest.mark.parametrize("address", [
+        "::", "fc00::1", "fe80::1", "::ffff:127.0.0.1", "::ffff:169.254.169.254",
+        "224.0.0.1", "ff02::1", "100.64.0.1", "240.0.0.1", "192.0.2.1",
+    ])
+    def test_non_public_and_mapped_addresses_blocked(self, address):
+        assert _is_ssrf_blocked(address) is True
+
+    @pytest.mark.parametrize("address", ["2606:4700:4700::1111", "::ffff:8.8.8.8"])
+    def test_public_ipv6_allowed(self, address):
+        assert _is_ssrf_blocked(address) is False
+
+    @pytest.mark.parametrize("addresses", [
+        ("93.184.216.34", "10.0.0.1"),
+        ("93.184.216.34", "::1"),
+        ("2606:4700:4700::1111", "fc00::1"),
+        (),
+    ])
+    def test_any_non_public_dns_answer_or_no_answers_blocks_host(self, addresses):
+        with patch("agents.web_probe_agent.socket.getaddrinfo", return_value=_dns_addresses(*addresses)):
+            assert _is_ssrf_blocked("mixed.example") is True
+
+    def test_all_public_dns_answers_allowed(self):
+        with patch(
+            "agents.web_probe_agent.socket.getaddrinfo",
+            return_value=_dns_addresses("93.184.216.34", "2606:4700:4700::1111"),
+        ) as resolve:
+            assert _is_ssrf_blocked("public.example") is False
+        resolve.assert_called_once_with(
+            "public.example", None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -87,6 +133,19 @@ class TestAnalyzeInputValidation:
         result = await WebProbeAgent().analyze("https://192.168.1.1/login")
         assert result.s_probe == 0.0
         assert result.error is not None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("url", [
+        "https://", "http://[broken", "https://example.com:bad/",
+        "https://example.com:0/", "https://example.com:65536/",
+        "https://user:secret@example.com/",
+    ])
+    async def test_invalid_url_returns_neutral_without_request(self, url):
+        with patch("agents.web_probe_agent.httpx.AsyncClient.stream") as stream:
+            result = await WebProbeAgent().analyze(url)
+        assert result.s_probe == 0.0
+        assert result.error
+        stream.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -267,6 +326,14 @@ def _make_mock_client(
 
 
 class TestFetchAndAnalyzeHTTPErrors:
+    @pytest.fixture(autouse=True)
+    def public_dns(self):
+        with patch(
+            "agents.web_probe_agent.socket.getaddrinfo",
+            return_value=_dns_addresses("93.184.216.34"),
+        ):
+            yield
+
     @pytest.mark.asyncio
     async def test_too_many_redirects_graceful(self):
         agent = WebProbeAgent()
@@ -338,3 +405,180 @@ class TestFetchAndAnalyzeHTTPErrors:
             result = await agent._fetch_and_analyze("https://example.com", "example.com")
         assert result.s_probe == 0.0
         assert result.error is None
+
+    @pytest.mark.asyncio
+    async def test_oversized_chunk_is_truncated_before_signal_extraction(self):
+        html = b" " * PROBE_MAX_RESPONSE_BYTES + b'<form><input type="password"></form>'
+        mock_client = _make_mock_client(html=html)
+        with patch("agents.web_probe_agent.httpx.AsyncClient", return_value=mock_client):
+            result = await WebProbeAgent().analyze("https://example.com/")
+        assert result.error is None
+        assert result.has_password_field is False
+        assert result.s_probe == 0.0
+
+
+class _TrackedStream(httpx.AsyncByteStream):
+    """Response stream that records consumption and explicit closure."""
+
+    def __init__(self, chunks):
+        self.chunks = chunks
+        self.chunks_read = 0
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            self.chunks_read += 1
+            yield chunk
+
+    async def aclose(self):
+        self.closed = True
+
+
+async def _run_transport_probe(handler, *, dns=None):
+    """Exercise real HTTPX redirect/stream behavior without opening sockets."""
+    requests = []
+
+    def record(request):
+        requests.append(request)
+        return handler(request)
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(record))
+    with (
+        patch("agents.web_probe_agent.httpx.AsyncClient", return_value=client),
+        patch(
+            "agents.web_probe_agent.socket.getaddrinfo",
+            side_effect=dns,
+            return_value=_dns_addresses("93.184.216.34"),
+        ),
+    ):
+        result = await WebProbeAgent().analyze("https://public.example/start")
+    return result, requests
+
+
+class TestRedirectSafety:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("location", [
+        "http://127.0.0.1/admin",
+        "http://169.254.169.254/latest/meta-data/",
+        "//192.168.1.1/admin",
+        "http://[::1]/admin",
+        "http://[::ffff:169.254.169.254]/metadata",
+        "file:///etc/passwd",
+        "ftp://files.example/secret",
+        "https://user:secret@other.example/",
+        "https://other.example:65536/",
+        "http://[broken",
+    ])
+    async def test_unsafe_redirect_never_reaches_transport(self, location):
+        body = _TrackedStream([b"redirect body must not be read"])
+        result, requests = await _run_transport_probe(
+            lambda _: httpx.Response(302, headers={"location": location}, stream=body)
+        )
+        assert len(requests) == 1
+        assert result.s_probe == 0.0
+        assert result.error
+        assert body.chunks_read == 0
+        assert body.closed is True
+
+    @pytest.mark.asyncio
+    async def test_redirect_hostname_with_private_aaaa_is_blocked(self):
+        def dns(host, *_args, **_kwargs):
+            if host == "internal.example":
+                return _dns_addresses("93.184.216.34", "fc00::1")
+            return _dns_addresses("93.184.216.34")
+
+        result, requests = await _run_transport_probe(
+            lambda _: httpx.Response(302, headers={"location": "https://internal.example/"}),
+            dns=dns,
+        )
+        assert len(requests) == 1
+        assert result.error == "SSRF-blocked host: internal.example"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+    async def test_public_relative_and_cross_domain_redirects_preserve_signals(self, status):
+        def handler(request):
+            if request.url.path == "/start":
+                return httpx.Response(status, headers={"location": "/intermediate"})
+            if request.url.path == "/intermediate":
+                return httpx.Response(status, headers={"location": "https://other.example/login"})
+            return httpx.Response(
+                200, headers={"content-type": "text/html"},
+                content=b'<form><input type="password"></form>',
+            )
+
+        result, requests = await _run_transport_probe(handler)
+        assert [str(request.url) for request in requests] == [
+            "https://public.example/start", "https://public.example/intermediate",
+            "https://other.example/login",
+        ]
+        assert result.error is None
+        assert result.redirect_count == 2
+        assert result.domain_changed_on_redirect is True
+        assert result.final_domain == "other.example"
+        assert result.has_login_form is True
+        assert result.s_probe == min(PROBE_LOGIN_WEIGHT + PROBE_REDIRECT_WEIGHT, PROBE_BOOST_CAP)
+
+    @pytest.mark.asyncio
+    async def test_dns_revalidated_even_on_same_domain_redirect(self):
+        answers = iter([
+            _dns_addresses("93.184.216.34"), _dns_addresses("169.254.169.254")
+        ])
+        result, requests = await _run_transport_probe(
+            lambda _: httpx.Response(302, headers={"location": "/next"}),
+            dns=lambda *_args, **_kwargs: next(answers),
+        )
+        assert len(requests) == 1
+        assert result.error == "SSRF-blocked host: public.example"
+
+    @pytest.mark.asyncio
+    async def test_redirect_loop_stops_at_limit(self):
+        result, requests = await _run_transport_probe(
+            lambda _: httpx.Response(302, headers={"location": "/start"})
+        )
+        assert len(requests) == PROBE_MAX_REDIRECTS + 1
+        assert result.redirect_count == PROBE_MAX_REDIRECTS
+        assert result.error == "Too many redirects"
+        assert result.s_probe == 0.0
+
+    @pytest.mark.asyncio
+    async def test_exact_redirect_limit_can_reach_html(self):
+        count = 0
+
+        def handler(_request):
+            nonlocal count
+            count += 1
+            if count <= PROBE_MAX_REDIRECTS:
+                return httpx.Response(302, headers={"location": f"/page{count}"})
+            return httpx.Response(200, headers={"content-type": "text/html"}, content=b"<html>ok</html>")
+
+        result, requests = await _run_transport_probe(handler)
+        assert len(requests) == PROBE_MAX_REDIRECTS + 1
+        assert result.redirect_count == PROBE_MAX_REDIRECTS
+        assert result.error is None
+        assert result.domain_changed_on_redirect is False
+
+    @pytest.mark.asyncio
+    async def test_html_stream_stops_at_body_limit_and_closes(self):
+        body = _TrackedStream([
+            b" " * PROBE_MAX_RESPONSE_BYTES,
+            b'<form><input type="password"></form>',
+        ])
+        result, _requests = await _run_transport_probe(
+            lambda _: httpx.Response(200, headers={"content-type": "text/html"}, stream=body)
+        )
+        assert body.chunks_read == 1
+        assert body.closed is True
+        assert result.error is None
+        assert result.has_password_field is False
+        assert result.s_probe == 0.0
+
+    @pytest.mark.asyncio
+    async def test_non_html_body_is_never_consumed(self):
+        body = _TrackedStream([b"large binary data"])
+        result, _requests = await _run_transport_probe(
+            lambda _: httpx.Response(200, headers={"content-type": "application/pdf"}, stream=body)
+        )
+        assert body.chunks_read == 0
+        assert body.closed is True
+        assert "Non-HTML" in result.error

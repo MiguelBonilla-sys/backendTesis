@@ -14,16 +14,59 @@ Los 3 ChromaDB collections se actualizan por cada análisis confirmado:
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from core.constants import COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI
 from core.logger import get_logger
+from core.redaction import redact
 from models.chromadb_client import delete_document, upsert_documents
 from models.database import execute, fetch
 
 logger = get_logger(__name__)
 
-AUTO_INGEST_THRESHOLD: float = 0.90  # s_risk >= this → auto-ingest sin confirmación
+AUTO_INGEST_THRESHOLD: float = 0.90  # s_risk >= this → tier "auto_high"
+
+
+def context_header(
+    *,
+    verdict: str,
+    domain: str,
+    domain_unicode: str = "",
+    impersonates: str = "",
+    source: str = "",
+) -> str:
+    """Línea de contexto que se antepone a cada chunk del RAG — ancla de
+    recuperación para el canal denso y el BM25 (contextual retrieval,
+    versión determinista, sin LLM). Ej.:
+    ``[ctx verdict=PHISHING domain=pаypal impersonates=paypal.com source=seed_corpus]``
+    """
+    dec = domain_unicode or domain
+    parts = [f"verdict={verdict}", f"domain={dec}"]
+    if impersonates and impersonates != dec:
+        parts.append(f"impersonates={impersonates}")
+    if source:
+        parts.append(f"source={source}")
+    return "[ctx " + " ".join(parts) + "]"
+
+
+def _invalidate_bm25() -> None:
+    """Fuerza el rebuild del índice BM25 tras un cambio de corpus de alto valor
+    (feedback admin, purga de FP). La auto-ingesta se apoya en el TTL."""
+    try:
+        from data_pipeline.hybrid_retrieval import hybrid_retriever
+
+        hybrid_retriever.invalidate()
+    except Exception:  # noqa: BLE001 — best-effort
+        pass
+
+
+def tier_for(verdict: str, s_risk: float) -> str:
+    """Tier de confianza del documento auto-ingestado (peso en SOURCE_WEIGHTS)."""
+    if s_risk >= AUTO_INGEST_THRESHOLD:
+        return "auto_high"
+    if verdict == "SUSPICIOUS" or 0.40 <= s_risk < AUTO_INGEST_THRESHOLD:
+        return "auto_mid"
+    return "auto_low"
 
 
 class KnowledgeUpdaterService:
@@ -51,14 +94,19 @@ class KnowledgeUpdaterService:
         s_gsb: float = 0.0,
         incident_id: str | None = None,
         auto_ingested: bool = True,
+        tier: str = "auto_ingest",
     ) -> None:
         """
         Ingesta resultado de análisis en los 3 ChromaDB collections.
-        Llamar después de _persist_incident cuando s_risk >= AUTO_INGEST_THRESHOLD.
+
+        Con ``LEARN_FROM_EVERY_ANALYSIS`` se llama para *cada* análisis; ``tier``
+        (``auto_high``/``auto_mid``/``auto_low``, ver ``tier_for``) fija el peso
+        del documento en el re-ranking por procedencia. ``auto_ingested=False``
+        → ``source="admin_confirmed"`` (feedback humano, peso 1.0).
         Falla silenciosamente para no interrumpir el pipeline principal.
         """
-        ts = datetime.now(timezone.utc).isoformat()
-        source = "auto_ingest" if auto_ingested else "admin_confirmed"
+        ts = datetime.now(UTC).isoformat()
+        source = tier if auto_ingested else "admin_confirmed"
         doc_id = incident_id or hashlib.sha256(
             f"{url}:{ts}".encode()
         ).hexdigest()[:32]
@@ -66,8 +114,13 @@ class KnowledgeUpdaterService:
         confusable_str = (
             ", ".join(repr(c) for c in confusable_chars) if confusable_chars else "none"
         )
+        ctx = context_header(
+            verdict=verdict, domain=domain, domain_unicode=domain_unicode,
+            source=source,
+        )
 
         email_doc = (
+            f"{ctx}\n"
             f"{verdict} URL: {url}\n"
             f"Domain: {domain_unicode or domain}\n"
             f"s_risk={s_risk:.2f}, s_idn={s_idn_local:.2f}, "
@@ -77,6 +130,7 @@ class KnowledgeUpdaterService:
         )
 
         idn_doc = (
+            f"{ctx}\n"
             f"IDN attack pattern — {verdict}\n"
             f"Domain: {domain_unicode or domain} (original: {domain})\n"
             f"Confusable chars: {confusable_str}\n"
@@ -86,6 +140,7 @@ class KnowledgeUpdaterService:
         )
 
         ti_doc = (
+            f"{ctx}\n"
             f"TI signals — {verdict}: {domain}\n"
             f"VirusTotal={s_vt:.2f}, URLScan={s_urlscan:.2f}, "
             f"GSB={s_gsb:.2f}, aggregate={s_ti:.2f}\n"
@@ -104,13 +159,13 @@ class KnowledgeUpdaterService:
             await upsert_documents(
                 COLLECTION_EMAIL,
                 ids=[f"email_{doc_id}"],
-                documents=[email_doc],
+                documents=[redact(email_doc)],
                 metadatas=[metadata],
             )
             await upsert_documents(
                 COLLECTION_IDN,
                 ids=[f"idn_{doc_id}"],
-                documents=[idn_doc],
+                documents=[redact(idn_doc)],
                 metadatas=[{
                     **metadata,
                     "is_mixed_script": str(is_mixed_script),
@@ -120,7 +175,7 @@ class KnowledgeUpdaterService:
             await upsert_documents(
                 COLLECTION_TI,
                 ids=[f"ti_{doc_id}"],
-                documents=[ti_doc],
+                documents=[redact(ti_doc)],
                 metadatas=[{
                     **metadata,
                     "s_vt": str(s_vt),
@@ -137,6 +192,8 @@ class KnowledgeUpdaterService:
             )
         except Exception as exc:
             logger.error("knowledge_ingest_failed", doc_id=doc_id, error=str(exc))
+            if not auto_ingested:
+                raise
 
     async def ingest_confirmed_feedback(
         self,
@@ -163,6 +220,13 @@ class KnowledgeUpdaterService:
         llm_reason: str,
     ) -> None:
         """Ingesta feedback confirmado por admin y marca el registro como procesado."""
+        if confirmed_verdict == "LEGITIMATE":
+            await self.purge_incident_documents(incident_id)
+            await execute(
+                "UPDATE feedback SET ingested = true, ingested_at = NOW() WHERE id = $1",
+                feedback_id,
+            )
+            return
         await self.ingest_from_analysis(
             url=url,
             domain=domain,
@@ -189,6 +253,7 @@ class KnowledgeUpdaterService:
             "UPDATE feedback SET ingested = true, ingested_at = NOW() WHERE id = $1",
             feedback_id,
         )
+        _invalidate_bm25()
 
     async def purge_incident_documents(self, incident_id: str) -> None:
         """
@@ -210,6 +275,7 @@ class KnowledgeUpdaterService:
             (COLLECTION_TI, "ti_"),
         ):
             await delete_document(collection, f"{prefix}{incident_id}")
+        _invalidate_bm25()
         logger.info("knowledge_purged", incident_id=incident_id)
 
     async def process_feedback_queue(self, batch_size: int = 50) -> int:

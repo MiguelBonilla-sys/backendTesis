@@ -7,14 +7,18 @@ external form actions.
 
 s_probe ∈ [0.0, 1.0] — additive boost to s_risk in FusionAgent.
 
-Safety guarantees:
-  - SSRF protection: all private/loopback/link-local IP ranges blocked.
-  - Streaming read: max PROBE_MAX_RESPONSE_BYTES (64 KB) downloaded.
-  - Strict timeout: PROBE_TIMEOUT_S (8s) connect + read combined.
+Safety controls:
+  - Public HTTP(S) destinations only, revalidated before every redirect hop.
+  - Buffered HTML: max PROBE_MAX_RESPONSE_BYTES (64 KB) of decoded body.
+  - HTTP connect/read timeout: PROBE_TIMEOUT_S (8s) per operation.
   - Max redirects: PROBE_MAX_REDIRECTS (5) before abort.
   - Graceful degradation: always returns WebProbeResult — never raises.
     On any failure (timeout, DNS, SSRF block) returns s_probe=0.0 so the
     rest of the pipeline is unaffected.
+
+DNS validation checks every returned IPv4/IPv6 address. The HTTP transport
+resolves again when connecting, so this is not protection against DNS rebinding;
+deployment egress rules must also deny access to internal/metadata networks.
 """
 from __future__ import annotations
 
@@ -41,20 +45,15 @@ from schemas.analyze import WebProbeResult
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# SSRF block list — private/loopback/link-local/metadata CIDR ranges
+# SSRF policy — only globally routable unicast addresses
 # ---------------------------------------------------------------------------
-_BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
-    ipaddress.IPv4Network("10.0.0.0/8"),
-    ipaddress.IPv4Network("172.16.0.0/12"),
-    ipaddress.IPv4Network("192.168.0.0/16"),
-    ipaddress.IPv4Network("127.0.0.0/8"),
-    ipaddress.IPv4Network("169.254.0.0/16"),  # AWS metadata / link-local
-    ipaddress.IPv4Network("0.0.0.0/8"),
-    ipaddress.IPv4Network("100.64.0.0/10"),   # shared address space (RFC 6598)
-    ipaddress.IPv6Network("::1/128"),
-    ipaddress.IPv6Network("fc00::/7"),
-    ipaddress.IPv6Network("fe80::/10"),
-)
+
+
+def _is_blocked_address(address: str) -> bool:
+    ip = ipaddress.ip_address(address)
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    return not ip.is_global or ip.is_multicast
 
 # ---------------------------------------------------------------------------
 # Brand keyword list for impersonation detection (lowercase, Colombian context)
@@ -106,25 +105,45 @@ _META_REFRESH_RE = re.compile(
 
 def _is_ssrf_blocked(host: str) -> bool:
     """
-    Returns True if the host resolves to a private / blocked IP range.
+    Returns True unless every resolved address is globally routable unicast.
 
     Handles both direct IP literals and hostnames via DNS.
     Blocks on DNS failure (fail-closed).
     """
     # Handle IP literals (e.g., http://192.168.1.1/...)
     try:
-        ip = ipaddress.ip_address(host)
-        return any(ip in net for net in _BLOCKED_NETWORKS)
+        return _is_blocked_address(host)
     except ValueError:
         pass  # Not an IP literal — continue to DNS
 
     # DNS resolution (synchronous — fast for cached entries, acceptable in pipeline)
     try:
-        ip_str = socket.gethostbyname(host)
-        ip = ipaddress.ip_address(ip_str)
-        return any(ip in net for net in _BLOCKED_NETWORKS)
-    except (socket.gaierror, ValueError):
+        addresses = socket.getaddrinfo(
+            host, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM
+        )
+        return not addresses or any(
+            _is_blocked_address(address[4][0]) for address in addresses
+        )
+    except (OSError, ValueError):
         return True  # Block on DNS failure (fail-closed policy)
+
+
+def _probe_url_error(url: httpx.URL) -> str | None:
+    """Validate the same normalized URL that HTTPX will request."""
+    if url.scheme not in ("http", "https"):
+        return f"Unsupported scheme: {url.scheme!r}"
+    if not url.host:
+        return "No host in URL"
+    if any(character in url.host for character in ("%", "\\", "[", "]")):
+        return "Invalid host in probe URL"
+    if url.username or url.password:
+        return "Credentials in probe URL are not allowed"
+    if url.port is not None and not 1 <= url.port <= 65535:
+        return "Invalid port in probe URL"
+    if _is_ssrf_blocked(url.host):
+        logger.warning("probe_ssrf_blocked", host=url.host)
+        return f"SSRF-blocked host: {url.host}"
+    return None
 
 
 def _extract_domain(url: str) -> str:
@@ -159,21 +178,10 @@ class WebProbeAgent:
         On any error (SSRF block, timeout, connection failure, non-HTML content)
         returns WebProbeResult with s_probe=0.0 and error set.
         """
-        parsed = urlparse(url)
-
-        if parsed.scheme not in ("http", "https"):
-            return WebProbeResult(error=f"Unsupported scheme: {parsed.scheme!r}")
-
-        host = parsed.hostname or ""
-        if not host:
-            return WebProbeResult(error="No host in URL")
-
-        if _is_ssrf_blocked(host):
-            logger.warning("probe_ssrf_blocked", host=host)
-            return WebProbeResult(error=f"SSRF-blocked host: {host}")
-
         try:
-            result = await self._fetch_and_analyze(url, original_domain=host.lower())
+            result = await self._fetch_and_analyze(
+                url, original_domain=httpx.URL(url).host.lower()
+            )
             if result.s_probe > 0:
                 logger.info(
                     "probe_signals_detected",
@@ -206,37 +214,61 @@ class WebProbeAgent:
         async with httpx.AsyncClient(
             timeout=PROBE_TIMEOUT_S,
             max_redirects=PROBE_MAX_REDIRECTS,
-            follow_redirects=True,
+            follow_redirects=False,
             verify=False,  # nosec — intentional: probe even invalid-cert phishing pages
         ) as client:
             try:
-                async with client.stream("GET", url, headers=headers) as response:
-                    status_code = response.status_code
-                    redirect_count = len(response.history)
-                    final_url = str(response.url)
-                    final_domain = _extract_domain(final_url)
-                    domain_changed = bool(
-                        final_domain and final_domain != original_domain
-                    )
-                    content_type = response.headers.get("content-type", "").lower()
+                current_url = httpx.URL(url)
+                redirect_count = 0
+                while True:
+                    error = _probe_url_error(current_url)
+                    if error:
+                        return WebProbeResult(error=error, redirect_count=redirect_count)
 
-                    # Only parse HTML responses — skip binaries/JSON/PDFs
-                    if "html" not in content_type and "xml" not in content_type:
-                        return WebProbeResult(
-                            final_url=final_url,
-                            final_domain=final_domain,
-                            status_code=status_code,
-                            redirect_count=redirect_count,
-                            domain_changed_on_redirect=domain_changed,
-                            error=f"Non-HTML content-type: {content_type[:80]}",
+                    async with client.stream(
+                        "GET", current_url, headers=headers, follow_redirects=False
+                    ) as response:
+                        status_code = response.status_code
+                        if (
+                            status_code in (301, 302, 303, 307, 308)
+                            and "location" in response.headers
+                        ):
+                            if redirect_count >= PROBE_MAX_REDIRECTS:
+                                return WebProbeResult(
+                                    redirect_count=redirect_count,
+                                    error="Too many redirects",
+                                )
+                            current_url = current_url.join(response.headers["location"])
+                            redirect_count += 1
+                            # Close this response without consuming its body, then
+                            # validate the next target before making any request.
+                            continue
+
+                        final_url = str(response.url)
+                        final_domain = _extract_domain(final_url)
+                        domain_changed = bool(
+                            final_domain and final_domain != original_domain
                         )
+                        content_type = response.headers.get("content-type", "").lower()
 
-                    # Stream body up to PROBE_MAX_RESPONSE_BYTES
-                    raw_bytes = b""
-                    async for chunk in response.aiter_bytes(chunk_size=4096):
-                        raw_bytes += chunk
-                        if len(raw_bytes) >= PROBE_MAX_RESPONSE_BYTES:
-                            break
+                        # Only parse HTML responses — skip binaries/JSON/PDFs.
+                        if "html" not in content_type and "xml" not in content_type:
+                            return WebProbeResult(
+                                final_url=final_url,
+                                final_domain=final_domain,
+                                status_code=status_code,
+                                redirect_count=redirect_count,
+                                domain_changed_on_redirect=domain_changed,
+                                error=f"Non-HTML content-type: {content_type[:80]}",
+                            )
+
+                        raw_bytes = bytearray()
+                        async for chunk in response.aiter_bytes(chunk_size=4096):
+                            remaining = PROBE_MAX_RESPONSE_BYTES - len(raw_bytes)
+                            raw_bytes.extend(chunk[:remaining])
+                            if len(raw_bytes) >= PROBE_MAX_RESPONSE_BYTES:
+                                break
+                    break
 
             except httpx.TooManyRedirects:
                 return WebProbeResult(

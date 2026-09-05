@@ -32,9 +32,12 @@ EMAIL_ATTACHMENT_WEIGHT: float = 0.25 # suspicious attachment
 EMAIL_BOOST_CAP: float = 0.50         # max additive contribution from email signals to s_risk
 
 # ---------------------------------------------------------------------------
-# LLM / LlamaStack
+# LLM Gateway (proveedor remoto OpenAI-compatible)
 # ---------------------------------------------------------------------------
-LLM_TIMEOUT_S: float = 45.0
+# 20 s: DeepSeek Flash remoto responde en ~1-3 s a este tamaño de prompt.
+# El LLM es el único paso serializado del pipeline (services/analysis.py),
+# así que este timeout define el peor caso de latencia de la request.
+LLM_TIMEOUT_S: float = 20.0
 LLM_FALLBACK_SCORE: float = 0.5
 
 # ---------------------------------------------------------------------------
@@ -51,6 +54,7 @@ COLLECTION_EMAIL: str = "email_embeddings"
 COLLECTION_IDN: str = "idn_patterns"
 COLLECTION_TI: str = "ti_signals"
 COLLECTION_BASELINE: str = "usb_baseline"
+COLLECTION_KNOWLEDGE: str = "security_knowledge"
 RAG_TOP_K: int = 3
 
 # ---------------------------------------------------------------------------
@@ -58,14 +62,30 @@ RAG_TOP_K: int = 3
 # ---------------------------------------------------------------------------
 # Los documentos auto-ingestados (sin confirmación humana) pesan menos en el
 # re-ranking del retrieval: un FP auto-ingestado no debe reforzar futuros FPs.
+# Tiers de auto-ingesta (LEARN_FROM_EVERY_ANALYSIS): el peso baja con la
+# incertidumbre del veredicto que originó el documento.
+#   auto_high : s_risk >= AUTO_INGEST_THRESHOLD  (0.90) — casi seguro phishing
+#   auto_mid  : SUSPICIOUS band                          — señal parcial
+#   auto_low  : LEGITIMATE                                — aprende qué es benigno
 SOURCE_WEIGHTS: dict[str, float] = {
     "admin_confirmed": 1.0,
     "institutional_baseline": 0.9,
+    "official_reference": 0.9,
     "seed_corpus": 0.8,
-    "auto_ingest": 0.6,
+    "auto_ingest": 0.6,   # legacy — equivale a auto_high
+    "auto_high": 0.6,
+    "auto_mid": 0.4,
+    "auto_low": 0.3,
+    "quarantine": 0.0,    # candidato a envenenamiento — no influye en el RAG
 }
 SOURCE_WEIGHT_DEFAULT: float = 0.8   # documentos sin metadato source (legacy)
 RAG_CANDIDATE_FACTOR: int = 2        # candidatos pedidos = RAG_TOP_K * factor
+
+# Recuperación híbrida (denso + BM25 léxico + Reciprocal Rank Fusion).
+# El canal léxico rescata dominios homógrafos (`xn--pypal-4ve`) y tokens de
+# marca (`paypal`, `1xbet`, `usbbog`) que el vector denso difumina.
+RAG_RRF_K: int = 60                  # constante estándar de RRF: 1/(k + rank)
+RAG_BM25_INDEX_TTL_S: float = 300.0  # refresco del índice BM25 (se invalida en upsert)
 
 # ---------------------------------------------------------------------------
 # Web Probe Agent
