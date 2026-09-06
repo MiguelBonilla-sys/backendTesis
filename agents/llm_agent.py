@@ -535,6 +535,14 @@ Where SCORE=1.0 means definitely phishing, SCORE=0.0 means definitely legitimate
         logger.warning("llm_score_parse_failed", raw_text=text[:200])
         return LLM_FALLBACK_SCORE
 
+    @staticmethod
+    def _sanitize_reason(reason: str) -> str:
+        """Texto plano: el REASON se persiste y se muestra en el dashboard, así
+        que se quita markup por si el modelo fue manipulado (OWASP LLM05)."""
+        reason = re.sub(r"<[^>]*>", "", reason)                 # tags HTML
+        reason = re.sub(r"javascript:", "", reason, flags=re.IGNORECASE)
+        return re.sub(r"\s+", " ", reason).strip()
+
     def _parse_reason(self, text: str) -> str:
         """
         Extrae el REASON del response LLM.
@@ -546,8 +554,8 @@ Where SCORE=1.0 means definitely phishing, SCORE=0.0 means definitely legitimate
             r"REASON:\s*(.+?)(?:\n|$)", text, re.IGNORECASE | re.DOTALL
         )
         if match:
-            return match.group(1).strip()[:500]
-        return text.strip()[:200] if text else "No reason provided"
+            return self._sanitize_reason(match.group(1))[:500]
+        return self._sanitize_reason(text)[:200] if text else "No reason provided"
 
 
 # ---------------------------------------------------------------------------
