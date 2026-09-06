@@ -87,6 +87,8 @@ class Settings(BaseSettings):
     #   necesita HUGGINGFACE_API_KEY; sin key degrada a 0.5.
     HUGGINGFACE_API_KEY: str = ""
     HF_URL_MODEL: str = "pirocheto/phishing-url-detection"
+    # Commit pinneado del modelo ONNX — descarga reproducible (supply-chain).
+    HF_URL_MODEL_REVISION: str = "44f3b19f705b52532e0aadf3d0d15dd892b8a2fb"
     HF_URL_ONNX_PATH: str = ""
     HF_EMAIL_MODEL: str = "cybersectony/phishing-email-detection-distilbert_v2.4.1"
 

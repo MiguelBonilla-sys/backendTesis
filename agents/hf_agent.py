@@ -54,7 +54,11 @@ def _get_url_onnx():
             if not path:
                 from huggingface_hub import hf_hub_download
 
-                path = hf_hub_download(repo_id=settings.HF_URL_MODEL, filename="model.onnx")
+                path = hf_hub_download(
+                    repo_id=settings.HF_URL_MODEL,
+                    filename="model.onnx",
+                    revision=settings.HF_URL_MODEL_REVISION or None,
+                )
             _url_onnx_session = onnxruntime.InferenceSession(
                 path, providers=["CPUExecutionProvider"]
             )

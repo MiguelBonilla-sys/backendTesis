@@ -169,7 +169,8 @@ class LLMGateway:
     ) -> tuple[str, str]:
         """Un POST con un reintento ante error transitorio (429/5xx).
         Devuelve ``(content, reasoning_content)``."""
-        assert self._client is not None
+        if self._client is None:
+            raise RuntimeError("LLMGateway no inicializado — llamá initialize() primero")
         payload: dict = {
             "model": model,
             "messages": messages,

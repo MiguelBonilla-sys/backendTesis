@@ -29,8 +29,8 @@ services:
       EMBED_PROVIDER: ollama
       EMBED_MODEL: embeddinggemma
       EMBED_BASE_URL: "http://ollama:11434"
-      # Persistir la descarga del model.onnx de HF entre redeploys
-      HF_HOME: /root/.cache/huggingface
+      # El modelo ONNX de HF va bundleado en la imagen (HF_URL_ONNX_PATH del
+      # Dockerfile) — sin descarga ni volumen de cache en runtime.
       TOP1M_PATH: data/top1m.txt
       CONFUSABLES_PATH: data/confusables.txt
       # El build del BK-tree es O(n) pure-python; en CPU lenta 927k dominios = ~8 min.
@@ -51,8 +51,6 @@ services:
       SECRET_KEY: "${SECRET_KEY}"
       JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
       CORS_ORIGINS: "${CORS_ORIGINS:-[\"chrome-extension://*\"]}"
-    volumes:
-      - hf_cache:/root/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -153,4 +151,3 @@ volumes:
   redisdata:
   chroma_data:
   ollama_models:
-  hf_cache:

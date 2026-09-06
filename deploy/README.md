@@ -27,15 +27,18 @@ docker exec -i "$PC" psql -U postgres -d phishing_detector -v ON_ERROR_STOP=1 < 
 
 ## Seed del RAG (ChromaDB) — después de que `backend` esté healthy
 
+El contenedor corre como `appuser` (no-root); los scripts escriben snapshots bajo
+`../.firecrawl`, así que se copian a `/app/.firecrawl` y se corre como root (op puntual).
+
 ```bash
 BC=$(docker ps --filter "name=backend-<app_uuid>" --format '{{.Names}}' | head -1)
-docker cp .firecrawl "$BC:/.firecrawl"     # snapshots Firecrawl revisados (fuera de git)
-docker exec -w /app "$BC" python -m scripts.ingest_firecrawl_knowledge --apply
-docker exec -w /app "$BC" python -m scripts.ingest_firecrawl_knowledge \
-    --sources data/real_case_sources.json --output ../.firecrawl/real-cases --apply
-docker exec -w /app "$BC" python -m scripts.seed_usb_institutional --apply
-docker exec -w /app "$BC" python -m scripts.seed_chromadb --apply
-docker exec -w /app "$BC" python -m scripts.verify_rag_knowledge
+docker cp .firecrawl "$BC:/.firecrawl"                 # snapshots Firecrawl revisados (fuera de git)
+X="docker exec -u root -w /app $BC python -m"
+$X scripts.ingest_firecrawl_knowledge --apply
+$X scripts.ingest_firecrawl_knowledge --sources data/real_case_sources.json --output ../.firecrawl/real-cases --apply
+$X scripts.seed_usb_institutional --apply
+$X scripts.seed_chromadb --apply
+$X scripts.verify_rag_knowledge
 ```
 
 ## Notas
