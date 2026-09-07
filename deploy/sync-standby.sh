@@ -3,7 +3,11 @@
 # standby free-tier, para que la 2a instancia del backend (Render) tenga lo mismo
 # si Coolify se cae.
 #
-#   PostgreSQL -> dump completo del primario, restore atomico en Neon.
+#   PostgreSQL -> TRUNCATE + COPY (data-only) del primario a Neon, en UNA
+#                 transaccion. Sin DDL por corrida → el pooler de Neon nunca queda
+#                 con schema desactualizado. El schema se carga UNA vez con
+#                 deploy/schema.sql contra el endpoint DIRECTO (sin -pooler).
+#                 STANDBY_DATABASE_URL debe ser el endpoint DIRECTO de Neon.
 #   ChromaDB   -> las 5 colecciones hacia Chroma Cloud, RE-EMBEBIENDO los docs con
 #                 el embedder del destino (HF). Coolify embebe con Ollama y Render
 #                 con HuggingFace: aunque es el MISMO modelo (embeddinggemma-300m),
@@ -38,20 +42,25 @@ BKC=$(docker ps --filter "name=backend-${APP_UUID}"  --format '{{.Names}}' | hea
 
 echo "== $(date -u +%FT%TZ) sync-standby =="
 
-# --- PostgreSQL ---
-docker exec "$PGC" pg_dump --no-owner --no-acl --clean --if-exists \
-    -U postgres -d phishing_detector \
-  | docker run -i --rm postgres:15-alpine \
-      psql --single-transaction -v ON_ERROR_STOP=1 "$STANDBY_DATABASE_URL" >/dev/null
+# --- PostgreSQL (data-only, 1 transaccion; schema pre-cargado en Neon) ---
+TABLES=$(docker exec "$PGC" psql -U postgres -d phishing_detector -tAc \
+  "select string_agg(format('%I', tablename), ', ') from pg_tables where schemaname = 'public'")
+[ -n "$TABLES" ] || { echo "no pude listar tablas de phishing_detector"; exit 1; }
+{
+  printf 'BEGIN;\nTRUNCATE %s RESTART IDENTITY CASCADE;\n' "$TABLES"
+  docker exec "$PGC" pg_dump --data-only --no-owner --no-acl -U postgres -d phishing_detector
+  printf 'COMMIT;\n'
+} | docker run -i --rm postgres:15-alpine \
+      psql -v ON_ERROR_STOP=1 "$STANDBY_DATABASE_URL" >/dev/null
 echo "  postgres OK"
 
-# --- ChromaDB (re-embed con HF) ---
+# --- ChromaDB (re-embed con HF; --prune → Chroma Cloud espeja exacto a Coolify) ---
 docker exec \
     -e STANDBY_CHROMA_HOST -e STANDBY_CHROMA_PORT -e STANDBY_CHROMA_API_KEY \
     -e STANDBY_CHROMA_TENANT -e STANDBY_CHROMA_DATABASE \
     -e STANDBY_EMBED_PROVIDER -e STANDBY_EMBED_MODEL -e STANDBY_EMBED_BASE_URL \
     -e STANDBY_EMBED_API_KEY -e STANDBY_EMBED_AUTH_SCHEME \
-    "$BKC" python -m scripts.sync_chroma_standby
+    "$BKC" python -m scripts.sync_chroma_standby --prune
 echo "  chroma OK"
 
 echo "== done =="

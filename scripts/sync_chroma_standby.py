@@ -211,8 +211,11 @@ async def main() -> int:
     ap.add_argument("--check", action="store_true", help="solo comparar conteo/dim, no escribir")
     args = ap.parse_args()
 
-    settings_client = await _client_from_settings()
+    # El cliente con auth (Chroma Cloud) DEBE crearse primero: chromadb comparte
+    # estado de auth a nivel de proceso, y si el primer AsyncHttpClient es el local
+    # sin auth, el segundo (Cloud) hereda "sin token" → "Permission denied".
     env_client = await _client_from_env()
+    settings_client = await _client_from_settings()
     if args.reverse:
         src, dst = env_client, settings_client
         dest_embed = None if args.check else _embedding_function()  # embedder de settings
