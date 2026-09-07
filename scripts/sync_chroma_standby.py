@@ -208,39 +208,43 @@ async def main() -> int:
     ap.add_argument("--batch", type=int, default=128)
     ap.add_argument("--prune", action="store_true", help="borrar en destino ids ausentes en origen")
     ap.add_argument("--reverse", action="store_true", help="Cloud → local (hidratar dev)")
+    ap.add_argument(
+        "--bidirectional",
+        action="store_true",
+        help="merge en ambos sentidos (upsert-only, sin prune) — para failback",
+    )
     ap.add_argument("--check", action="store_true", help="solo comparar conteo/dim, no escribir")
     args = ap.parse_args()
+
+    if args.bidirectional and args.prune:
+        raise SystemExit("--bidirectional es incompatible con --prune (borraría lo del otro lado)")
 
     # El cliente con auth (Chroma Cloud) DEBE crearse primero: chromadb comparte
     # estado de auth a nivel de proceso, y si el primer AsyncHttpClient es el local
     # sin auth, el segundo (Cloud) hereda "sin token" → "Permission denied".
     env_client = await _client_from_env()
     settings_client = await _client_from_settings()
-    if args.reverse:
-        src, dst = env_client, settings_client
-        dest_embed = None if args.check else _embedding_function()  # embedder de settings
-    else:
-        src, dst = settings_client, env_client
-        dest_embed = None if args.check else _standby_embedder()
 
     if args.check:
+        src, dst = (env_client, settings_client) if args.reverse else (settings_client, env_client)
         return await _check(src, dst)
 
-    total_up = total_pruned = 0
-    for name in _COLLECTIONS:
-        up, pr = await _sync_collection(
-            name, src, dst, batch=args.batch, prune=args.prune, dest_embed=dest_embed
-        )
-        total_up += up
-        total_pruned += pr
+    # (origen, destino, embedder-del-destino)
+    fwd = (settings_client, env_client, _standby_embedder())  # local → Cloud (re-embed HF)
+    rev = (env_client, settings_client, _embedding_function())  # Cloud → local (re-embed settings)
+    passes = [rev] if args.reverse else ([fwd, rev] if args.bidirectional else [fwd])
 
-    logger.info(
-        "sync_chroma_standby_done",
-        upserted=total_up,
-        pruned=total_pruned,
-        mode="re-embed" if dest_embed else "vector-copy",
-    )
-    mode = "re-embed" if dest_embed else "vector-copy"
+    total_up = total_pruned = 0
+    for src, dst, dest_embed in passes:
+        for name in _COLLECTIONS:
+            up, pr = await _sync_collection(
+                name, src, dst, batch=args.batch, prune=args.prune, dest_embed=dest_embed
+            )
+            total_up += up
+            total_pruned += pr
+
+    mode = "bidireccional" if args.bidirectional else ("reverse" if args.reverse else "forward")
+    logger.info("sync_chroma_standby_done", upserted=total_up, pruned=total_pruned, mode=mode)
     print(f"OK — {mode} — upserted {total_up}, pruned {total_pruned}")
     return 0
 

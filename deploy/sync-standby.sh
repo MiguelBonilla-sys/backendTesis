@@ -1,66 +1,51 @@
 #!/bin/sh
-# Sincroniza el estado de la instancia primaria (Coolify, DBs locales) hacia la
-# standby free-tier, para que la 2a instancia del backend (Render) tenga lo mismo
-# si Coolify se cae.
+# Sync BIDIRECCIONAL entre Coolify (local, primario) y la capa free-tier (standby
+# que usa Render). Merge por PK en los dos sentidos: si Coolify se cae y Render
+# sirve escrituras contra Neon/Chroma Cloud, al volver Coolify esas escrituras se
+# reintegran — y las de Coolify van a la standby.
 #
-#   PostgreSQL -> TRUNCATE + COPY (data-only) del primario a Neon, en UNA
-#                 transaccion. Sin DDL por corrida → el pooler de Neon nunca queda
-#                 con schema desactualizado. El schema se carga UNA vez con
-#                 deploy/schema.sql contra el endpoint DIRECTO (sin -pooler).
-#                 STANDBY_DATABASE_URL debe ser el endpoint DIRECTO de Neon.
-#   ChromaDB   -> las 5 colecciones hacia Chroma Cloud, RE-EMBEBIENDO los docs con
-#                 el embedder del destino (HF). Coolify embebe con Ollama y Render
-#                 con HuggingFace: aunque es el MISMO modelo (embeddinggemma-300m),
-#                 los stacks dan vectores distintos (cos ~0.6 para el mismo texto),
-#                 asi que copiar vectores tal cual romperia la retrieval de Render.
-#   Redis      -> NO se sincroniza: es cache de TI (TTL 1h). Tras el failover se
-#                 repuebla solo desde las TI APIs, dentro de la cuota gratuita.
+#   PostgreSQL -> scripts.sync_pg_bilateral : upsert por PK UUID en ambos sentidos
+#                 (audit_log: una via, por watermark). Sin TRUNCATE. Schema
+#                 pre-cargado en Neon con deploy/schema.sql (endpoint DIRECTO).
+#                 Los BORRADOS no se propagan (ver el docstring del script).
+#   ChromaDB   -> scripts.sync_chroma_standby --bidirectional : merge de las 5
+#                 colecciones en ambos sentidos, re-embebiendo (Coolify=Ollama,
+#                 Cloud/Render=HF; mismo modelo, distinto stack → cos ~0.6, no se
+#                 pueden copiar vectores). Upsert-only, sin prune.
+#   Redis      -> NO se sincroniza (cache de TI, TTL 1h; se repuebla solo).
 #
-# Correr en el HOST de Coolify por cron, p. ej.:
-#   */15 * * * * APP_UUID=2tfwirwa01imva8glms5kf4w \
-#     STANDBY_DATABASE_URL='postgresql://neondb_owner:...@ep-...-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require' \
-#     STANDBY_CHROMA_HOST=api.trychroma.com STANDBY_CHROMA_PORT=443 \
-#     STANDBY_CHROMA_API_KEY=ck-... STANDBY_CHROMA_TENANT=<uuid> STANDBY_CHROMA_DATABASE=tesis \
-#     STANDBY_EMBED_MODEL=google/embeddinggemma-300m \
-#     STANDBY_EMBED_BASE_URL=https://router.huggingface.co/hf-inference/models \
-#     STANDBY_EMBED_API_KEY=hf_... \
-#     /data/coolify/.../backendTesis/deploy/sync-standby.sh >> /var/log/sync-standby.log 2>&1
+# Correr en el HOST de Coolify por cron:
+#   */15 * * * * . $HOME/.sync-standby.env && $HOME/sync-standby.sh >> $HOME/sync-standby.log 2>&1
+# Env (en ~/.sync-standby.env): APP_UUID, STANDBY_DATABASE_URL (Neon DIRECTO, libpq),
+#   STANDBY_CHROMA_*, STANDBY_EMBED_* . Ver deploy/env.shared.example.
 #
-# OJO failback: el sync es una via (primario -> standby). Si Render sirve escrituras
-# mientras Coolify esta caido y luego Coolify vuelve, el proximo dump PISA esos datos.
-# Al recuperar Coolify: pausar este cron, migrar a mano lo que Render haya escrito, reanudar.
+# Split-brain: si los DOS lados editan la MISMA fila (mismo id) en la misma
+# ventana, gana el que ya estaba (ON CONFLICT DO NOTHING). Para este sistema
+# (incidents/feedback son append, users cambia poco) es aceptable.
 set -eu
 
 : "${APP_UUID:?exporta APP_UUID del recurso Coolify}"
-: "${STANDBY_DATABASE_URL:?exporta STANDBY_DATABASE_URL (Neon, formato libpq)}"
+: "${STANDBY_DATABASE_URL:?exporta STANDBY_DATABASE_URL (Neon DIRECTO, libpq)}"
 : "${STANDBY_EMBED_MODEL:?exporta STANDBY_EMBED_MODEL (re-embed del corpus RAG)}"
 
-PGC=$(docker ps --filter "name=postgres-${APP_UUID}" --format '{{.Names}}' | head -1)
-BKC=$(docker ps --filter "name=backend-${APP_UUID}"  --format '{{.Names}}' | head -1)
-[ -n "$PGC" ] || { echo "no encuentro el contenedor postgres-${APP_UUID}"; exit 1; }
+BKC=$(docker ps --filter "name=backend-${APP_UUID}" --format '{{.Names}}' | head -1)
 [ -n "$BKC" ] || { echo "no encuentro el contenedor backend-${APP_UUID}"; exit 1; }
 
-echo "== $(date -u +%FT%TZ) sync-standby =="
+echo "== $(date -u +%FT%TZ) sync-standby (bidireccional) =="
 
-# --- PostgreSQL (data-only, 1 transaccion; schema pre-cargado en Neon) ---
-TABLES=$(docker exec "$PGC" psql -U postgres -d phishing_detector -tAc \
-  "select string_agg(format('%I', tablename), ', ') from pg_tables where schemaname = 'public'")
-[ -n "$TABLES" ] || { echo "no pude listar tablas de phishing_detector"; exit 1; }
-{
-  printf 'BEGIN;\nTRUNCATE %s RESTART IDENTITY CASCADE;\n' "$TABLES"
-  docker exec "$PGC" pg_dump --data-only --no-owner --no-acl -U postgres -d phishing_detector
-  printf 'COMMIT;\n'
-} | docker run -i --rm postgres:15-alpine \
-      psql -v ON_ERROR_STOP=1 "$STANDBY_DATABASE_URL" >/dev/null
+CHROMA_ENVS="-e STANDBY_CHROMA_HOST -e STANDBY_CHROMA_PORT -e STANDBY_CHROMA_API_KEY \
+  -e STANDBY_CHROMA_TENANT -e STANDBY_CHROMA_DATABASE \
+  -e STANDBY_EMBED_PROVIDER -e STANDBY_EMBED_MODEL -e STANDBY_EMBED_BASE_URL \
+  -e STANDBY_EMBED_API_KEY -e STANDBY_EMBED_AUTH_SCHEME"
+
+# --- PostgreSQL (merge bidireccional por PK) ---
+# shellcheck disable=SC2086
+docker exec -e STANDBY_DATABASE_URL "$BKC" python -m scripts.sync_pg_bilateral
 echo "  postgres OK"
 
-# --- ChromaDB (re-embed con HF; --prune → Chroma Cloud espeja exacto a Coolify) ---
-docker exec \
-    -e STANDBY_CHROMA_HOST -e STANDBY_CHROMA_PORT -e STANDBY_CHROMA_API_KEY \
-    -e STANDBY_CHROMA_TENANT -e STANDBY_CHROMA_DATABASE \
-    -e STANDBY_EMBED_PROVIDER -e STANDBY_EMBED_MODEL -e STANDBY_EMBED_BASE_URL \
-    -e STANDBY_EMBED_API_KEY -e STANDBY_EMBED_AUTH_SCHEME \
-    "$BKC" python -m scripts.sync_chroma_standby --prune
+# --- ChromaDB (merge bidireccional, re-embed por lado) ---
+# shellcheck disable=SC2086
+docker exec $CHROMA_ENVS "$BKC" python -m scripts.sync_chroma_standby --bidirectional
 echo "  chroma OK"
 
 echo "== done =="
