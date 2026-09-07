@@ -166,26 +166,35 @@ async def _sync_collection(
 
     include = ["documents", "metadatas"] if dest_embed else ["documents", "metadatas", "embeddings"]
     data = await _get_all(src_col, include)
-    ids, docs, metas = data["ids"], data["documents"], data["metadatas"]
-    if not ids:
+    src_ids = data["ids"]
+    if not src_ids:
         return (0, 0)
     if not dest_embed and not data["embeddings"]:
         raise SystemExit(f"[{name}] origen sin embeddings y sin STANDBY_EMBED_* para re-calcular")
 
     dst_col = await dst.get_or_create_collection(name)
+    dst_ids = set((await _get_all(dst_col, []))["ids"])
 
     pruned = 0
     if prune:
-        stale = list(set((await _get_all(dst_col, []))["ids"]) - set(ids))
+        stale = list(dst_ids - set(src_ids))
         for i in range(0, len(stale), batch):
             await dst_col.delete(ids=stale[i : i + batch])
         pruned = len(stale)
 
+    # Solo los docs que faltan en el destino → en régimen estable, cero llamadas al
+    # embedder (clave para el modo bidireccional cada 15 min).
+    new_idx = [i for i, did in enumerate(src_ids) if did not in dst_ids]
+    if not new_idx:
+        return (0, pruned)
+    ids = [src_ids[i] for i in new_idx]
+    docs = [data["documents"][i] for i in new_idx]
+    metas = [data["metadatas"][i] for i in new_idx]
+    src_embs = None if dest_embed else [data["embeddings"][i] for i in new_idx]
+
     for i in range(0, len(ids), batch):
         sl = slice(i, i + batch)
-        embs = (
-            await asyncio.to_thread(dest_embed, docs[sl]) if dest_embed else data["embeddings"][sl]
-        )
+        embs = await asyncio.to_thread(dest_embed, docs[sl]) if dest_embed else src_embs[sl]
         await dst_col.upsert(
             ids=ids[sl],
             documents=docs[sl] or None,

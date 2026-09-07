@@ -28,6 +28,15 @@ set -eu
 : "${STANDBY_DATABASE_URL:?exporta STANDBY_DATABASE_URL (Neon DIRECTO, libpq)}"
 : "${STANDBY_EMBED_MODEL:?exporta STANDBY_EMBED_MODEL (re-embed del corpus RAG)}"
 
+# Lock: si una corrida previa sigue viva (el sync bidireccional puede tardar
+# varios minutos), saltar en vez de solapar.
+LOCK="${TMPDIR:-/tmp}/sync-standby.lock"
+if ! mkdir "$LOCK" 2>/dev/null; then
+  echo "$(date -u +%FT%TZ) sync-standby ya corriendo ($LOCK) — salto"
+  exit 0
+fi
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT INT TERM
+
 BKC=$(docker ps --filter "name=backend-${APP_UUID}" --format '{{.Names}}' | head -1)
 [ -n "$BKC" ] || { echo "no encuentro el contenedor backend-${APP_UUID}"; exit 1; }
 
