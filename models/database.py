@@ -22,6 +22,9 @@ async def init_db() -> None:
             dsn=dsn,
             min_size=2,
             max_size=10,
+            # Neon/PgBouncer (endpoint -pooler) usa transaction pooling → los
+            # prepared statements con nombre revientan. Sin efecto en Postgres directo.
+            statement_cache_size=0,
         )
         logger.info("Database pool initialised", min_size=2, max_size=10)
     except Exception as exc:
@@ -101,6 +104,7 @@ async def log_audit_event(
     """Registra un evento en audit_log. Fire-and-forget — no lanza excepciones."""
     try:
         import json
+
         await execute(
             """
             INSERT INTO audit_log (event_type, actor, resource, ip_address, status, detail)
@@ -115,4 +119,5 @@ async def log_audit_event(
         )
     except Exception as e:
         from core.logger import get_logger
+
         get_logger(__name__).warning("audit_log_failed", error=str(e))

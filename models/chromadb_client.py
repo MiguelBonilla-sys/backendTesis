@@ -65,6 +65,101 @@ class _OllamaEmbedder:
         return self(input)
 
 
+class _OpenAIEmbedder:
+    """EmbeddingFunction respaldada por un endpoint compatible con la API de
+    OpenAI (``POST {base}/embeddings``). Sirve OpenAI, fal.run, Voyage, etc. sin
+    modelo local. ``auth_scheme`` = "Bearer" (OpenAI) o "Key" (fal.run)."""
+
+    def __init__(self, base_url: str, model: str, api_key: str, auth_scheme: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._model = model
+        self._api_key = api_key
+        self._auth_scheme = auth_scheme or "Bearer"
+
+    @staticmethod
+    def name() -> str:
+        return "openai_compat"
+
+    def get_config(self) -> dict:
+        return {"base_url": self._base_url, "model": self._model}
+
+    @classmethod
+    def build_from_config(cls, config: dict) -> _OpenAIEmbedder:
+        # El secreto no se persiste en la config de la colección → viene de settings.
+        return cls(
+            config["base_url"],
+            config["model"],
+            settings.EMBED_API_KEY,
+            settings.EMBED_AUTH_SCHEME,
+        )
+
+    def __call__(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        import httpx
+
+        headers = {}
+        if self._api_key:
+            headers["Authorization"] = f"{self._auth_scheme} {self._api_key}"
+        resp = httpx.post(
+            f"{self._base_url}/embeddings",
+            json={"model": self._model, "input": list(input)},
+            headers=headers,
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        return [row["embedding"] for row in sorted(data, key=lambda r: r["index"])]
+
+    def embed_documents(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        return self(input)
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        return self(input)
+
+
+class _HFEmbedder:
+    """EmbeddingFunction contra HuggingFace Inference (``feature-extraction``).
+    Sirve `google/embeddinggemma-300m` sin Ollama: mismo modelo que el Ollama
+    local, endpoint remoto. La respuesta es ``[[float, ...], ...]`` (no OpenAI)."""
+
+    def __init__(self, base_url: str, model: str, api_key: str) -> None:
+        base = base_url.rstrip("/")
+        self._url = f"{base}/{model}/pipeline/feature-extraction"
+        self._model = model
+        self._api_key = api_key
+
+    @staticmethod
+    def name() -> str:
+        return "hf_feature_extraction"
+
+    def get_config(self) -> dict:
+        return {"base_url": self._url, "model": self._model}
+
+    @classmethod
+    def build_from_config(cls, config: dict) -> _HFEmbedder:
+        return cls(settings.EMBED_BASE_URL, config["model"], settings.EMBED_API_KEY)
+
+    def __call__(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        import httpx
+
+        headers = {}
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        resp = httpx.post(
+            self._url,
+            json={"inputs": list(input), "options": {"wait_for_model": True}},
+            headers=headers,
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    def embed_documents(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        return self(input)
+
+    def embed_query(self, input: list[str]) -> list[list[float]]:  # noqa: A002
+        return self(input)
+
+
 def _embedding_function():
     """EmbeddingFunction para las colecciones.
 
@@ -76,11 +171,24 @@ def _embedding_function():
         return _embed_fn
     _embed_fn_resolved = True
 
-    if settings.EMBED_PROVIDER.lower() != "ollama":
-        return _embed_fn  # None → default
+    provider = settings.EMBED_PROVIDER.lower()
+    if provider == "ollama":
+        _embed_fn = _OllamaEmbedder(settings.EMBED_BASE_URL, settings.EMBED_MODEL)
+    elif provider in ("openai", "openai_compat", "fal"):
+        _embed_fn = _OpenAIEmbedder(
+            settings.EMBED_BASE_URL,
+            settings.EMBED_MODEL,
+            settings.EMBED_API_KEY,
+            settings.EMBED_AUTH_SCHEME,
+        )
+    elif provider in ("hf", "huggingface"):
+        _embed_fn = _HFEmbedder(
+            settings.EMBED_BASE_URL, settings.EMBED_MODEL, settings.EMBED_API_KEY
+        )
+    else:
+        return _embed_fn  # None → default MiniLM de ChromaDB
 
-    _embed_fn = _OllamaEmbedder(settings.EMBED_BASE_URL, settings.EMBED_MODEL)
-    logger.info("chromadb_embedder", provider="ollama", model=settings.EMBED_MODEL)
+    logger.info("chromadb_embedder", provider=provider, model=settings.EMBED_MODEL)
     return _embed_fn
 
 
@@ -98,14 +206,21 @@ async def init_chromadb() -> None:
     """Create the async HTTP client and ensure all required collections exist."""
     global _client
     try:
-        _client = await chromadb.AsyncHttpClient(
-            host=settings.CHROMADB_HOST,
-            port=settings.CHROMADB_PORT,
-        )
+        kwargs: dict = {
+            "host": settings.CHROMADB_HOST,
+            "port": settings.CHROMADB_PORT,
+            "ssl": settings.CHROMADB_SSL or bool(settings.CHROMA_API_KEY),
+        }
+        if settings.CHROMA_API_KEY:  # Chroma Cloud
+            kwargs["headers"] = {"x-chroma-token": settings.CHROMA_API_KEY}
+            kwargs["tenant"] = settings.CHROMA_TENANT
+            kwargs["database"] = settings.CHROMA_DATABASE
+        _client = await chromadb.AsyncHttpClient(**kwargs)
         logger.info(
             "ChromaDB client initialised",
             host=settings.CHROMADB_HOST,
             port=settings.CHROMADB_PORT,
+            cloud=bool(settings.CHROMA_API_KEY),
         )
         # Eagerly create collections so agents can use them without guards
         for name in _REQUIRED_COLLECTIONS:
@@ -135,9 +250,7 @@ async def get_or_create_collection(name: str) -> chromadb.Collection:
     ef = _embedding_function()
     try:
         if ef is not None:
-            return await client.get_or_create_collection(
-                name=name, embedding_function=ef
-            )
+            return await client.get_or_create_collection(name=name, embedding_function=ef)
         return await client.get_or_create_collection(name=name)
     except Exception as exc:
         raise DatabaseError(
@@ -216,7 +329,8 @@ async def query_collection(
         ef = _embedding_function()
         query = (
             {"query_embeddings": await asyncio.to_thread(ef, query_texts)}
-            if ef else {"query_texts": query_texts}
+            if ef
+            else {"query_texts": query_texts}
         )
         results = await collection.query(
             **query,

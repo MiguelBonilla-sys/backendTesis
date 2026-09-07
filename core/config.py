@@ -15,9 +15,13 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     REDIS_TTL: int = 3600
 
-    # ChromaDB
+    # ChromaDB — local (HTTP) o Chroma Cloud (si CHROMA_API_KEY está seteada → ssl + auth)
     CHROMADB_HOST: str = "localhost"
     CHROMADB_PORT: int = 8001
+    CHROMADB_SSL: bool = False
+    CHROMA_API_KEY: str = ""
+    CHROMA_TENANT: str = "default_tenant"
+    CHROMA_DATABASE: str = "default_database"
 
     # JWT
     SECRET_KEY: str = "changeme-use-strong-secret-in-production"
@@ -98,11 +102,17 @@ class Settings(BaseSettings):
     # - "ollama"  → embedder local vía Ollama. Para el corpus español + homoglifos
     #               usar `embeddinggemma` (300M, 768d, 100+ idiomas, CPU, ~620 MB)
     #               o `paraphrase-multilingual` (278M, 384d — drop-in sin re-index).
+    # - "openai"  → endpoint remoto compatible con la API de OpenAI
+    #               (`POST {EMBED_BASE_URL}/embeddings`). Sin modelo local: misma EF
+    #               en Coolify y en Render sin correr Ollama en ninguno.
+    #               EMBED_AUTH_SCHEME: "Bearer" (OpenAI) o "Key" (fal.run).
     # OJO: ChromaDB fija la EF por colección — cambiar de provider requiere
     # colecciones nuevas o re-embeber (ver scripts/seed_chromadb.py).
     EMBED_PROVIDER: str = "chroma"
     EMBED_MODEL: str = "embeddinggemma"
     EMBED_BASE_URL: str = "http://localhost:11434"
+    EMBED_API_KEY: str = ""
+    EMBED_AUTH_SCHEME: str = "Bearer"
 
     # Recuperación híbrida denso + BM25 léxico + RRF. Si `rank_bm25` no está o
     # la colección está vacía, cae a denso-solo sin ruido.

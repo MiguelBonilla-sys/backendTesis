@@ -41,6 +41,82 @@ $X scripts.seed_chromadb --apply
 $X scripts.verify_rag_knowledge
 ```
 
+## Segunda instancia — Render (failover)
+
+Topología: el **primario (Coolify) es 100% local** (sus PG/Redis/Chroma +
+`embeddinggemma` por Ollama, `docker-compose.coolify.yml` sin cambios) y se
+**sincroniza** hacia la capa free-tier. El **secundario (Render)** corre contra
+esa capa (Neon + Redis Cloud + Chroma Cloud + `embeddinggemma` por HuggingFace).
+
+```
+Coolify backend ── PG/Redis/Chroma LOCALES + Ollama(embeddinggemma)   (autoritativo)
+       │
+       └── cron deploy/sync-standby.sh (host Coolify, */15) ──▶ Neon + Chroma Cloud
+                                                                   ▲
+Render backend ── Neon + Redis Cloud + Chroma Cloud + HF(embeddinggemma) ─┘
+```
+
+- **Primario**: Coolify. Sin cambios en el compose. `EMBED_PROVIDER=ollama`.
+- **Secundario**: `../render.yaml` (blueprint). Render no corre compose → un solo
+  Web Service desde el `Dockerfile`. Dashboard → New → Blueprint → repo `backendTesis`.
+  `EMBED_PROVIDER=hf` + `google/embeddinggemma-300m` vía HuggingFace Inference
+  (`feature-extraction`) — mismo modelo que el Ollama de Coolify, sin correr Ollama.
+
+### Sincronización primario → standby (`deploy/sync-standby.sh`)
+
+Cron en el **host de Coolify** (`*/15 * * * *`), con `APP_UUID`, `STANDBY_DATABASE_URL`
+(Neon, libpq), `STANDBY_CHROMA_*` y `STANDBY_EMBED_*` en el entorno.
+
+| Componente | Cómo | Nota |
+|---|---|---|
+| **PostgreSQL** | `pg_dump --clean --if-exists` del contenedor local → `psql --single-transaction` a Neon | restore atómico; ventana de pérdida ≤ intervalo del cron |
+| **ChromaDB** | `scripts.sync_chroma_standby` — copia `documents`+`metadatas` de las 5 colecciones y **re-embebe con HF** antes de escribir en Chroma Cloud. Paginado de a 300 (límite free tier) | `--check` compara conteo+dimensión; `--reverse` hidrata un Chroma local; `--prune` propaga borrados |
+| **Redis** | **no se sincroniza** | caché de TI (TTL 1h); tras el failover se repuebla solo desde las TI APIs, dentro de la cuota gratis |
+
+**Por qué re-embebe y no copia vectores.** Coolify embebe con Ollama (GGUF) y
+Render/Cloud con HuggingFace. Es el **mismo modelo** (`embeddinggemma-300m`, 768d)
+pero **distinto stack de serving**: para el mismo texto los vectores dan
+`cos ≈ 0.6`, no son intercambiables (Ollama aplica los prompts de tarea de
+embeddinggemma vía template; el `feature-extraction` de HF embebe el texto crudo).
+Copiar vectores cruzaría dos espacios → retrieval de Render degradada. Por eso el
+sync trae solo el texto y lo re-embebe con `STANDBY_EMBED_*` (HF).
+
+Cada entorno queda **internamente consistente**: Coolify escribe y consulta con
+Ollama; Chroma Cloud tiene vectores HF y Render consulta con HF. Los `id`, el
+texto y la metadata son idénticos en los dos lados; solo difieren los vectores.
+`verify_rag_knowledge` → hit@3 ≈ 1.0 en ambos.
+
+fal.run no tiene embeddinggemma. Si HF se queda corto de cuota, el fallback es
+`EMBED_PROVIDER=openai` + fal `baai/bge-m3` (1024d) en Render/Cloud — implica
+re-seedear las 5 colecciones de Chroma Cloud con ese modelo.
+
+**Failback (importante):** el sync es una vía. Si Render sirve escrituras mientras
+Coolify está caído y luego Coolify vuelve, el próximo `pg_dump` **pisa** esos datos.
+Al recuperar Coolify: pausar el cron, migrar a mano lo que Render haya escrito
+(volumen bajo: `incidents`/`feedback` nuevos), reanudar.
+
+Alternativa a menor lag para Postgres: replicación lógica con Neon como *subscriber*
+(`wal_level=logical` + `CREATE PUBLICATION` en Coolify). Necesita que Neon alcance
+la PG de Coolify (exponerla con TLS+allowlist, o un túnel). El dump por cron alcanza
+para la tesis.
+
+**Reglas para que el failover sea transparente:**
+
+1. `SECRET_KEY` / `JWT_SECRET_KEY` **idénticos** en las dos instancias (si no, el
+   JWT emitido por una no vale en la otra).
+2. `EMBED_MODEL` = `embeddinggemma-300m` (768d) en las dos; solo cambia el
+   `EMBED_PROVIDER` (`ollama` en Coolify, `hf` en Render). El sync re-embebe, así
+   que la dimensión coincide y `--check` da paridad.
+3. Lista completa de vars: `env.shared.example`.
+
+**Schema en Neon** (una vez): correr `schema.sql` + `seed_users.sql` contra el
+`DATABASE_URL` de Neon (idempotentes). Sin `psql` a mano: hay un script asyncpg en
+el scratchpad de la sesión, o `python -c` con `asyncpg.connect(...).execute(open(...).read())`.
+
+**Seed del RAG en Chroma Cloud** (una vez, desde cualquier entorno con el `.env`):
+`python -m scripts.seed_usb_institutional --apply`, `scripts.seed_chromadb --apply`,
+`scripts.ingest_firecrawl_knowledge --apply`, luego `scripts.verify_rag_knowledge`.
+
 ## Notas
 
 - `TOP1M_LIMIT` (default 1_000_000) acota el índice top-1M que el IDN agent carga en

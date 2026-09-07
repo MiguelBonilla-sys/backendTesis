@@ -1,0 +1,80 @@
+# Render Blueprint — segunda instancia del backend (failover del deploy de Coolify).
+# Render no ejecuta docker-compose: el backend corre como un único Web Service
+# desde el Dockerfile, apuntando a la MISMA capa de datos gestionada (Neon /
+# Redis Cloud / Chroma Cloud) que usa Coolify. Así las dos instancias comparten
+# estado y el failover es transparente.
+#
+# Uso:  Render Dashboard → New → Blueprint → repo backendTesis → rama main.
+# Los secrets van con  sync: false  → se cargan a mano en el panel (Environment),
+# nunca en este archivo. Lista completa en  deploy/env.shared.example.
+
+services:
+  - type: web
+    name: back-tesi-render
+    runtime: docker
+    repo: https://github.com/MiguelBonilla-sys/backendTesis
+    branch: main
+    region: ohio            # us-east-2 — misma región que Neon; Redis en us-east-1
+    plan: starter           # 'free' duerme a los 15 min (cold start justo cuando el primario ya cayó). Starter no duerme.
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    dockerCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips "*"
+    healthCheckPath: /health
+    autoDeploy: true        # push a main → redeploy, igual que Coolify
+    envVars:
+      # --- No secretos: idénticos a Coolify ---
+      - key: TOP1M_LIMIT
+        value: "150000"     # boot ~75 s; subir si la instancia tiene RAM de sobra
+      - key: EMBED_PROVIDER
+        value: hf            # embeddinggemma vía HuggingFace Inference, sin Ollama. Ver deploy/README.md
+      - key: EMBED_MODEL
+        value: google/embeddinggemma-300m   # 768d — mismo modelo que el Ollama local
+      - key: EMBED_BASE_URL
+        value: https://router.huggingface.co/hf-inference/models
+      - key: EMBED_AUTH_SCHEME
+        value: Bearer
+      - key: CHROMADB_HOST
+        value: api.trychroma.com
+      - key: CHROMADB_PORT
+        value: "443"
+      - key: LLM_BASE_URL
+        value: https://opencode.ai/zen/go/v1
+      - key: LLM_MODEL
+        value: deepseek-v4-flash-vision-exp
+      - key: LLM_MODEL_FALLBACK
+        value: deepseek-v4-flash
+      - key: LLM_PROVIDER
+        value: opencode-go
+      - key: LLM_REDACT_PROMPT
+        value: "true"
+      # --- Secretos y valores de proyecto: cargar en el panel (Environment) ---
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CHROMA_API_KEY
+        sync: false
+      - key: EMBED_API_KEY
+        sync: false          # key del proveedor de embeddings (OpenAI / fal / …)
+      - key: CHROMA_TENANT
+        sync: false
+      - key: CHROMA_DATABASE
+        sync: false
+      - key: SECRET_KEY
+        sync: false          # MISMO valor que Coolify o los JWT no cruzan al conmutar
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: VIRUSTOTAL_API_KEY
+        sync: false
+      - key: URLSCAN_API_KEY
+        sync: false
+      - key: GOOGLE_SAFE_BROWSING_API_KEY
+        sync: false
+      - key: WHOISXML_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false          # JSON: ["https://<front-prod>","chrome-extension://<ext-id>"]
