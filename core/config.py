@@ -36,6 +36,13 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # Orígenes por patrón (además de CORS_ORIGINS exactos): extensión, ngrok y
+    # cualquier deploy de Vercel (el front vive ahí; el JWT protege igual).
+    CORS_ORIGIN_REGEX: str = (
+        r"https://([a-z0-9-]+\.)*vercel\.app"
+        r"|https://.*\.ngrok-free\.(app|dev)"
+        r"|chrome-extension://.*"
+    )
 
     # Rate Limiting
     RATE_LIMIT_ANALYZE: int = 100
