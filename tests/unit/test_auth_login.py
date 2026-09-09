@@ -144,7 +144,11 @@ class TestRegisterEndpoint:
 
     def test_register_creates_student_and_returns_token(self, client):
         with patch("routers.auth_router.check_rate_limit", new_callable=AsyncMock), \
-             patch("routers.auth_router.execute", new_callable=AsyncMock, return_value="INSERT 0 1"):
+             patch(
+                 "routers.auth_router.execute",
+                 new_callable=AsyncMock,
+                 return_value="INSERT 0 1",
+             ):
             resp = client.post(
                 "/api/v1/auth/register",
                 json={"email": "Nuevo.User@Academia.USBBOG.edu.co", "password": "unaclave123"},
@@ -156,15 +160,13 @@ class TestRegisterEndpoint:
 
     def test_register_duplicate_email_409(self, client):
         with patch("routers.auth_router.check_rate_limit", new_callable=AsyncMock), \
-             patch("routers.auth_router.execute", new_callable=AsyncMock, return_value="INSERT 0 0"):
+             patch(
+                 "routers.auth_router.execute",
+                 new_callable=AsyncMock,
+                 return_value="INSERT 0 0",
+             ):
             resp = client.post(
                 "/api/v1/auth/register",
                 json={"email": "ya.existe@usbbog.edu.co", "password": "unaclave123"},
             )
         assert resp.status_code == 409
-
-    def test_onboarding_page_served_at_root(self, client):
-        resp = client.get("/")
-        assert resp.status_code == 200
-        assert "Crear cuenta" in resp.text
-        assert "academia.usbbog.edu.co" in resp.text

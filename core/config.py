@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     # Orígenes por patrón (además de CORS_ORIGINS exactos): extensión, ngrok y
     # cualquier deploy de Vercel (el front vive ahí; el JWT protege igual).
     CORS_ORIGIN_REGEX: str = (
-        r"https://([a-z0-9-]+\.)*vercel\.app"
+        r"https://([a-z0-9-]+\.)*(vercel\.app|onrender\.com)"
         r"|https://.*\.ngrok-free\.(app|dev)"
         r"|chrome-extension://.*"
     )
