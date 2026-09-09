@@ -39,10 +39,11 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
-    # Orígenes por patrón (además de CORS_ORIGINS exactos): extensión, ngrok y
-    # cualquier deploy de Vercel (el front vive ahí; el JWT protege igual).
+    # Orígenes por patrón (además de CORS_ORIGINS exactos): extensión, ngrok,
+    # cualquier subdominio propio (*.mangel.dpdns.org — onboardingtes, dashdect…)
+    # y cualquier deploy de Vercel / Render. El JWT protege igual.
     CORS_ORIGIN_REGEX: str = (
-        r"https://([a-z0-9-]+\.)*(vercel\.app|onrender\.com)"
+        r"https://([a-z0-9-]+\.)*(mangel\.dpdns\.org|vercel\.app|onrender\.com)"
         r"|https://.*\.ngrok-free\.(app|dev)"
         r"|chrome-extension://.*"
     )
