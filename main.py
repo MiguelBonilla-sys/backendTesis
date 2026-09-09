@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
 
 from core.config import settings
 from core.logger import logger
@@ -84,6 +86,23 @@ app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
 app.include_router(analyze_router, prefix="/api/v1", tags=["analyze"])
 app.include_router(eml_router, prefix="/api/v1", tags=["analyze"])
 app.include_router(incidents_router, prefix="/api/v1", tags=["incidents"])
+
+# --- Onboarding: página estática de alta de cuenta + descarga de la extensión ---
+_WEB_DIR = Path(__file__).parent / "web"
+
+
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
+async def onboarding() -> HTMLResponse:
+    return HTMLResponse((_WEB_DIR / "index.html").read_text(encoding="utf-8"))
+
+
+@app.get("/download/extension.zip", include_in_schema=False)
+async def download_extension() -> FileResponse:
+    return FileResponse(
+        _WEB_DIR / "extension-tesis-v1.0.0.zip",
+        media_type="application/zip",
+        filename="extension-tesis-v1.0.0.zip",
+    )
 
 
 if __name__ == "__main__":

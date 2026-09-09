@@ -5,14 +5,23 @@ Genera JWT HS256 con exp=15min para acceso a endpoints protegidos.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from auth.dependencies import require_auth
 from auth.jwt import create_access_token, create_refresh_token, decode_token
 from core.config import settings
 from core.exceptions import AuthenticationError
 from core.logger import get_logger
-from schemas.auth import LoginRequest, RefreshRequest, TokenResponse, UserInfo
+from core.rate_limiter import check_rate_limit, get_client_ip
+from core.security import hash_password
+from models.database import execute
+from schemas.auth import (
+    LoginRequest,
+    RefreshRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserInfo,
+)
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -51,6 +60,58 @@ async def login(request: LoginRequest) -> TokenResponse:
         refresh_token=refresh,
         refresh_expires_in=settings.JWT_REFRESH_EXPIRE_MINUTES * 60,
     )
+
+
+# --------------------------------------------------------------------------- #
+# POST /auth/register  — alta self-service (solo dominios USB)
+# --------------------------------------------------------------------------- #
+
+
+def _issue_tokens(sub: str, role: str) -> TokenResponse:
+    return TokenResponse(
+        access_token=create_access_token(data={"sub": sub, "role": role}),
+        token_type="bearer",
+        expires_in=settings.JWT_EXPIRE_MINUTES * 60,
+        role=role,
+        refresh_token=create_refresh_token(data={"sub": sub, "role": role}),
+        refresh_expires_in=settings.JWT_REFRESH_EXPIRE_MINUTES * 60,
+    )
+
+
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, request: Request) -> TokenResponse:
+    """Crea una cuenta de estudiante. Solo correos institucionales USB.
+
+    Rol siempre ``student`` — el alta self-service nunca crea admins.
+    Devuelve el token para iniciar sesión de una vez.
+    """
+    await check_rate_limit(
+        f"rl:register:{get_client_ip(request)}", limit=5, window_seconds=3600
+    )
+
+    email = payload.email.strip().lower()
+    domain = email.rsplit("@", 1)[-1]
+    if domain not in settings.ALLOWED_SIGNUP_DOMAINS:
+        allowed = " o ".join(f"@{d}" for d in settings.ALLOWED_SIGNUP_DOMAINS)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"El registro es solo para correos {allowed}",
+        )
+
+    result = await execute(
+        "INSERT INTO users (email, password_hash, role, is_active) "
+        "VALUES ($1, $2, 'student', true) ON CONFLICT (email) DO NOTHING",
+        email,
+        hash_password(payload.password),
+    )
+    if result.strip().endswith("0 0"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Ese correo ya tiene una cuenta. Iniciá sesión.",
+        )
+
+    logger.info("user_registered", username=email, role="student")
+    return _issue_tokens(email, "student")
 
 
 # --------------------------------------------------------------------------- #

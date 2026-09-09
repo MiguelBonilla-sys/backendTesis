@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Detector de Phishing IDN — USB · Crear cuenta e instalar la extensión</title>
+<style>
+  :root{
+    --bg:#f4f6fb; --card:#ffffff; --ink:#1b2733; --muted:#5b6b7c;
+    --brand:#123a6b; --brand-2:#1f5fb0; --ok:#127a4a; --err:#b4232a;
+    --line:#e2e8f2; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  .wrap{max-width:760px; margin:0 auto; padding:32px 20px 64px}
+  header.hero{text-align:center; padding:24px 0 8px}
+  .badge-usb{
+    display:inline-block; font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+    color:var(--brand); background:#e7eefb; border:1px solid #d3e0f7;
+    padding:4px 10px; border-radius:999px; margin-bottom:14px;
+  }
+  h1{font-size:26px; margin:.2em 0 .1em; line-height:1.25}
+  .sub{color:var(--muted); margin:0 auto; max-width:52ch}
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+    padding:22px 22px 24px; margin:20px 0; box-shadow:0 1px 2px rgba(20,40,80,.04);
+  }
+  .step-h{display:flex; align-items:center; gap:12px; margin:0 0 6px}
+  .num{
+    flex:0 0 auto; width:30px; height:30px; border-radius:50%;
+    background:var(--brand); color:#fff; font-weight:700; font-size:15px;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .step-h h2{font-size:18px; margin:0}
+  .step-body{margin-left:42px}
+  ol.guide{margin:.4em 0 0; padding-left:1.2em}
+  ol.guide li{margin:.35em 0}
+  code, kbd{
+    background:#eef2f8; border:1px solid var(--line); border-radius:6px;
+    padding:1px 6px; font:13px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  label{display:block; font-weight:600; font-size:14px; margin:14px 0 4px}
+  input[type=email], input[type=password]{
+    width:100%; padding:11px 12px; border:1px solid var(--line); border-radius:10px;
+    font-size:15px; background:#fff; color:var(--ink);
+  }
+  input:focus{outline:2px solid var(--brand-2); outline-offset:1px; border-color:var(--brand-2)}
+  .hint{font-size:13px; color:var(--muted); margin-top:4px}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--brand); color:#fff; border:0; border-radius:10px;
+    padding:12px 18px; font-size:15px; font-weight:600; cursor:pointer;
+    text-decoration:none; margin-top:16px;
+  }
+  .btn:hover{background:#0e2f57}
+  .btn.secondary{background:#fff; color:var(--brand); border:1px solid var(--brand)}
+  .btn[disabled]{opacity:.55; cursor:not-allowed}
+  .msg{margin-top:14px; padding:11px 13px; border-radius:10px; font-size:14px; display:none}
+  .msg.ok{display:block; background:#e6f5ec; border:1px solid #bfe3cd; color:var(--ok)}
+  .msg.err{display:block; background:#fce9e9; border:1px solid #f3c9cb; color:var(--err)}
+  .pill{
+    display:inline-block; font-size:12px; background:#eef2f8; border:1px solid var(--line);
+    border-radius:999px; padding:2px 9px; margin:2px 4px 2px 0; color:var(--muted);
+  }
+  footer{color:var(--muted); font-size:13px; text-align:center; margin-top:28px; line-height:1.7}
+  a{color:var(--brand-2)}
+  @media (max-width:520px){ .step-body{margin-left:0} .step-h{align-items:flex-start} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="badge-usb">Universidad de San Buenaventura · Bogotá</span>
+    <h1>Detector de Phishing IDN</h1>
+    <p class="sub">
+      Una extensión para el navegador que revisa los enlaces de tu correo institucional
+      y te avisa si un dominio está imitando a otro con caracteres parecidos
+      (por ejemplo <code>раypal.com</code> con una “р” cirílica).
+      Seguí estos 4 pasos.
+    </p>
+  </header>
+
+  <!-- PASO 1 -->
+  <section class="card">
+    <div class="step-h"><span class="num">1</span><h2>Creá tu cuenta</h2></div>
+    <div class="step-body">
+      <p>Solo con tu correo institucional. Vas a usar estas credenciales para iniciar
+         sesión dentro de la extensión.</p>
+
+      <form id="signup" novalidate>
+        <label for="email">Correo institucional</label>
+        <input id="email" name="email" type="email" autocomplete="email"
+               placeholder="tu.usuario@academia.usbbog.edu.co" required />
+        <div class="hint">
+          Se aceptan
+          <span class="pill">@usbbog.edu.co</span>
+          <span class="pill">@academia.usbbog.edu.co</span>
+        </div>
+
+        <label for="pass">Contraseña</label>
+        <input id="pass" name="password" type="password" autocomplete="new-password"
+               minlength="8" required />
+        <div class="hint">Mínimo 8 caracteres.</div>
+
+        <label for="pass2">Repetir contraseña</label>
+        <input id="pass2" name="password2" type="password" autocomplete="new-password"
+               minlength="8" required />
+
+        <button class="btn" id="submitBtn" type="submit">Crear cuenta</button>
+        <div class="msg" id="formMsg" role="status" aria-live="polite"></div>
+      </form>
+    </div>
+  </section>
+
+  <!-- PASO 2 -->
+  <section class="card">
+    <div class="step-h"><span class="num">2</span><h2>Descargá la extensión</h2></div>
+    <div class="step-body">
+      <p>Es un archivo <code>.zip</code> liviano (~20 KB). Guardalo y descomprimilo;
+         te va a quedar una carpeta llamada <code>dist</code>.</p>
+      <a class="btn secondary" href="/download/extension.zip" download>⬇ Descargar extension-tesis-v1.0.0.zip</a>
+    </div>
+  </section>
+
+  <!-- PASO 3 -->
+  <section class="card">
+    <div class="step-h"><span class="num">3</span><h2>Instalala en el navegador</h2></div>
+    <div class="step-body">
+      <p><strong>Chrome / Edge / Brave</strong></p>
+      <ol class="guide">
+        <li>Abrí <code>chrome://extensions</code> (o <code>edge://extensions</code>).</li>
+        <li>Activá el <strong>Modo de desarrollador</strong> (interruptor arriba a la derecha).</li>
+        <li>Clic en <strong>“Cargar descomprimida”</strong> / <em>Load unpacked</em>.</li>
+        <li>Elegí la carpeta <code>dist</code> que descomprimiste en el paso 2.</li>
+        <li>Listo: vas a ver el ícono del detector en la barra de extensiones.</li>
+      </ol>
+      <p style="margin-top:14px"><strong>Firefox</strong></p>
+      <ol class="guide">
+        <li>Abrí <code>about:debugging#/runtime/this-firefox</code>.</li>
+        <li>Clic en <strong>“Cargar complemento temporal…”</strong>.</li>
+        <li>Seleccioná el archivo <code>dist/manifest.json</code>.</li>
+      </ol>
+      <div class="hint">
+        En Chrome, si más adelante querés que quede fijo, hacé clic en el ícono de piezas
+        de la barra y “anclá” el detector.
+      </div>
+    </div>
+  </section>
+
+  <!-- PASO 4 -->
+  <section class="card">
+    <div class="step-h"><span class="num">4</span><h2>Usala</h2></div>
+    <div class="step-body">
+      <ol class="guide">
+        <li>Entrá a tu correo web (Gmail, Outlook web, etc.).</li>
+        <li>Hacé clic en el ícono de la extensión.</li>
+        <li>Iniciá sesión con el correo y la contraseña que creaste en el paso 1.</li>
+        <li>La extensión analiza los enlaces del mensaje abierto y muestra un veredicto:
+          <span class="pill" style="color:#127a4a">LEGÍTIMO</span>
+          <span class="pill" style="color:#9a6b00">SOSPECHOSO</span>
+          <span class="pill" style="color:#b4232a">PHISHING</span>
+          con una explicación de por qué.
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <footer>
+    El análisis es <strong>a pedido</strong> (lo disparás vos) — la extensión no lee tu correo en segundo plano.<br />
+    No se guarda el cuerpo del mensaje: solo las URLs y un hash SHA-256, según la Ley 1581 de 2012.<br />
+    Proyecto de grado — Ingeniería de Sistemas, USB Bogotá, 2026.
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  var ALLOWED = ["usbbog.edu.co", "academia.usbbog.edu.co"];
+  var form = document.getElementById("signup");
+  var msg = document.getElementById("formMsg");
+  var btn = document.getElementById("submitBtn");
+
+  function show(kind, text) {
+    msg.className = "msg " + kind;
+    msg.textContent = text;
+  }
+  function domainOk(email) {
+    var at = email.lastIndexOf("@");
+    if (at < 0) return false;
+    return ALLOWED.indexOf(email.slice(at + 1).toLowerCase()) !== -1;
+  }
+
+  form.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var email = form.email.value.trim().toLowerCase();
+    var p1 = form.password.value;
+    var p2 = form.password2.value;
+
+    if (!domainOk(email)) {
+      return show("err", "Usá un correo @usbbog.edu.co o @academia.usbbog.edu.co.");
+    }
+    if (p1.length < 8) {
+      return show("err", "La contraseña debe tener al menos 8 caracteres.");
+    }
+    if (p1 !== p2) {
+      return show("err", "Las contraseñas no coinciden.");
+    }
+
+    btn.disabled = true;
+    show("ok", "Creando cuenta…");
+    try {
+      var res = await fetch("/api/v1/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, password: p1 }),
+      });
+      if (res.status === 201) {
+        form.reset();
+        show("ok", "✓ Cuenta creada. Ya podés iniciar sesión desde la extensión (paso 4).");
+        btn.textContent = "Cuenta creada";
+        return;
+      }
+      var body = {};
+      try { body = await res.json(); } catch (_) {}
+      var detail = body.detail;
+      if (Array.isArray(detail)) detail = "Revisá el correo y la contraseña.";
+      if (res.status === 429) detail = "Demasiados intentos. Probá de nuevo en un rato.";
+      show("err", detail || ("No se pudo crear la cuenta (HTTP " + res.status + ")."));
+      btn.disabled = false;
+    } catch (err) {
+      show("err", "No se pudo conectar con el servidor. Reintentá en unos segundos.");
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -113,3 +113,58 @@ class TestRequireRole:
         with pytest.raises(HTTPException) as exc_info:
             await checker(current_user={"sub": "user", "role": "student"})
         assert exc_info.value.status_code == 403
+
+
+class TestRegisterEndpoint:
+    @pytest.fixture
+    def client(self):
+        with patch("main.init_db", new_callable=AsyncMock), \
+             patch("main.close_db", new_callable=AsyncMock), \
+             patch("main.init_redis", new_callable=AsyncMock), \
+             patch("main.close_redis", new_callable=AsyncMock):
+            from main import app
+            with TestClient(app) as c:
+                yield c
+
+    def test_register_rejects_non_usb_domain(self, client):
+        with patch("routers.auth_router.check_rate_limit", new_callable=AsyncMock):
+            resp = client.post(
+                "/api/v1/auth/register",
+                json={"email": "alguien@gmail.com", "password": "12345678"},
+            )
+        assert resp.status_code == 403
+        assert "usbbog.edu.co" in resp.json()["detail"]
+
+    def test_register_short_password_422(self, client):
+        resp = client.post(
+            "/api/v1/auth/register",
+            json={"email": "a@academia.usbbog.edu.co", "password": "short"},
+        )
+        assert resp.status_code == 422
+
+    def test_register_creates_student_and_returns_token(self, client):
+        with patch("routers.auth_router.check_rate_limit", new_callable=AsyncMock), \
+             patch("routers.auth_router.execute", new_callable=AsyncMock, return_value="INSERT 0 1"):
+            resp = client.post(
+                "/api/v1/auth/register",
+                json={"email": "Nuevo.User@Academia.USBBOG.edu.co", "password": "unaclave123"},
+            )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["role"] == "student"
+        assert data["access_token"]
+
+    def test_register_duplicate_email_409(self, client):
+        with patch("routers.auth_router.check_rate_limit", new_callable=AsyncMock), \
+             patch("routers.auth_router.execute", new_callable=AsyncMock, return_value="INSERT 0 0"):
+            resp = client.post(
+                "/api/v1/auth/register",
+                json={"email": "ya.existe@usbbog.edu.co", "password": "unaclave123"},
+            )
+        assert resp.status_code == 409
+
+    def test_onboarding_page_served_at_root(self, client):
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Crear cuenta" in resp.text
+        assert "academia.usbbog.edu.co" in resp.text

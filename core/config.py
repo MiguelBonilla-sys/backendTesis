@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""
 
+    # Registro self-service — solo correos institucionales USB
+    ALLOWED_SIGNUP_DOMAINS: list[str] = ["usbbog.edu.co", "academia.usbbog.edu.co"]
+
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     # Orígenes por patrón (además de CORS_ORIGINS exactos): extensión, ngrok y

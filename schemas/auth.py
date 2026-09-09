@@ -7,6 +7,14 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class RegisterRequest(BaseModel):
+    """Alta self-service — el router valida además el dominio institucional USB."""
+
+    # Forma básica de correo; el control real es la allowlist de dominios del router.
+    email: str = Field(..., min_length=6, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+    password: str = Field(..., min_length=8, max_length=128)
+
+
 class LoginRequest(BaseModel):
     # Login must accept any non-empty credential — complexity rules belong on
     # registration only. Enforcing min_length here returns 422 and locks out
