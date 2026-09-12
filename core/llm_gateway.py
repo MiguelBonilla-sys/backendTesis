@@ -9,10 +9,12 @@ modelo instalado localmente.
 El colapso a score neutral (``LLM_FALLBACK_SCORE``) lo maneja el caller
 (``agents/llm_agent.py``) — acá solo se propagan los errores HTTP.
 """
+
 from __future__ import annotations
 
 import asyncio
 import time
+import uuid
 from dataclasses import dataclass
 
 import httpx
@@ -52,13 +54,23 @@ class LLMGateway:
 
     def __init__(self) -> None:
         self._client: httpx.AsyncClient | None = None
+        # OpenCode Go exige un User-Agent propio y una sesión estable por
+        # conversación (routing/prompt-cache) — sin esto responde 400
+        # MissingSessionID. Un id por proceso alcanza: no tenemos sesiones de
+        # usuario reales acá, cada request es una llamada aislada.
+        # https://opencode.ai/docs/go/#where-can-i-use-it
+        self._session_id = str(uuid.uuid4())
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
     def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
+        headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "backendtesis-idn-phishing-detector/1.0",
+            "x-opencode-session": self._session_id,
+        }
         if settings.LLM_API_KEY:
             headers["Authorization"] = f"Bearer {settings.LLM_API_KEY}"
         return headers
@@ -77,9 +89,7 @@ class LLMGateway:
         if self._client is None:
             self._client = httpx.AsyncClient(base_url=settings.LLM_BASE_URL)
         try:
-            resp = await self._client.get(
-                "/models", headers=self._headers(), timeout=10.0
-            )
+            resp = await self._client.get("/models", headers=self._headers(), timeout=10.0)
             resp.raise_for_status()
             logger.info(
                 "llm_gateway_initialized",
@@ -134,9 +144,7 @@ class LLMGateway:
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
                 if status in _MODEL_STATUS and candidate != settings.LLM_MODEL_FALLBACK:
-                    logger.warning(
-                        "llm_gateway_model_fallback", model=candidate, status=status
-                    )
+                    logger.warning("llm_gateway_model_fallback", model=candidate, status=status)
                     continue
                 raise
 
