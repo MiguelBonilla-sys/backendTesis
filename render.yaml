@@ -23,6 +23,10 @@ services:
     autoDeploy: true        # push a main → redeploy, igual que Coolify
     envVars:
       # --- No secretos: idénticos a Coolify ---
+      - key: APP_ENV
+        value: production   # sin esto cae al default "development" — relaja las cookies de auth
+      - key: AUTH_COOKIE_DOMAIN
+        value: mangel.dpdns.org   # back-tesi. y render. son subdominios de esto — comparte la cookie en el failover
       - key: TOP1M_LIMIT
         value: "150000"     # boot ~75 s; subir si la instancia tiene RAM de sobra
       - key: EMBED_PROVIDER

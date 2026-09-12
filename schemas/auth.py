@@ -33,7 +33,9 @@ class TokenResponse(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str = Field(..., min_length=1)
+    # Optativo: el dashboard no manda body, el refresh token viaja en la
+    # cookie httpOnly. La extensión sigue mandándolo en el body.
+    refresh_token: str | None = Field(None, min_length=1)
 
 
 class UserInfo(BaseModel):
@@ -42,6 +44,6 @@ class UserInfo(BaseModel):
 
 
 class TokenPayload(BaseModel):
-    sub: str        # username
-    role: str       # "admin" | "student" | "viewer"
-    exp: int        # unix timestamp
+    sub: str  # username
+    role: str  # "admin" | "student" | "viewer"
+    exp: int  # unix timestamp

@@ -34,6 +34,19 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""
 
+    # Cookies httpOnly del dashboard (además del token en el body, que usa la
+    # extensión). SameSite=None + Secure porque el front puede servirse desde
+    # un dominio *.vercel.app (cross-site real) — en dev estos dos se relajan
+    # solos (ver auth_router._cookie_kwargs), no hace falta tocarlos localmente.
+    # AUTH_COOKIE_DOMAIN: en prod, "mangel.dpdns.org" — Coolify (back-tesi.) y
+    # Render (render.) están mapeados como subdominios de ESE dominio (ver
+    # render.yaml / docker-compose.coolify.yml), así que comparten la cookie:
+    # el failover entre instancias ya no pierde la sesión. Vacío = cookie
+    # host-only (solo sirve para el dominio exacto que la puso).
+    AUTH_COOKIE_DOMAIN: str = ""
+    AUTH_COOKIE_SECURE: bool = True
+    AUTH_COOKIE_SAMESITE: str = "none"
+
     # Registro self-service — solo correos institucionales USB
     ALLOWED_SIGNUP_DOMAINS: list[str] = ["usbbog.edu.co", "academia.usbbog.edu.co"]
 

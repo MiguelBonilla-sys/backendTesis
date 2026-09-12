@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from auth.jwt import decode_token
+from core.constants import ACCESS_TOKEN_COOKIE
 from core.exceptions import AuthenticationError
 
-security = HTTPBearer()
+# auto_error=False: la extensión manda Bearer, el dashboard manda cookie httpOnly.
+# Sin header no debe cortar acá — se cae al cookie antes de rechazar.
+security = HTTPBearer(auto_error=False)
 
 
 async def require_auth(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> dict:
-    """FastAPI dependency that validates the Bearer JWT token.
+    """FastAPI dependency that validates the JWT — vía Bearer header o cookie httpOnly.
 
     Usage::
 
@@ -29,8 +33,15 @@ async def require_auth(
     Raises:
         HTTPException(401): If the token is missing, expired, or invalid.
     """
+    token = credentials.credentials if credentials else request.cookies.get(ACCESS_TOKEN_COOKIE)
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
-        return decode_token(credentials.credentials)
+        return decode_token(token)
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -51,6 +62,7 @@ async def require_admin(current_user: dict = Depends(require_auth)) -> dict:
 
 def require_role(*roles: str):
     """Factory de dependency para roles específicos."""
+
     async def _check(current_user: dict = Depends(require_auth)) -> dict:
         if current_user.get("role") not in roles:
             raise HTTPException(
@@ -58,4 +70,5 @@ def require_role(*roles: str):
                 detail=f"Required roles: {', '.join(roles)}",
             )
         return current_user
+
     return _check

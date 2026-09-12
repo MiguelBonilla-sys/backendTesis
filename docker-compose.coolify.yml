@@ -21,6 +21,9 @@ services:
       SERVICE_FQDN_BACKEND_8000: "/"
       APP_ENV: production
       DEBUG: "false"
+      # back-tesi. y render. son subdominios de esto — comparte la cookie de
+      # sesión del dashboard entre las dos instancias durante el failover.
+      AUTH_COOKIE_DOMAIN: mangel.dpdns.org
       # Topología interna del stack
       DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-phishing_detector}"
       REDIS_URL: "redis://redis:6379/0"
