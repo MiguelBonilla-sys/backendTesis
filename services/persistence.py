@@ -1,11 +1,18 @@
 """Persistence helpers — fire-and-forget async writes to PostgreSQL."""
+
 from __future__ import annotations
 
 import json
 from datetime import datetime
 
 from core.logger import get_logger
-from schemas.analyze import AnalyzeEmailRequest, AnalyzeRequest, AnalyzeResponse, BatchAnalyzeRequest
+from schemas.analyze import (
+    AnalyzeEmailRequest,
+    AnalyzeRequest,
+    AnalyzeResponse,
+    BatchAnalyzeRequest,
+)
+from utils.email_parser import ParsedEmail
 from utils.url_parser import extract_domain
 
 logger = get_logger(__name__)
@@ -18,6 +25,7 @@ async def _persist_incident(
     """Inserta el incidente en PostgreSQL de forma asíncrona."""
     try:
         from models.database import execute
+
         await execute(
             """
             INSERT INTO incidents (
@@ -68,6 +76,7 @@ async def _persist_email_incident(
     """Persiste un incidente de análisis de email completo en PostgreSQL (fire-and-forget)."""
     try:
         from models.database import execute
+
         await execute(
             """
             INSERT INTO incidents (
@@ -109,7 +118,65 @@ async def _persist_email_incident(
         )
         logger.info("email_incident_persisted", request_id=response.request_id)
     except Exception as exc:
-        logger.error("persist_email_incident_failed", request_id=response.request_id, error=str(exc))
+        logger.error(
+            "persist_email_incident_failed", request_id=response.request_id, error=str(exc)
+        )
+
+
+async def _persist_eml_incident(
+    response: AnalyzeResponse,
+    parsed: ParsedEmail,
+    all_urls: list[str],
+) -> None:
+    """Persiste un incidente de un archivo .eml subido directamente (fire-and-forget).
+
+    Espejo de ``_persist_email_incident`` pero la fuente es ``ParsedEmail``
+    (``routers/eml_router.py``) en vez del payload JSON de la extensión — hasta
+    ahora ``/api/v1/analyze_eml`` no dejaba rastro en ``incidents``, así que no
+    aparecía en Historial ni en las métricas de "hoy" del dashboard. Sin
+    ``email_to`` (el .eml no trae destinatario) ni cuerpo HTML completo (solo
+    se guardan asunto/remitente/URLs, igual que el resto de incidentes).
+    """
+    try:
+        from models.database import execute
+
+        await execute(
+            """
+            INSERT INTO incidents (
+                id, email_hash, url, domain, verdict,
+                s_risk, s_idn, s_llm, s_ti,
+                llm_reason, shap_contributions,
+                email_subject, email_from, email_to, all_urls, reasons,
+                created_at
+            ) VALUES (
+                $1, $2, $3, $4, $5,
+                $6, $7, $8, $9,
+                $10, $11,
+                $12, $13, $14, $15, $16,
+                $17
+            ) ON CONFLICT (id) DO NOTHING
+            """,
+            response.request_id,
+            parsed.email_hash,
+            response.url,
+            response.domain,
+            response.verdict,
+            response.s_risk,
+            response.agent_scores.s_idn,
+            response.agent_scores.s_llm,
+            response.agent_scores.s_ti,
+            response.llm_reason,
+            json.dumps(response.shap_explanation.feature_contributions),
+            parsed.subject,
+            parsed.sender,
+            "",
+            json.dumps(all_urls),
+            json.dumps(response.reasons),
+            response.timestamp,
+        )
+        logger.info("eml_incident_persisted", request_id=response.request_id)
+    except Exception as exc:
+        logger.error("persist_eml_incident_failed", request_id=response.request_id, error=str(exc))
 
 
 async def _persist_batch_incident(
@@ -119,6 +186,7 @@ async def _persist_batch_incident(
     """Persiste un incidente de batch en PostgreSQL (fire-and-forget)."""
     try:
         from models.database import execute
+
         await execute(
             """
             INSERT INTO incidents (
@@ -154,7 +222,9 @@ async def _persist_batch_incident(
             response.timestamp,
         )
     except Exception as exc:
-        logger.error("persist_batch_incident_failed", request_id=response.request_id, error=str(exc))
+        logger.error(
+            "persist_batch_incident_failed", request_id=response.request_id, error=str(exc)
+        )
 
 
 async def _persist_manual_report(
@@ -169,6 +239,7 @@ async def _persist_manual_report(
     try:
         domain = extract_domain(url) if url.startswith("http") else url
         from models.database import execute
+
         await execute(
             """
             INSERT INTO incidents (

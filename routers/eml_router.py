@@ -15,7 +15,7 @@ from __future__ import annotations
 import asyncio
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
@@ -30,19 +30,20 @@ from schemas.analyze import (
     ReportResponse,
 )
 from services.analysis import _aggregate_email_reasons, _analyze_single_url_for_email
-from services.persistence import _persist_manual_report
+from services.persistence import _persist_eml_incident, _persist_manual_report
 from utils.email_parser import ParsedEmail, parse_eml
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["analyze"])
 
-_EML_MAX_BYTES = 10 * 1024 * 1024   # 10 MB hard cap
-_EML_MAX_URLS = 10                   # máximo de URLs únicas a analizar por email
+_EML_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap
+_EML_MAX_URLS = 10  # máximo de URLs únicas a analizar por email
 
 
 # --------------------------------------------------------------------------- #
 # POST /analyze_eml — análisis completo de archivo .eml
 # --------------------------------------------------------------------------- #
+
 
 @router.post(
     "/analyze_eml",
@@ -139,9 +140,16 @@ async def analyze_eml_file(
     ]
 
     raw_results = await asyncio.gather(*url_tasks, return_exceptions=True)
-    url_analyses: list[AnalyzeResponse] = [
-        r for r in raw_results if isinstance(r, AnalyzeResponse)
-    ]
+    url_analyses: list[AnalyzeResponse] = [r for r in raw_results if isinstance(r, AnalyzeResponse)]
+
+    # Un incidente por URL analizada — igual que /analyze_email (fire-and-forget).
+    # Antes esta ruta no persistía nada: no aparecía en Historial ni en las
+    # métricas de "hoy" pese a haber corrido el pipeline completo.
+    for result in url_analyses:
+        asyncio.create_task(
+            _persist_eml_incident(result, parsed, unique_urls),
+            name=f"persist_eml_{result.request_id}",
+        )
 
     for i, r in enumerate(raw_results):
         if isinstance(r, Exception):
@@ -181,13 +189,14 @@ async def analyze_eml_file(
         email_s_risk=email_s_risk,
         reasons=email_reasons,
         processing_ms=round(processing_ms, 1),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
 
 
 # --------------------------------------------------------------------------- #
 # POST /report — reporte manual de URLs (Asset Register A09)
 # --------------------------------------------------------------------------- #
+
 
 @router.post(
     "/report",
@@ -213,7 +222,7 @@ async def report_url(
     await check_rate_limit(f"rl:report:{client_ip}", limit=20, window_seconds=60)
 
     report_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Persist as manual incident — fire-and-forget to avoid blocking the response
     asyncio.create_task(
