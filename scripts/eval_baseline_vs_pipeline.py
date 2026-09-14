@@ -17,6 +17,7 @@ Acepta los mismos datasets que eval_datasets.py más el corpus IDN sintético:
         --jsonl data/idn_synth.jsonl --legit-jsonl data/legit_sample.jsonl
     python -m scripts.eval_baseline_vs_pipeline --dataset pirocheto --limit 300
 """
+
 from __future__ import annotations
 
 import argparse
@@ -35,6 +36,7 @@ BASELINE_THRESHOLD = 0.5
 # Carga de casos
 # ---------------------------------------------------------------------------
 
+
 def load_jsonl_cases(path: Path, expected: str) -> list[dict]:
     """Carga casos desde un JSONL (corpus sintético o real). Campo ``url`` o
     ``domain``/``unicode`` (homógrafo). ``expected`` etiqueta toda la lista."""
@@ -50,8 +52,14 @@ def load_jsonl_cases(path: Path, expected: str) -> list[dict]:
                 host = rec.get("unicode") or rec.get("domain")
                 url = f"http://{host}" if host else None
             if url:
-                cases.append({"url": url, "expected": expected,
-                              "source": path.name, "synthetic": rec.get("synthetic", False)})
+                cases.append(
+                    {
+                        "url": url,
+                        "expected": expected,
+                        "source": path.name,
+                        "synthetic": rec.get("synthetic", False),
+                    }
+                )
     return cases
 
 
@@ -59,24 +67,45 @@ def load_jsonl_cases(path: Path, expected: str) -> list[dict]:
 # Llamada al pipeline (deriva ambos veredictos)
 # ---------------------------------------------------------------------------
 
-async def analyze(client: httpx.AsyncClient, backend: str, url: str, token: str) -> dict:
-    try:
-        resp = await client.post(
-            f"{backend}/api/v1/analyze",
-            json={"url": url},
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=30.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        s_hf = (data.get("agent_scores") or {}).get("s_hf")
-        return {
-            "pipeline_verdict": data.get("verdict", "ERROR"),
-            "s_hf": s_hf,
-            "s_risk": data.get("s_risk"),
-        }
-    except Exception as exc:  # noqa: BLE001 — eval script, registrar y seguir
-        return {"pipeline_verdict": "ERROR", "s_hf": None, "error": str(exc)}
+
+async def analyze(client: httpx.AsyncClient, backend: str, url: str, token_holder: dict) -> dict:
+    """Reintenta ante error de transporte (reset/timeout — port-forward de un
+    backend local en VM bajo carga) y ante 401 (el access_token expira a los
+    15 min — ``expires_in=900`` — y un corpus de 300 casos a baja concurrencia
+    supera esa ventana). ``token_holder`` es compartido entre llamadas
+    concurrentes: quien primero ve el 401 relogea y lo actualiza para todas."""
+    last_error: Exception | None = None
+    for attempt in (1, 2, 3):
+        try:
+            resp = await client.post(
+                f"{backend}/api/v1/analyze",
+                json={"url": url},
+                headers={"Authorization": f"Bearer {token_holder['token']}"},
+                timeout=30.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            s_hf = (data.get("agent_scores") or {}).get("s_hf")
+            return {
+                "pipeline_verdict": data.get("verdict", "ERROR"),
+                "s_hf": s_hf,
+                "s_risk": data.get("s_risk"),
+            }
+        except httpx.HTTPStatusError as exc:
+            last_error = exc
+            if exc.response.status_code == 401 and attempt < 3:
+                token_holder["token"] = await get_token(backend)
+                continue
+            break
+        except httpx.TransportError as exc:
+            last_error = exc
+            if attempt < 3:
+                await asyncio.sleep(0.5)
+                continue
+        except Exception as exc:  # noqa: BLE001 — eval script, registrar y seguir
+            last_error = exc
+            break
+    return {"pipeline_verdict": "ERROR", "s_hf": None, "error": str(last_error)}
 
 
 async def get_token(backend: str) -> str:
@@ -98,6 +127,7 @@ async def get_token(backend: str) -> str:
 # Métricas + McNemar
 # ---------------------------------------------------------------------------
 
+
 def _binary_metrics(pairs: list[tuple[bool, bool]]) -> dict:
     """pairs: (predicted_phishing, actual_phishing)."""
     tp = sum(1 for p, a in pairs if p and a)
@@ -109,8 +139,12 @@ def _binary_metrics(pairs: list[tuple[bool, bool]]) -> dict:
     f1 = 2 * prec * rec / (prec + rec) if prec + rec else 0.0
     total = tp + fp + fn + tn
     return {
-        "tp": tp, "fp": fp, "fn": fn, "tn": tn,
-        "precision": round(prec, 4), "recall": round(rec, 4),
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": tn,
+        "precision": round(prec, 4),
+        "recall": round(rec, 4),
         "f1": round(f1, 4),
         "accuracy": round((tp + tn) / total, 4) if total else 0.0,
         "meets_thesis_target": prec >= 0.80 and rec >= 0.75,
@@ -132,8 +166,14 @@ def mcnemar(baseline_correct: list[bool], pipeline_correct: list[bool]) -> dict:
     c = sum(1 for bc, pc in zip(baseline_correct, pipeline_correct) if pc and not bc)
     n_disc = b + c
     if n_disc == 0:
-        return {"b": 0, "c": 0, "chi2": 0.0, "p_value": 1.0,
-                "significant_at_0.05": False, "favors": "tie"}
+        return {
+            "b": 0,
+            "c": 0,
+            "chi2": 0.0,
+            "p_value": 1.0,
+            "significant_at_0.05": False,
+            "favors": "tie",
+        }
 
     chi2 = (abs(b - c) - 1) ** 2 / n_disc
     try:
@@ -158,14 +198,15 @@ def mcnemar(baseline_correct: list[bool], pipeline_correct: list[bool]) -> dict:
 # Loop principal
 # ---------------------------------------------------------------------------
 
+
 async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
-    token = await get_token(backend)
+    token_holder = {"token": await get_token(backend)}
     sem = asyncio.Semaphore(concurrency)
     start = time.perf_counter()
 
     async def one(client, case):
         async with sem:
-            r = await analyze(client, backend, case["url"], token)
+            r = await analyze(client, backend, case["url"], token_holder)
             r["expected"] = case["expected"]
             return r
 
@@ -184,7 +225,11 @@ async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
             continue
         actual = r["expected"] == "PHISHING"
         base_pred = r["s_hf"] >= BASELINE_THRESHOLD
-        pipe_pred = r["pipeline_verdict"] == "PHISHING"
+        # SUSPICIOUS cuenta como detección (decisión 2026-09-14): el pipeline
+        # tiene 3 niveles de veredicto y SUSPICIOUS sí alerta al usuario/admin
+        # — no deja pasar el correo como limpio. Comparar solo contra PHISHING
+        # castiga al pipeline por ser más granular que el baseline binario.
+        pipe_pred = r["pipeline_verdict"] in ("PHISHING", "SUSPICIOUS")
         baseline_pairs.append((base_pred, actual))
         pipeline_pairs.append((pipe_pred, actual))
         baseline_correct.append(base_pred == actual)
@@ -200,6 +245,17 @@ async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
         "pipeline": _binary_metrics(pipeline_pairs),
         "mcnemar": mcnemar(baseline_correct, pipeline_correct),
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        # Crudo por-caso — evidencia reproducible para la tesis y para
+        # recalibrate_theta.py (T6) sin tener que volver a pegarle al backend.
+        "raw_results": [
+            {
+                "url": c.get("url"),
+                "source": c.get("source"),
+                "synthetic": c.get("synthetic", False),
+                **r,
+            }
+            for c, r in zip(cases, results, strict=True)
+        ],
     }
 
 
@@ -215,14 +271,20 @@ def print_report(report: dict) -> None:
         delta = p[key] - b[key]
         print(f"{key:<14}{b[key]:>12.4f}{p[key]:>12.4f}{delta:>+12.4f}")
     print("-" * 64)
-    print(f"McNemar: χ²={m['chi2']} | p={m['p_value']} | "
-          f"significativo(0.05)={m['significant_at_0.05']} | favorece={m['favors']}")
-    print(f"  (baseline-solo correctos={m.get('b_baseline_only_correct')}, "
-          f"pipeline-solo correctos={m.get('c_pipeline_only_correct')})")
+    print(
+        f"McNemar: χ²={m['chi2']} | p={m['p_value']} | "
+        f"significativo(0.05)={m['significant_at_0.05']} | favorece={m['favors']}"
+    )
+    print(
+        f"  (baseline-solo correctos={m.get('b_baseline_only_correct')}, "
+        f"pipeline-solo correctos={m.get('c_pipeline_only_correct')})"
+    )
     print("=" * 64)
     print("Meta tesis: Precision ≥ 0.80 | Recall ≥ 0.75")
-    print(f"  baseline cumple: {b['meets_thesis_target']} | "
-          f"pipeline cumple: {p['meets_thesis_target']}")
+    print(
+        f"  baseline cumple: {b['meets_thesis_target']} | "
+        f"pipeline cumple: {p['meets_thesis_target']}"
+    )
 
 
 def collect_cases(args) -> list[dict]:
