@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from auth.dependencies import require_auth
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
+from data_pipeline.knowledge_updater import is_usb_baseline_candidate, knowledge_updater
 from schemas.analyze import (
     AnalyzeResponse,
     EmailAnalysisResponse,
@@ -168,6 +169,23 @@ async def analyze_eml_file(
         # No URLs found — derive a partial risk score from email signals only
         email_s_risk = round(min(email_signals.urgency_score * 0.40, 0.39), 4)
         email_verdict = "SUSPICIOUS" if email_s_risk >= 0.40 else "LEGITIMATE"
+
+    # Aprendizaje incremental del baseline USB (T10) — fire-and-forget, no
+    # bloquea la respuesta. Gate estricto: dominio institucional + SPF/DKIM
+    # pass + veredicto LEGITIMATE de muy baja incertidumbre (ver
+    # is_usb_baseline_candidate). No requiere autorización T9: solo aprende
+    # del correo que el propio usuario ya pidió analizar.
+    if is_usb_baseline_candidate(
+        sender_domain=parsed.sender_domain,
+        spf_pass=parsed.spf_pass,
+        dkim_pass=parsed.dkim_pass,
+        verdict=email_verdict,
+        s_risk=email_s_risk,
+    ):
+        asyncio.create_task(
+            knowledge_updater.ingest_legit_baseline(parsed),
+            name=f"usb_baseline_{parsed.email_hash}",
+        )
 
     email_reasons = _aggregate_email_reasons(url_analyses, email_signals)
     processing_ms = (time.perf_counter() - t_start) * 1000.0

@@ -356,3 +356,132 @@ class TestPurgeIncidentDocuments:
                 call(COLLECTION_TI, "ti_abc-123"),
             ]
         )
+
+
+# ---------------------------------------------------------------------------
+# is_usb_baseline_candidate / ingest_legit_baseline (T10 — aprendizaje
+# incremental del baseline USB, sin el import batch bloqueado por T9)
+# ---------------------------------------------------------------------------
+
+class TestIsUsbBaselineCandidate:
+    def _kwargs(self, **overrides):
+        base = dict(
+            sender_domain="registro.usbbog.edu.co",
+            spf_pass=True,
+            dkim_pass=True,
+            verdict="LEGITIMATE",
+            s_risk=0.05,
+        )
+        base.update(overrides)
+        return base
+
+    def test_qualifies_with_all_conditions_met(self):
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        assert is_usb_baseline_candidate(**self._kwargs()) is True
+
+    def test_bare_institutional_domain_qualifies(self):
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        assert is_usb_baseline_candidate(**self._kwargs(sender_domain="usbbog.edu.co")) is True
+
+    def test_rejects_non_legitimate_verdict(self):
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        assert is_usb_baseline_candidate(**self._kwargs(verdict="SUSPICIOUS")) is False
+
+    def test_rejects_s_risk_above_strict_threshold(self):
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        # LEGITIMATE pero por encima del umbral estricto (no el THETA general)
+        assert is_usb_baseline_candidate(**self._kwargs(s_risk=0.35)) is False
+
+    def test_rejects_spf_fail(self):
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        assert is_usb_baseline_candidate(**self._kwargs(spf_pass=False)) is False
+
+    def test_rejects_dkim_fail(self):
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        assert is_usb_baseline_candidate(**self._kwargs(dkim_pass=False)) is False
+
+    def test_rejects_external_trusted_domain(self):
+        """microsoftonline.com/google.com son TRUSTED_DOMAIN_SUFFIXES (gate del
+        probe) pero NO son institucionales — no deben alimentar el baseline USB."""
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        assert (
+            is_usb_baseline_candidate(**self._kwargs(sender_domain="outlook.office.com"))
+            is False
+        )
+
+    def test_rejects_lookalike_domain_suffix(self):
+        """"notusbbog.edu.co" no debe matchear por sufijo laxo de string."""
+        from data_pipeline.knowledge_updater import is_usb_baseline_candidate
+
+        assert (
+            is_usb_baseline_candidate(**self._kwargs(sender_domain="notusbbog.edu.co"))
+            is False
+        )
+
+
+class TestIngestLegitBaseline:
+    @pytest.mark.asyncio
+    async def test_upserts_anonymized_document_to_baseline_collection(self):
+        from data_pipeline.knowledge_updater import COLLECTION_BASELINE, KnowledgeUpdaterService
+
+        parsed = type(
+            "ParsedEmail",
+            (),
+            {
+                "sender_domain": "registro.usbbog.edu.co",
+                "subject": "Comunicado para Juan Pérez sobre matrícula",
+                "spf_pass": True,
+                "dkim_pass": True,
+                "sender_domain_mismatch": False,
+                "urls": ["https://aula.usbbog.edu.co/login"],
+                "attachment_names": [],
+            },
+        )()
+
+        service = KnowledgeUpdaterService()
+        with patch(
+            "data_pipeline.knowledge_updater.upsert_documents", new_callable=AsyncMock
+        ) as mock_upsert:
+            await service.ingest_legit_baseline(parsed)
+
+        mock_upsert.assert_awaited_once()
+        args, kwargs = mock_upsert.call_args
+        assert args[0] == COLLECTION_BASELINE
+        assert kwargs["ids"][0].startswith("baseline_")
+        doc = kwargs["documents"][0]
+        assert "Juan" not in doc  # PII anonimizada
+        assert kwargs["metadatas"][0]["source"] == "institutional_baseline"
+        assert kwargs["metadatas"][0]["verdict"] == "LEGITIMATE"
+
+    @pytest.mark.asyncio
+    async def test_failure_is_swallowed_not_raised(self):
+        """No debe interrumpir /analyze_eml si ChromaDB está caído."""
+        from data_pipeline.knowledge_updater import KnowledgeUpdaterService
+
+        parsed = type(
+            "ParsedEmail",
+            (),
+            {
+                "sender_domain": "usbbog.edu.co",
+                "subject": "Aviso",
+                "spf_pass": True,
+                "dkim_pass": True,
+                "sender_domain_mismatch": False,
+                "urls": [],
+                "attachment_names": [],
+            },
+        )()
+
+        service = KnowledgeUpdaterService()
+        with patch(
+            "data_pipeline.knowledge_updater.upsert_documents",
+            side_effect=RuntimeError("chromadb down"),
+        ):
+            await service.ingest_legit_baseline(parsed)  # no debe lanzar

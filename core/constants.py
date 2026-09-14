@@ -108,6 +108,17 @@ TRUSTED_DOMAIN_SUFFIXES: frozenset[str] = frozenset(
         "office.com",
     }
 )
+# Baseline benigno institucional (T10, docs/tasks.md) — aprendizaje incremental:
+# a diferencia de TRUSTED_DOMAIN_SUFFIXES (incluye proveedores externos confiables
+# para el gate del probe), este subconjunto solo debe disparar con dominios
+# propios de la universidad — evita etiquetar como "baseline USB" un correo de
+# Microsoft/Google que simplemente pasa por el gate del probe.
+INSTITUTIONAL_DOMAIN_SUFFIXES: frozenset[str] = frozenset({"usbbog.edu.co", "usb.edu.co"})
+# Umbral estricto (no el THETA general): solo correos institucionales de muy
+# baja incertidumbre alimentan el baseline — un LEGITIMATE limítrofe (spoofing
+# no detectado del todo) no debe envenenarlo.
+USB_BASELINE_MAX_RISK: float = 0.10
+
 PROBE_TIMEOUT_S: float = 8.0
 PROBE_MAX_RESPONSE_BYTES: int = 65_536  # 64 KB — enough to find login forms
 PROBE_MAX_REDIRECTS: int = 5

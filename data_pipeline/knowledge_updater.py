@@ -5,18 +5,39 @@ Responsabilidades:
 - ingest_from_analysis(): auto-ingesta post-scan para s_risk >= AUTO_INGEST_THRESHOLD
 - ingest_confirmed_feedback(): ingesta un feedback confirmado por admin
 - process_feedback_queue(): procesa cola pendiente (feedback.ingested=false)
+- ingest_legit_baseline(): aprendizaje incremental del baseline USB (T10) — ver abajo
 
 Los 3 ChromaDB collections se actualizan por cada análisis confirmado:
   email_embeddings ← contexto completo del análisis + veredicto
   idn_patterns     ← chars confusables + dominio unicode + ataque
   ti_signals       ← scores TI + razones (completa el collection vacío)
+
+Baseline institucional (usb_baseline, T10): el diseño original (T9) requería
+autorización formal de TI de la USB para un import batch de ~2 meses de
+buzones históricos — sigue disponible en scripts/ingest_usb_baseline.py para
+quien la consiga, pero deja de ser bloqueante. En su lugar, ``ingest_legit_baseline``
+aprende de forma incremental: cuando /analyze_eml procesa un correo que el
+propio usuario ya decidió analizar y ese correo resulta institucional (dominio
+USB, SPF+DKIM pass, veredicto LEGITIMATE de muy baja incertidumbre — ver
+``is_usb_baseline_candidate``), su patrón estructural (sin PII) se agrega al
+mismo baseline. No es un import de datos de terceros: es la traza de un
+análisis que el estudiante mismo pidió.
 """
+
 from __future__ import annotations
 
 import hashlib
+import re
 from datetime import UTC, datetime
 
-from core.constants import COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI
+from core.constants import (
+    COLLECTION_BASELINE,
+    COLLECTION_EMAIL,
+    COLLECTION_IDN,
+    COLLECTION_TI,
+    INSTITUTIONAL_DOMAIN_SUFFIXES,
+    USB_BASELINE_MAX_RISK,
+)
 from core.logger import get_logger
 from core.redaction import redact
 from models.chromadb_client import delete_document, upsert_documents
@@ -25,6 +46,95 @@ from models.database import execute, fetch
 logger = get_logger(__name__)
 
 AUTO_INGEST_THRESHOLD: float = 0.90  # s_risk >= this → tier "auto_high"
+
+# --------------------------------------------------------------------------- #
+# Baseline USB — anonimización pre-embedding (T10)
+# Compartido con scripts/ingest_usb_baseline.py (import batch, T9) para que
+# ambas rutas de ingesta produzcan el mismo formato de documento/metadata.
+# --------------------------------------------------------------------------- #
+
+# Patrones de PII a tokenizar en el asunto (orden importa)
+_PII_PATTERNS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"[\w.\-]+@[\w.\-]+\.\w+"), "<EMAIL>"),
+    (re.compile(r"\$\s?[\d.,]+|\b[\d.,]+\s?(COP|USD|pesos)\b", re.I), "<MONTO>"),
+    (re.compile(r"\b\d{6,}\b"), "<NUM>"),  # documentos, IDs largos
+    (re.compile(r"\b\d{1,3}([.\s]\d{3})+\b"), "<NUM>"),  # montos con separador
+    (re.compile(r"\b\d+\b"), "<N>"),  # números sueltos
+]
+
+# Nombres propios: heurística conservadora — secuencias de 2+ palabras
+# capitalizadas se reemplazan (saluda a "Juan Pérez" → <NOMBRE>).
+_PROPER_NAME = re.compile(r"\b([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)")
+
+
+def anonymize_subject(subject: str) -> str:
+    """Normaliza el asunto a un patrón estructural sin PII."""
+    s = _PROPER_NAME.sub("<NOMBRE>", subject)
+    for pattern, token in _PII_PATTERNS:
+        s = pattern.sub(token, s)
+    return s.strip()[:200]
+
+
+def url_domains(urls: list[str]) -> list[str]:
+    """Extrae solo los dominios de las URLs — descarta paths con tokens."""
+    domains: list[str] = []
+    for u in urls:
+        m = re.search(r"https?://([^/]+)", u)
+        if m:
+            domains.append(m.group(1).lower())
+    # dedup preservando orden
+    seen: set[str] = set()
+    return [d for d in domains if not (d in seen or seen.add(d))]
+
+
+def build_baseline_document(parsed) -> tuple[str, str, dict]:
+    """
+    Construye el documento anonimizado + metadata para ``usb_baseline``.
+    Devuelve (doc_id, texto_embebible, metadata). NO incluye cuerpo ni PII.
+    """
+    domains = url_domains(parsed.urls)
+    doc = (
+        f"LEGITIMATE institutional email\n"
+        f"Sender domain: {parsed.sender_domain}\n"
+        f"Subject pattern: {anonymize_subject(parsed.subject)}\n"
+        f"SPF: {'pass' if parsed.spf_pass else 'fail'}, "
+        f"DKIM: {'pass' if parsed.dkim_pass else 'fail'}, "
+        f"sender/return-path mismatch: {parsed.sender_domain_mismatch}\n"
+        f"URL domains: {', '.join(domains) if domains else 'none'}\n"
+        f"Attachments: {len(parsed.attachment_names)}"
+    )
+    # doc_id estable por hash del contenido anonimizado (no del original)
+    doc_id = hashlib.sha256(doc.encode()).hexdigest()[:32]
+    metadata = {
+        "verdict": "LEGITIMATE",
+        "source": "institutional_baseline",
+        "sender_domain": parsed.sender_domain,
+        "spf_pass": str(parsed.spf_pass),
+        "dkim_pass": str(parsed.dkim_pass),
+        "ingested_at": datetime.now(UTC).isoformat(),
+    }
+    return doc_id, doc, metadata
+
+
+def is_usb_baseline_candidate(
+    *, sender_domain: str, spf_pass: bool, dkim_pass: bool, verdict: str, s_risk: float
+) -> bool:
+    """
+    Gate estricto del baseline incremental (T10): dominio institucional propio
+    (no basta con estar en TRUSTED_DOMAIN_SUFFIXES, que incluye proveedores
+    externos) + SPF y DKIM pass (no solo el From: — evita spoofing) + veredicto
+    LEGITIMATE de muy baja incertidumbre. Cualquier condición que falle excluye
+    el correo del baseline; no degrada a un gate más laxo.
+    """
+    if verdict != "LEGITIMATE" or s_risk > USB_BASELINE_MAX_RISK:
+        return False
+    if not (spf_pass and dkim_pass):
+        return False
+    domain = (sender_domain or "").lower()
+    return any(
+        domain == suffix or domain.endswith(f".{suffix}")
+        for suffix in INSTITUTIONAL_DOMAIN_SUFFIXES
+    )
 
 
 def context_header(
@@ -107,15 +217,15 @@ class KnowledgeUpdaterService:
         """
         ts = datetime.now(UTC).isoformat()
         source = tier if auto_ingested else "admin_confirmed"
-        doc_id = incident_id or hashlib.sha256(
-            f"{url}:{ts}".encode()
-        ).hexdigest()[:32]
+        doc_id = incident_id or hashlib.sha256(f"{url}:{ts}".encode()).hexdigest()[:32]
 
         confusable_str = (
             ", ".join(repr(c) for c in confusable_chars) if confusable_chars else "none"
         )
         ctx = context_header(
-            verdict=verdict, domain=domain, domain_unicode=domain_unicode,
+            verdict=verdict,
+            domain=domain,
+            domain_unicode=domain_unicode,
             source=source,
         )
 
@@ -166,22 +276,26 @@ class KnowledgeUpdaterService:
                 COLLECTION_IDN,
                 ids=[f"idn_{doc_id}"],
                 documents=[redact(idn_doc)],
-                metadatas=[{
-                    **metadata,
-                    "is_mixed_script": str(is_mixed_script),
-                    "homograph_ratio": str(homograph_ratio),
-                }],
+                metadatas=[
+                    {
+                        **metadata,
+                        "is_mixed_script": str(is_mixed_script),
+                        "homograph_ratio": str(homograph_ratio),
+                    }
+                ],
             )
             await upsert_documents(
                 COLLECTION_TI,
                 ids=[f"ti_{doc_id}"],
                 documents=[redact(ti_doc)],
-                metadatas=[{
-                    **metadata,
-                    "s_vt": str(s_vt),
-                    "s_urlscan": str(s_urlscan),
-                    "s_gsb": str(s_gsb),
-                }],
+                metadatas=[
+                    {
+                        **metadata,
+                        "s_vt": str(s_vt),
+                        "s_urlscan": str(s_urlscan),
+                        "s_gsb": str(s_gsb),
+                    }
+                ],
             )
             logger.info(
                 "knowledge_ingested",
@@ -255,6 +369,33 @@ class KnowledgeUpdaterService:
         )
         _invalidate_bm25()
 
+    async def ingest_legit_baseline(self, parsed) -> None:
+        """
+        Aprendizaje incremental del baseline USB (T10) — llamar solo cuando
+        ``is_usb_baseline_candidate`` ya dio True sobre el mismo correo.
+
+        ``parsed`` es un ``utils.email_parser.ParsedEmail`` (o cualquier objeto
+        con los mismos atributos). Reutiliza ``build_baseline_document``, el
+        mismo formato que produce el import batch (scripts/ingest_usb_baseline.py)
+        para que ambas rutas convivan en la colección sin duplicar lógica.
+        Falla silenciosamente — no debe interrumpir la respuesta de /analyze_eml.
+        """
+        doc_id, doc, metadata = build_baseline_document(parsed)
+        try:
+            await upsert_documents(
+                COLLECTION_BASELINE,
+                ids=[f"baseline_{doc_id}"],
+                documents=[doc],
+                metadatas=[metadata],
+            )
+            logger.info(
+                "usb_baseline_ingested",
+                sender_domain=parsed.sender_domain,
+                incremental=True,
+            )
+        except Exception as exc:
+            logger.error("usb_baseline_ingest_failed", error=str(exc))
+
     async def purge_incident_documents(self, incident_id: str) -> None:
         """
         Remueve los documentos de un incidente de las 3 ChromaDB collections.
@@ -301,9 +442,7 @@ class KnowledgeUpdaterService:
         processed = 0
         for row in rows:
             try:
-                reasons_list: list[str] = (
-                    row["reasons"] if isinstance(row["reasons"], list) else []
-                )
+                reasons_list: list[str] = row["reasons"] if isinstance(row["reasons"], list) else []
                 await self.ingest_confirmed_feedback(
                     feedback_id=str(row["id"]),
                     incident_id=str(row["incident_id"]),
