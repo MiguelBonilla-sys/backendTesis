@@ -69,7 +69,7 @@ DATASETS: dict[str, dict] = {
         "hf_id": "imanoop7/phishing_url_classification",
         "config": None,
         "split": "train",
-        "url_col": "url",
+        "url_col": "text",                # columna real: "text", no "url"
         "label_col": "label",             # 1=phishing, 0=safe
         "phishing_value": 1,
         "description": "URL classification Safe/NotSafe — includes IP-based phishing",

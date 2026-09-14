@@ -22,3 +22,8 @@ addopts = "--cov=. --cov-report=term-missing --cov-fail-under=90"
 
 [tool.coverage.run]
 omit = ["tests/*", "scripts/*", "docs/*", "models/chromadb_client.py"]
+
+[dependency-groups]
+dev = [
+    "datasets>=5.0.1",
+]
