@@ -1,4 +1,5 @@
 """Tests for core/calibration.py — recalibración adaptativa de θ (T12)."""
+
 from __future__ import annotations
 
 import pytest
@@ -24,6 +25,7 @@ def _restore_theta():
 # Effective theta runtime state
 # ---------------------------------------------------------------------------
 
+
 class TestEffectiveTheta:
     def test_default_is_base_theta(self):
         assert get_effective_theta() == THETA
@@ -48,6 +50,7 @@ class TestEffectiveTheta:
 # choose_theta — selección por loss asimétrica
 # ---------------------------------------------------------------------------
 
+
 def _samples(fp_scores: list[float], fn_scores: list[float], n_pad: int = 0):
     """FP: legítimos con score alto. FN: phishing con score bajo.
     n_pad agrega muestras bien clasificadas para superar el mínimo."""
@@ -64,15 +67,15 @@ class TestChooseTheta:
         assert result.new_theta == result.old_theta
 
     def test_many_false_positives_push_theta_up(self):
-        """Legítimos con s_risk ~0.72 (FPs con θ=0.70) → θ óptimo sube."""
-        samples = _samples(fp_scores=[0.72] * 10, fn_scores=[], n_pad=15)
+        """Legítimos con s_risk apenas sobre θ (FPs) → θ óptimo sube."""
+        samples = _samples(fp_scores=[THETA + 0.02] * 10, fn_scores=[], n_pad=15)
         result = choose_theta(samples)
         assert result.adjusted is True
         assert result.new_theta > THETA
 
     def test_many_false_negatives_push_theta_down(self):
-        """Phishing confirmado con s_risk ~0.65 (FNs con θ=0.70) → θ baja."""
-        samples = _samples(fp_scores=[], fn_scores=[0.65] * 10, n_pad=15)
+        """Phishing confirmado con s_risk apenas bajo θ (FNs) → θ baja."""
+        samples = _samples(fp_scores=[], fn_scores=[THETA - 0.05] * 10, n_pad=15)
         result = choose_theta(samples)
         assert result.adjusted is True
         assert result.new_theta < THETA

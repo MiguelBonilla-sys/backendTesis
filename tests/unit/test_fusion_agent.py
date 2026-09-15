@@ -1,4 +1,5 @@
 """Tests for agents/fusion_agent.py"""
+
 from __future__ import annotations
 
 import time
@@ -9,10 +10,10 @@ from agents.fusion_agent import FusionAgent
 from core.constants import ALPHA, GAMMA, THETA
 from schemas.analyze import EmailSignals, IDNResult, TIResult
 
-
 # ---------------------------------------------------------------------------
 # Shared fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def agent() -> FusionAgent:
@@ -58,6 +59,7 @@ def legit_ti() -> TIResult:
 # ---------------------------------------------------------------------------
 # FusionAgent.fuse — verdict + scores
 # ---------------------------------------------------------------------------
+
 
 class TestFusionAgentFuse:
     @pytest.mark.asyncio
@@ -115,6 +117,7 @@ class TestFusionAgentFuse:
     ):
         """S_risk = γ * S_IDN + (1-γ) * s_llm_combined; s_llm_combined = (1-HF_W)*s_llm + HF_W*s_hf"""
         from core.constants import HF_WEIGHT
+
         s_llm = 0.7
         s_hf = 0.6
         response = await agent.fuse(
@@ -128,10 +131,13 @@ class TestFusionAgentFuse:
             s_hf=s_hf,
         )
         from core.constants import GAMMA_IDN_BOOST, GAMMA_IDN_MAX, IDN_DOMINANCE_THRESHOLD
+
         expected_s_idn = ALPHA * phishing_idn.s_idn_local + (1 - ALPHA) * phishing_ti.s_ti
         expected_combined = (1 - HF_WEIGHT) * s_llm + HF_WEIGHT * s_hf
         # IDN dominance applies: phishing_idn is mixed-script with s_idn_local >= threshold
-        idn_dominance = phishing_idn.is_mixed_script and phishing_idn.s_idn_local >= IDN_DOMINANCE_THRESHOLD
+        idn_dominance = (
+            phishing_idn.is_mixed_script and phishing_idn.s_idn_local >= IDN_DOMINANCE_THRESHOLD
+        )
         gamma_eff = min(GAMMA + GAMMA_IDN_BOOST, GAMMA_IDN_MAX) if idn_dominance else GAMMA
         expected_s_risk = gamma_eff * expected_s_idn + (1 - gamma_eff) * expected_combined
         assert abs(response.s_risk - expected_s_risk) < 0.001
@@ -152,10 +158,10 @@ class TestFusionAgentFuse:
         assert 0.0 <= response.s_risk <= 1.0
 
     @pytest.mark.asyncio
-    async def test_suspicious_verdict_in_boundary_zone(
-        self, agent: FusionAgent
-    ):
-        """Score 0.40–0.69 yields SUSPICIOUS."""
+    async def test_suspicious_verdict_in_boundary_zone(self, agent: FusionAgent):
+        """Score medio-bajo, antes SUSPICIOUS (θ=0.70) — con el θ=0.30
+        recalibrado (T6, 2026-09-15) y SUSPICIOUS_THRESHOLD colapsada a θ,
+        este mismo score ya cruza a PHISHING."""
         mid_idn = IDNResult(
             domain_unicode="paypal",
             confusable_chars=[],
@@ -177,8 +183,8 @@ class TestFusionAgentFuse:
             start_time=time.perf_counter(),
         )
         # S_IDN = 0.60*0.45 + 0.40*0.13 = 0.322
-        # S_risk = 0.50*0.322 + 0.50*0.5 = 0.411 → SUSPICIOUS
-        assert response.verdict in {"SUSPICIOUS", "LEGITIMATE"}
+        # S_risk = 0.50*0.322 + 0.50*0.5 = 0.411 → PHISHING (>= θ=0.30)
+        assert response.verdict in {"PHISHING", "SUSPICIOUS"}
 
     @pytest.mark.asyncio
     async def test_response_contains_all_required_fields(
@@ -239,6 +245,7 @@ class TestFusionAgentFuse:
         self, agent: FusionAgent, legit_idn: IDNResult, legit_ti: TIResult
     ):
         import uuid
+
         response = await agent.fuse(
             url="https://paypal.com",
             domain="paypal.com",
@@ -254,6 +261,7 @@ class TestFusionAgentFuse:
 # ---------------------------------------------------------------------------
 # SHAP contributions
 # ---------------------------------------------------------------------------
+
 
 class TestFusionAgentShap:
     @pytest.mark.asyncio
@@ -347,6 +355,7 @@ class TestFusionAgentShap:
     def test_compute_shap_llm_weight(self, agent: FusionAgent):
         """(1-γ)*(1-HF_WEIGHT) = 0.50*0.60 = 0.30 weight for s_llm."""
         from core.constants import HF_WEIGHT
+
         shap = agent._compute_shap(
             s_idn_local=0.0,
             s_ti=0.0,
@@ -359,12 +368,13 @@ class TestFusionAgentShap:
             visual_similarity=0.0,
             is_mixed_script=0.0,
         )
-        expected = (1.0 - GAMMA) * (1.0 - HF_WEIGHT)   # 0.50 * 0.60 = 0.30
+        expected = (1.0 - GAMMA) * (1.0 - HF_WEIGHT)  # 0.50 * 0.60 = 0.30
         assert abs(shap["s_llm"] - expected) < 0.001
 
     def test_compute_shap_hf_weight(self, agent: FusionAgent):
         """(1-γ)*HF_WEIGHT = 0.50*0.40 = 0.20 weight for s_hf."""
         from core.constants import HF_WEIGHT
+
         shap = agent._compute_shap(
             s_idn_local=0.0,
             s_ti=0.0,
@@ -377,7 +387,7 @@ class TestFusionAgentShap:
             visual_similarity=0.0,
             is_mixed_script=0.0,
         )
-        expected = (1.0 - GAMMA) * HF_WEIGHT   # 0.50 * 0.40 = 0.20
+        expected = (1.0 - GAMMA) * HF_WEIGHT  # 0.50 * 0.40 = 0.20
         assert abs(shap["s_hf"] - expected) < 0.001
 
     def test_compute_shap_ti_weight(self, agent: FusionAgent):
@@ -410,10 +420,18 @@ class TestFusionAgentShap:
             is_mixed_script=1.0,
         )
         expected_keys = {
-            "s_idn_local", "s_ti", "s_llm", "s_hf",
-            "s_vt", "s_urlscan", "s_gsb",
-            "homograph_ratio", "visual_similarity", "is_mixed_script",
-            "s_email", "s_probe",
+            "s_idn_local",
+            "s_ti",
+            "s_llm",
+            "s_hf",
+            "s_vt",
+            "s_urlscan",
+            "s_gsb",
+            "homograph_ratio",
+            "visual_similarity",
+            "is_mixed_script",
+            "s_email",
+            "s_probe",
         }
         assert set(shap.keys()) == expected_keys
 
@@ -421,6 +439,7 @@ class TestFusionAgentShap:
 # ---------------------------------------------------------------------------
 # _compute_verdict
 # ---------------------------------------------------------------------------
+
 
 class TestComputeVerdict:
     def test_phishing_at_theta(self, agent: FusionAgent):
@@ -433,16 +452,18 @@ class TestComputeVerdict:
     def test_legitimate_at_zero(self, agent: FusionAgent):
         assert agent._compute_verdict(0.0) == "LEGITIMATE"
 
-    def test_legitimate_below_040(self, agent: FusionAgent):
-        assert agent._compute_verdict(0.39) == "LEGITIMATE"
+    def test_legitimate_below_theta(self, agent: FusionAgent):
+        """SUSPICIOUS_THRESHOLD == THETA (colapsada, T6 2026-09-15) — todo lo
+        que antes caía en la banda SUSPICIOUS (0.40-0.69) ahora es LEGITIMATE
+        si está por debajo de θ, o PHISHING si lo cruza. Ya no hay valores
+        intermedios que devuelvan SUSPICIOUS."""
+        assert agent._compute_verdict(THETA - 0.001) == "LEGITIMATE"
         assert agent._compute_verdict(0.0) == "LEGITIMATE"
 
-    def test_suspicious_at_040(self, agent: FusionAgent):
-        assert agent._compute_verdict(0.40) == "SUSPICIOUS"
-
-    def test_suspicious_just_below_theta(self, agent: FusionAgent):
-        assert agent._compute_verdict(0.69) == "SUSPICIOUS"
-        assert agent._compute_verdict(THETA - 0.001) == "SUSPICIOUS"
+    def test_no_suspicious_band_left(self, agent: FusionAgent):
+        """Antes 0.40 caía en SUSPICIOUS; con la banda colapsada, cualquier
+        score >= θ es directamente PHISHING."""
+        assert agent._compute_verdict(0.40) == "PHISHING"
 
     def test_verdict_values_are_valid_strings(self, agent: FusionAgent):
         valid = {"PHISHING", "SUSPICIOUS", "LEGITIMATE"}
@@ -459,6 +480,7 @@ class TestComputeVerdict:
 # ---------------------------------------------------------------------------
 # _compute_reasons
 # ---------------------------------------------------------------------------
+
 
 class TestComputeReasons:
     @pytest.fixture
@@ -540,8 +562,12 @@ class TestComputeReasons:
 
     def test_newly_registered_domain_produces_reason(self, agent, clean_idn):
         ti = TIResult(
-            s_vt=0.0, s_urlscan=0.0, s_gsb=0.0, s_ti=0.0,
-            is_newly_registered=True, domain_age_days=5,
+            s_vt=0.0,
+            s_urlscan=0.0,
+            s_gsb=0.0,
+            s_ti=0.0,
+            is_newly_registered=True,
+            domain_age_days=5,
         )
         reasons = agent._compute_reasons(clean_idn, ti, 0.0, "SUSPICIOUS")
         assert any("newly registered" in r.lower() or "5 days" in r for r in reasons)
@@ -632,6 +658,7 @@ class TestComputeReasons:
 # SHAP reconstruction property (T2 — docs/tasks.md)
 # ---------------------------------------------------------------------------
 
+
 class TestShapReconstruction:
     """La suma de features primarios debe reconstruir s_risk (error < 0.01)."""
 
@@ -720,6 +747,7 @@ class TestShapReconstruction:
 # ---------------------------------------------------------------------------
 # Probe boost gating (T3 — docs/tasks.md)
 # ---------------------------------------------------------------------------
+
 
 class TestProbeBoostGate:
     """El boost del probe solo aplica con sospecha pasiva previa y nunca

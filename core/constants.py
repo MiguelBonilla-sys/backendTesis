@@ -19,7 +19,31 @@ GAMMA_IDN_MAX: float = 0.80  # cap for effective gamma under IDN dominance
 # Rationale: LLM receives Punycode URLs and cannot decode homoglyphs — its score
 # is structurally unreliable for IDN attacks. IDN Agent has domain-specific authority.
 IDN_DOMINANCE_THRESHOLD: float = 0.50  # min s_idn_local to trigger dominance
-THETA: float = 0.70  # risk threshold above which verdict = PHISHING
+# Recalibrado 2026-09-15 (T6, docs/tasks.md) vía ROC sobre corpus real+sintético
+# de 600 casos (AUC=0.987): con las 5 señales el s_risk de phishing real cae
+# mucho más bajo de lo que asumía el diseño original de 3 señales (mediana
+# 0.355 vs el θ=0.70 anterior, que dejaba pasar el 58% del phishing real como
+# LEGITIMATE). El óptimo puro de la loss asimétrica (λ=0.30, FN pesa 3× FP)
+# da θ=0.12 — pero eso es MENOR que el piso de "sin información" (0.25):
+# cuando LLM y HF degradan a neutral (0.5 cada uno) simultáneamente, TODO
+# dominio da s_risk=(1-γ)*0.5=0.25 sin importar el riesgo real (encontrado
+# por tests/integration/test_phishing_evaluation.py — google.com etc.
+# marcados PHISHING con mocks neutrales). θ=0.30 mantiene margen real sobre
+# ese piso: precision=1.0, recall=0.667 en el corpus (vs 1.0/0.42 con el θ
+# anterior) — no llega al recall≥0.75 de la meta de tesis, pero es el valor
+# seguro más agresivo que no rompe la garantía de degradación graciosa.
+# Ver reports/t6_theta_recalibration_20260915_002802.json.
+THETA: float = 0.30  # risk threshold above which verdict = PHISHING
+# SUSPICIOUS_THRESHOLD = THETA (banda SUSPICIOUS colapsada/deshabilitada, no
+# eliminada): el corpus de T6 mostró que el score de dominios legítimos tiene
+# dos "pisos" discretos (0.10 en 104/300 casos, 0.115 en 81/300 — probable
+# artefacto estructural del fusion, no ruido) pegados justo debajo del nuevo
+# θ. Cualquier corte SUSPICIOUS en ese rango dispara falsas alarmas sobre
+# 27%-70% del tráfico legítimo — inaceptable sin antes investigar el origen
+# de esos pisos. Hasta esa investigación (pendiente, no es T6), el veredicto
+# de 3 niveles se comporta como 2 (LEGITIMATE/PHISHING) — no se retiró el
+# código de SUSPICIOUS, solo se desactivó con este valor.
+SUSPICIOUS_THRESHOLD: float = THETA
 HOMOGRAPH_THRESHOLD: float = 0.30  # r_h alert threshold
 SIM_V_EARLY_EXIT: float = 0.95  # early-exit visual-similarity cutoff in BKTree
 

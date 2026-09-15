@@ -1,4 +1,5 @@
 """Tests for core/constants.py — weight and threshold sanity checks."""
+
 from __future__ import annotations
 
 import pytest
@@ -52,7 +53,7 @@ class TestIDNParameters:
         assert GAMMA == 0.50
 
     def test_theta_value(self):
-        assert THETA == 0.70
+        assert THETA == 0.30
 
     def test_f_mix_value(self):
         assert F_MIX == 1.6
@@ -70,8 +71,18 @@ class TestIDNParameters:
     def test_gamma_is_half(self):
         assert GAMMA == 0.50
 
-    def test_theta_above_half(self):
-        assert THETA > 0.5
+    def test_theta_above_neutral_degradation_floor(self):
+        """Reemplaza test_theta_above_half (2026-09-15, T6): "phishing = más
+        de la mitad de confianza" no es el invariante correcto bajo loss
+        asimétrica (λ=0.30, FN pesa 3× más que FP) — θ puede estar legítimamente
+        por debajo de 0.5. El invariante real: cuando TODAS las señales externas
+        degradan a neutral (LLM=HF=0.5, TI=probe=idn_local=0 — sin información,
+        no evidencia de riesgo), s_risk cae exactamente en (1-GAMMA)*0.5. Si θ
+        no supera ese piso, cualquier dominio queda PHISHING apenas el LLM y el
+        HF fallan a la vez — encontrado en tests/integration/test_phishing_evaluation.py
+        (google.com etc. con s_risk=0.25 bajo mocks neutrales)."""
+        neutral_degradation_floor = (1 - GAMMA) * 0.5
+        assert THETA > neutral_degradation_floor
 
 
 class TestLLMConstants:

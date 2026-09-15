@@ -9,8 +9,10 @@ Fórmulas (as-built — ver docs/spec.md F3):
     S_risk  = clamp(S_base + boost_email + boost_probe, 0, 1)
               boost_email ≤ EMAIL_BOOST_CAP (0.50)
               boost_probe ≤ PROBE_BOOST_CAP (0.60)
-    verdict = PHISHING    if S_risk >= θ (0.70)
-              SUSPICIOUS  if 0.40 <= S_risk < 0.70
+    verdict = PHISHING    if S_risk >= θ (0.30 — recalibrado T6, 2026-09-15)
+              SUSPICIOUS  if SUSPICIOUS_THRESHOLD <= S_risk < θ (banda
+                          colapsada, SUSPICIOUS_THRESHOLD == θ — ver
+                          core/constants.py)
               LEGITIMATE  otherwise
 
 SHAP: ``dict[str, float]`` con contribuciones lineales de cada feature
@@ -23,6 +25,7 @@ a los primarios):
 Cuando el clamp a 1.0 satura, todas las contribuciones se reescalan
 proporcionalmente para que los primarios sigan sumando S_risk.
 """
+
 from __future__ import annotations
 
 import time
@@ -187,14 +190,19 @@ class FusionAgent:
         if s_probe > 0.0:
             if probe_domain_trusted:
                 logger.info(
-                    "probe_boost_gated", url=url, reason="trusted_domain",
+                    "probe_boost_gated",
+                    url=url,
+                    reason="trusted_domain",
                     s_probe_raw=round(s_probe, 4),
                 )
                 s_probe = 0.0
             elif (s_risk + s_email) < PROBE_GATE_THRESHOLD:
                 logger.info(
-                    "probe_boost_gated", url=url, reason="no_passive_suspicion",
-                    s_base=round(s_risk + s_email, 4), s_probe_raw=round(s_probe, 4),
+                    "probe_boost_gated",
+                    url=url,
+                    reason="no_passive_suspicion",
+                    s_base=round(s_risk + s_email, 4),
+                    s_probe_raw=round(s_probe, 4),
                 )
                 s_probe = 0.0
 
@@ -297,11 +305,11 @@ class FusionAgent:
             return 0.0
         s_email = 0.0
         if email_signals.sender_domain_mismatch:
-            s_email += EMAIL_MISMATCH_WEIGHT                       # 0.35
+            s_email += EMAIL_MISMATCH_WEIGHT  # 0.35
         if email_signals.is_urgent and email_signals.urgency_score > 0.4:
             s_email += email_signals.urgency_score * EMAIL_URGENCY_WEIGHT  # up to 0.18
         if email_signals.has_suspicious_attachments:
-            s_email += EMAIL_ATTACHMENT_WEIGHT                     # 0.25
+            s_email += EMAIL_ATTACHMENT_WEIGHT  # 0.25
         return min(s_email, EMAIL_BOOST_CAP)
 
     # ------------------------------------------------------------------
@@ -334,18 +342,14 @@ class FusionAgent:
 
         # --- Señales IDN ---
         if idn_result.is_mixed_script:
-            reasons.append(
-                "Mixed-script domain detected (potential IDN homograph attack)"
-            )
+            reasons.append("Mixed-script domain detected (potential IDN homograph attack)")
         if idn_result.homograph_ratio >= HOMOGRAPH_THRESHOLD:
             reasons.append(
                 f"High confusable character ratio "
                 f"({idn_result.homograph_ratio:.0%}) above alert threshold (30%)"
             )
         if idn_result.visual_similarity >= 0.90:
-            reasons.append(
-                "Domain visually similar to a known legitimate domain (sim ≥ 0.90)"
-            )
+            reasons.append("Domain visually similar to a known legitimate domain (sim ≥ 0.90)")
         if idn_result.confusable_chars:
             sample = ", ".join(repr(c) for c in idn_result.confusable_chars[:3])
             extra = (
@@ -377,9 +381,7 @@ class FusionAgent:
         # --- Señales del email (contexto completo: cabeceras + cuerpo) ---
         if email_signals is not None:
             if email_signals.is_urgent:
-                reasons.append(
-                    "Email uses urgency/pressure tactics to coerce immediate action"
-                )
+                reasons.append("Email uses urgency/pressure tactics to coerce immediate action")
             if email_signals.sender_domain_mismatch:
                 reasons.append(
                     f"Sender domain ({email_signals.sender_domain!r}) does not match "
@@ -389,13 +391,10 @@ class FusionAgent:
                 names = ", ".join(email_signals.attachment_names[:3])
                 reasons.append(f"Suspicious attachments detected: {names}")
             if not email_signals.spf_pass and email_signals.sender_domain:
-                reasons.append(
-                    f"SPF authentication failed for {email_signals.sender_domain!r}"
-                )
+                reasons.append(f"SPF authentication failed for {email_signals.sender_domain!r}")
             if not email_signals.dkim_pass and email_signals.sender_domain:
                 reasons.append(
-                    f"DKIM signature verification failed for "
-                    f"{email_signals.sender_domain!r}"
+                    f"DKIM signature verification failed for " f"{email_signals.sender_domain!r}"
                 )
 
         # --- Señales del probe activo (contenido de la página) ---
@@ -413,22 +412,24 @@ class FusionAgent:
     # Verdict classification
     # ------------------------------------------------------------------
 
-    def _compute_verdict(
-        self, s_risk: float
-    ) -> Literal["PHISHING", "SUSPICIOUS", "LEGITIMATE"]:
+    def _compute_verdict(self, s_risk: float) -> Literal["PHISHING", "SUSPICIOUS", "LEGITIMATE"]:
         """
         Clasifica el riesgo en uno de los tres verdicts por umbrales:
 
-        - ``PHISHING``   : ``s_risk >= θ``   (θ efectivo — base 0.70,
+        - ``PHISHING``   : ``s_risk >= θ``   (θ efectivo — base THETA,
           ajustable por el job de recalibración adaptativa, T12)
-        - ``SUSPICIOUS`` : ``0.40 <= s_risk < θ``
-        - ``LEGITIMATE`` : ``s_risk < 0.40``
+        - ``SUSPICIOUS`` : ``SUSPICIOUS_THRESHOLD <= s_risk < θ`` — desde el
+          recalibrado de T6 (2026-09-15) ``SUSPICIOUS_THRESHOLD == THETA``
+          (banda colapsada, ver comentario en core/constants.py) hasta que
+          se investigue el piso discreto de score de dominios legítimos.
+        - ``LEGITIMATE`` : ``s_risk < SUSPICIOUS_THRESHOLD``
         """
         from core.calibration import get_effective_theta
+        from core.constants import SUSPICIOUS_THRESHOLD
 
         if s_risk >= get_effective_theta():
             return "PHISHING"
-        if s_risk >= 0.40:
+        if s_risk >= SUSPICIOUS_THRESHOLD:
             return "SUSPICIOUS"
         return "LEGITIMATE"
 
@@ -486,9 +487,9 @@ class FusionAgent:
         """
         # Pesos compuestos — usa gamma_eff/alpha/w_hf efectivos (pueden diferir
         # de las constantes bajo IDN dominance o calibración online).
-        idn_weight: float = gamma_eff * alpha                          # γ_eff·α
-        ti_weight: float = gamma_eff * (1.0 - alpha)                   # γ_eff·(1-α)
-        llm_combined_weight: float = 1.0 - gamma_eff                   # (1-γ_eff)
+        idn_weight: float = gamma_eff * alpha  # γ_eff·α
+        ti_weight: float = gamma_eff * (1.0 - alpha)  # γ_eff·(1-α)
+        llm_combined_weight: float = 1.0 - gamma_eff  # (1-γ_eff)
         # s_llm_combined = (1-w_hf)*s_llm + w_hf*s_hf
         llm_weight: float = llm_combined_weight * (1.0 - w_hf)
         hf_weight: float = llm_combined_weight * w_hf
