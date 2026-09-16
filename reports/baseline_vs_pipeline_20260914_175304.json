@@ -1,0 +1,2739 @@
+{
+  "n_cases": 300,
+  "n_evaluated": 127,
+  "errors": 173,
+  "elapsed_s": 908.72,
+  "baseline": {
+    "tp": 58,
+    "fp": 0,
+    "fn": 69,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.4567,
+    "f1": 0.627,
+    "accuracy": 0.4567,
+    "meets_thesis_target": false
+  },
+  "pipeline": {
+    "tp": 100,
+    "fp": 0,
+    "fn": 27,
+    "tn": 0,
+    "precision": 1.0,
+    "recall": 0.7874,
+    "f1": 0.8811,
+    "accuracy": 0.7874,
+    "meets_thesis_target": true
+  },
+  "mcnemar": {
+    "b_baseline_only_correct": 17,
+    "c_pipeline_only_correct": 59,
+    "chi2": 22.1184,
+    "p_value": 3e-06,
+    "significant_at_0.05": true,
+    "favors": "pipeline"
+  },
+  "timestamp": "2026-09-14T17:53:04.543021+00:00",
+  "raw_results": [
+    {
+      "url": "http://bloᏀfa.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0733,
+      "s_risk": 0.4723,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://lenҬa.ru",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.1698,
+      "s_risk": 0.5477,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://cloudfroⲚt.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.315,
+      "s_risk": 0.3582,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://taleꚙ.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2096,
+      "s_risk": 0.471,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ᏻmx.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4407,
+      "s_risk": 0.5541,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://n𝈓l.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.4203,
+      "s_risk": 0.2741,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://fliᏢkart.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.6486,
+      "s_risk": 0.5899,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://goꚘgle.be",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3389,
+      "s_risk": 0.5514,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://aЅos.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4972,
+      "s_risk": 0.5672,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://adeхc.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3721,
+      "s_risk": 0.5022,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://alibaΒa.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.9317,
+      "s_risk": 0.6107,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://wikⲓmedia.org",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0157,
+      "s_risk": 0.5191,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://thefreedicТionary.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.0447,
+      "s_risk": 0.1252,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://zone-telechargemenΤ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.2935,
+      "s_risk": 0.3238,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://kаkaku.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5076,
+      "s_risk": 0.5608,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://hСlips.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5602,
+      "s_risk": 0.566,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://googlе.fi",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2541,
+      "s_risk": 0.5504,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ⲅt.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2406,
+      "s_risk": 0.4891,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://nbcⲚews.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0876,
+      "s_risk": 0.5338,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ltn.cꚙm.tw",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0511,
+      "s_risk": 0.5226,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ero-advӕrtising.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.136,
+      "s_risk": 0.055,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://e𝈪pais.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5264,
+      "s_risk": 0.4141,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://globalοffers.link",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5426,
+      "s_risk": 0.2895,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://buzzhaⲚd.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4876,
+      "s_risk": 0.5588,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ꮐroupon.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5359,
+      "s_risk": 0.5636,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://oџo.io",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3622,
+      "s_risk": 0.5462,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://gᎪp.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.438,
+      "s_risk": 0.5538,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://zendeᏚk.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3445,
+      "s_risk": 0.5445,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://𝈓c2.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.185,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://busⲓnessinsider.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.3057,
+      "s_risk": 0.329,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://wikւhow.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.5675,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://𝈪ivejournal.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.3659,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://google.cᏫ.jp",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.5675,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://airbnЬ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4972,
+      "s_risk": 0.5672,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://weeЬly.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.7523,
+      "s_risk": 0.5852,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://gamer.coᎷ.tw",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.1877,
+      "s_risk": 0.5363,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ꮓoho.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.1226,
+      "s_risk": 0.5223,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://yandӕx.ru",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3585,
+      "s_risk": 0.5533,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://aӍazonaws.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.5675,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://list.tmaⲒl.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3924,
+      "s_risk": 0.5567,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://microsoftonliⲚe.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5307,
+      "s_risk": 0.3739,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://liνedoor.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.7411,
+      "s_risk": 0.5841,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://capiᎢalone.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.2242,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://waІmart.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4089,
+      "s_risk": 0.5659,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ebaϒ.de",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4779,
+      "s_risk": 0.5128,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://kaskus.cᎾ.id",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.233,
+      "s_risk": 0.5333,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://wordΡress.org",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0192,
+      "s_risk": 0.5194,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://sabah.cоm.tr",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.6613,
+      "s_risk": 0.5836,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://rutrackӕr.org",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://tistoґy.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://рanda.tv",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0469,
+      "s_risk": 0.5147,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ebay-kleыnanzeigen.de",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.8155,
+      "s_risk": 0.2188,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://oղlinesbi.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.5675,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ӕmazon.it",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ͺntuit.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3056,
+      "s_risk": 0.5406,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://bӔttle.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3004,
+      "s_risk": 0.525,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ꭹouth.cn",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.6999,
+      "s_risk": 0.215,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://media.tսmblr.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.5675,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://spҿedtest.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2474,
+      "s_risk": 0.5197,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://chaoshi.Ҭmall.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.514,
+      "s_risk": 0.5689,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://tХxx.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.515,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://raᎡbg.to",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.107,
+      "s_risk": 0.4757,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://mercadolibre.Ҫom.ar",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2196,
+      "s_risk": 0.547,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://google.coӍ.sg",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.134,
+      "s_risk": 0.5384,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://bՕngacams.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3861,
+      "s_risk": 0.5561,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://sharӔpoint.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.5087,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://google.coΜ.sa",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.325,
+      "s_risk": 0.32,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://wundᎬrground.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5595,
+      "s_risk": 0.1429,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://adidas.tmaІl.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.8264,
+      "s_risk": 0.6076,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://tҢesportbible.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.1298,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://iΜzog.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5549,
+      "s_risk": 0.156,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://gameᏢedia.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0791,
+      "s_risk": 0.5179,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://dσorblog.jp",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2326,
+      "s_risk": 0.5183,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://aᏕk.fm",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.3209,
+      "s_risk": 0.2814,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://bѲx.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4868,
+      "s_risk": 0.5587,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Бet365.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.6322,
+      "s_risk": 0.5882,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://allegᎡo.pl",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5967,
+      "s_risk": 0.5697,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ꭲarget.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2466,
+      "s_risk": 0.5347,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://zol.cօm.cn",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.9778,
+      "s_risk": 0.6078,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://instagᎡam.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.575,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://wikևa.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://coᏒriere.it",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://aևrtel.in",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.11,
+      "s_risk": 0.506,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://bookыng.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.313,
+      "s_risk": 0.5413,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://qզ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.515,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://google.coМ.bd",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.575,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://adp𝈪xmd.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.3721,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://themeforeЅt.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.2225,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://uⲣs.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://sθurceforge.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.3725,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://aliꮯdn.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://offᎥce.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2524,
+      "s_risk": 0.5427,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://hatena.nЕ.jp",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.6037,
+      "s_risk": 0.5779,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ᏼadoo.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://csԁn.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://likҽs.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.56,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://dmm.c𝈚.jp",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.7422,
+      "s_risk": 0.4634,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://teΕpr.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5,
+      "s_risk": 0.515,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://hootᏕuite.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.37,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://17өk.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4777,
+      "s_risk": 0.5128,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://google.ꮯom.ar",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0657,
+      "s_risk": 0.5316,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://igⲚ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4377,
+      "s_risk": 0.5538,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://espncriҫinfo.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.6613,
+      "s_risk": 0.4032,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ꮪo.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.159,
+      "s_risk": 0.5259,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://etsᎽ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.4305,
+      "s_risk": 0.3651,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://mywАy.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4403,
+      "s_risk": 0.554,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://taboolα.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2476,
+      "s_risk": 0.5423,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://aТlassian.net",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.2451,
+      "s_risk": 0.542,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://google.Сo.il",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.0927,
+      "s_risk": 0.5343,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://uⲘblr.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.4105,
+      "s_risk": 0.5585,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://tribunnewЅ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.4313,
+      "s_risk": 0.2105,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://instrucҬure.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.1625,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://indiatimЕs.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5,
+      "s_risk": 0.1642,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://rakuten.cⲐ.jp",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.627,
+      "s_risk": 0.5802,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://goꚙgle.de",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.1419,
+      "s_risk": 0.5392,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://skΥpe.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.101,
+      "s_risk": 0.5276,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://goꮎgle.ae",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.486,
+      "s_risk": 0.5736,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ѣing.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.1346,
+      "s_risk": 0.4785,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://kapΑnlagi.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.6832,
+      "s_risk": 0.5783,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://wеbtretho.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3439,
+      "s_risk": 0.5444,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://gѳogle.ru",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.37,
+      "s_risk": 0.5545,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://indeeᏧ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "LEGITIMATE",
+      "s_hf": 0.5495,
+      "s_risk": 0.1549,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://isanӕlyze.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3328,
+      "s_risk": 0.5433,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://snapԁeal.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.423,
+      "s_risk": 0.5598,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://dropboΧ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.5791,
+      "s_risk": 0.4008,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://trҽllo.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.1214,
+      "s_risk": 0.5296,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://mediaքire.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "SUSPICIOUS",
+      "s_hf": 0.3776,
+      "s_risk": 0.5553,
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://liveԁoor.jp",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://google.coᎷ.kw",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://anϹestry.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ѕiteadvisor.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://billᎠesk.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://gꚘogle.dk",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://4ԁsply.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://milliyet.coⲘ.tr",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://blogspoᎢ.jp",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://merᏧeka.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://nbϲolympics.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://reᏧnet.cn",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ոaver.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://nikҿ.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://ѽeb.de",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://washingtonᏢost.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://telegraph.сo.uk",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://Ҳe.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://blogѕpot.in",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://aΜazon.in",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://avitꭴ.ru",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://googЮe.ro",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://gfycаt.com",
+      "source": "idn_synth.jsonl",
+      "synthetic": true,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "PHISHING"
+    },
+    {
+      "url": "http://decathlon.ro",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ay.gy",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://glassdoor.co.in",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://albedaiah.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://cdjapan.co.jp",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://thefreethoughtproject.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://workopolis.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://vforum.vn",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://sweetpacks-search.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://qip.ru",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://mollie.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://screenshot.sh",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://baixarhentai.net",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://4game.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://nsu.ru",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://fastenal.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://jkforum.net",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ovh.net",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://abcmouse.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://stories-ar.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://forebet.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://metronews.ru",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://mediafreakcity.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://rae.es",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://maxmanroe.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://expedia.co.in",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://frontapp.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://travian.com.tr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://hoyts.com.ar",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://trueplookpanya.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://fashionmia.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://brokerbabe.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://joerogan.net",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://artinstitutes.edu",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://goshow.tv",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://teacherspayteachers.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://f1-gate.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://nestle.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://sexvidx.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://saathnibhanasaathiya.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://movie2k.to",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://tube2012.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://movixhub.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://roland.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://idropnews.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://game-spot.us",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://xcams.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://funshop.co.kr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://creditexpert.co.uk",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://bitstamp.net",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://oceanoffgames.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://freeomovie.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://3bmeteo.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://mobileaction.co",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://nvcc.edu",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://teamworkonline.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://onetravel.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://newsyou.info",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://megavirale.it",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://akbartravelsonline.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://pornhd4k.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://bundestag.de",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://tigo.com.co",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://dbank.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://irctc.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://prokal.co",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://umin.jp",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://nascar.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://isbank.com.tr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://luca.com.tr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://zf.ro",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://econsultancy.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://trapfleyb-bs.ru",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://smn.gov.ar",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://rankedboost.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://henjo.jp",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://khabarindiatv.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://hdfree.tv",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://vwts.ru",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://sapo.ao",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://google.rw",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://vauva.fi",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://abc7news.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ingrammicro.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://wir-kaufen.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://vistaprint.fr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://bgu.ac.il",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://lankatruth.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://interweavestore.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://cleveland.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://britishcouncil.in",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://nowgoal.cc",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://sayidaty.net",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://razersupport.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://bisms.ir",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://goeuro.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ashampoo.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://walmartbenefits.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://sextubelab.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://myvoffice.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://fullcalendar.io",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://tg-uchi.jp",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://symless.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://applyabroad.org",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ovoenergy.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://returnofkings.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://topuniversities.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://iqilu.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://mpnrs.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://tu-chemnitz.de",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://knmi.nl",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://medicitalia.it",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://popin.cc",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://osaka-u.ac.jp",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://applegate.co.uk",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://gaypornempire.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://renrenbt.org",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://watchwrestling.tc",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://list4hyip.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://segugio.it",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ama-assn.org",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://muchoviaje.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://downxiazai.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://kw.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://tournamentsoftware.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://copts-united.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://catchvideo.net",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://slashcam.de",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://youreporter.it",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://wikidiff.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://writeexpress.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://myonlineresourcecenter.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://travel2be.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://uid.me",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://mangot5.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://vpnbook.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ladylike.gr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://turkishmaritime.com.tr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://ntvbd.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://shanbara.jp",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://biodiscover.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://indonetwork.co.id",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://transferhit.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://sarkarinaukrisarch.in",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://5acbd.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://foxtons.co.uk",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://mxrevshare.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://vicky.in",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://geshl2.com",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    },
+    {
+      "url": "http://onalert.gr",
+      "source": "legit_sample.jsonl",
+      "synthetic": false,
+      "pipeline_verdict": "ERROR",
+      "s_hf": null,
+      "error": "Client error '401 Unauthorized' for url 'http://localhost:8000/api/v1/analyze'\nFor more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401",
+      "expected": "LEGITIMATE"
+    }
+  ]
+}
