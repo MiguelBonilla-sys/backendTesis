@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -109,11 +110,16 @@ async def analyze(client: httpx.AsyncClient, backend: str, url: str, token_holde
 
 
 async def get_token(backend: str) -> str:
+    # Login autentica por users.email (ver routers/auth_router.py) — "username" es
+    # engañoso, hay que pasar el email real. Override vía env para no hardcodear
+    # credenciales de un ambiente específico (dev vs prod).
+    username = os.environ.get("EVAL_ADMIN_EMAIL", "admin")
+    password = os.environ.get("EVAL_ADMIN_PASSWORD", "Admin1234!")
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.post(
                 f"{backend}/api/v1/auth/login",
-                json={"username": "admin", "password": "Admin1234!"},
+                json={"username": username, "password": password},
                 timeout=10.0,
             )
             if resp.status_code == 200:
