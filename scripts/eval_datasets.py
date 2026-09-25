@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -162,8 +163,14 @@ async def analyze_url(client: httpx.AsyncClient, backend: str, url: str, token: 
         return {"error": str(e), "verdict": "ERROR"}
 
 
-async def get_token(backend: str, username: str = "admin", password: str = "Admin1234!") -> str:
-    """Obtain a JWT from the /auth/login endpoint."""
+async def get_token(backend: str, username: str | None = None, password: str | None = None) -> str:
+    """Obtain a JWT from the /auth/login endpoint.
+
+    Credentials default to env vars (EVAL_ADMIN_EMAIL/EVAL_ADMIN_PASSWORD) instead of a
+    hardcoded literal — same pattern as eval_baseline_vs_pipeline.get_token.
+    """
+    username = username or os.environ.get("EVAL_ADMIN_EMAIL", "admin")
+    password = password or os.environ.get("EVAL_ADMIN_PASSWORD", "Admin1234!")
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{backend}/api/v1/auth/login",

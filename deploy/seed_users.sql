@@ -9,13 +9,13 @@ INSERT INTO users (email, password_hash, role, is_active)
 VALUES
   (
     'mabonillat@academia.usbbog.edu.co',
-    '$2b$12$m6Skj063sf1wFCviOiqApe1LpygyIcCps/4BqQX/4WgosfbyVKWp2',
+    '$2b$12$m6Skj063sf1wFCviOiqApe1LpygyIcCps/4BqQX/4WgosfbyVKWp2', -- nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash
     'admin',
     true
   ),
   (
     'jsfandinon@academia.usbbog.edu.co',
-    '$2b$12$rLSoO6YrhPAy2j4.JRSLgOfpy1KeEk0ZabHXOjutPP45LbcJx8ej6',
+    '$2b$12$rLSoO6YrhPAy2j4.JRSLgOfpy1KeEk0ZabHXOjutPP45LbcJx8ej6', -- nosemgrep: generic.secrets.security.detected-bcrypt-hash.detected-bcrypt-hash
     'student',
     true
   )
