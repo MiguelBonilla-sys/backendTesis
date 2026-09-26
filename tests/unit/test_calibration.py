@@ -9,6 +9,7 @@ from core.calibration import (
     THETA_DRIFT_MAX,
     choose_theta,
     get_effective_theta,
+    minimum_safe_theta,
     reset_effective_theta,
     set_effective_theta,
 )
@@ -38,7 +39,7 @@ class TestEffectiveTheta:
         set_effective_theta(THETA + 0.50)
         assert get_effective_theta() == pytest.approx(THETA + THETA_DRIFT_MAX)
         set_effective_theta(THETA - 0.50)
-        assert get_effective_theta() == pytest.approx(THETA - THETA_DRIFT_MAX)
+        assert get_effective_theta() == pytest.approx(minimum_safe_theta())
 
     def test_reset_returns_to_base(self):
         set_effective_theta(THETA + 0.05)
@@ -75,7 +76,7 @@ class TestChooseTheta:
 
     def test_many_false_negatives_push_theta_down(self):
         """Phishing confirmado con s_risk apenas bajo θ (FNs) → θ baja."""
-        samples = _samples(fp_scores=[], fn_scores=[THETA - 0.05] * 10, n_pad=15)
+        samples = _samples(fp_scores=[], fn_scores=[THETA - 0.02] * 10, n_pad=15)
         result = choose_theta(samples)
         assert result.adjusted is True
         assert result.new_theta < THETA

@@ -131,7 +131,7 @@ class FusionAgent:
         """
         # Pesos efectivos: constantes de tesis, o los calibrados online si el
         # kill-switch está activo (ver core/online_calibration.py).
-        if settings.ONLINE_CALIBRATION_ENABLED:
+        if settings.ONLINE_CALIBRATION_ENABLED and not settings.EVALUATION_MODE:
             from core.online_calibration import get_effective_weights
 
             _w = get_effective_weights()
@@ -196,7 +196,8 @@ class FusionAgent:
                     s_probe_raw=round(s_probe, 4),
                 )
                 s_probe = 0.0
-            elif (s_risk + s_email) < PROBE_GATE_THRESHOLD:
+            elif ((s_risk + s_email) < PROBE_GATE_THRESHOLD
+                  and not self._independent_probe_evidence(probe_result)):
                 logger.info(
                     "probe_boost_gated",
                     url=url,
@@ -390,11 +391,11 @@ class FusionAgent:
             if email_signals.has_suspicious_attachments:
                 names = ", ".join(email_signals.attachment_names[:3])
                 reasons.append(f"Suspicious attachments detected: {names}")
-            if not email_signals.spf_pass and email_signals.sender_domain:
-                reasons.append(f"SPF authentication failed for {email_signals.sender_domain!r}")
-            if not email_signals.dkim_pass and email_signals.sender_domain:
+            if email_signals.spf_pass is False and email_signals.sender_domain:
+                reasons.append(f"SPF failure declared for {email_signals.sender_domain!r}")
+            if email_signals.dkim_pass is False and email_signals.sender_domain:
                 reasons.append(
-                    f"DKIM signature verification failed for " f"{email_signals.sender_domain!r}"
+                    f"DKIM failure declared for {email_signals.sender_domain!r}"
                 )
 
         # --- Señales del probe activo (contenido de la página) ---
@@ -407,6 +408,16 @@ class FusionAgent:
             reasons.append("No suspicious indicators detected")
 
         return reasons
+
+    @staticmethod
+    def _independent_probe_evidence(probe: WebProbeResult | None) -> bool:
+        """A credential form plus impersonation plus external submission can
+        corroborate itself. A login or a redirect alone still needs passive
+        suspicion; known legitimate destinations retain their existing gate.
+        """
+        return bool(probe and not probe.error
+                    and (probe.has_password_field or probe.has_login_form)
+                    and probe.brand_impersonation and probe.external_form_action)
 
     # ------------------------------------------------------------------
     # Verdict classification

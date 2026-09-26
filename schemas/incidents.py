@@ -7,6 +7,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from schemas.analyze import AgentTelemetry
+
 
 class IncidentRecord(BaseModel):
     id: str
@@ -31,6 +33,7 @@ class IncidentRecord(BaseModel):
     email_body_html: str = ""
     email_images: list[str] = Field(default_factory=list)
     email_attachments: list[str] = Field(default_factory=list)
+    agent_status: dict[str, AgentTelemetry] = Field(default_factory=dict)
 
 
 class IncidentListResponse(BaseModel):

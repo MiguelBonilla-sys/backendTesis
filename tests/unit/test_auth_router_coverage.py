@@ -1,16 +1,17 @@
 """Coverage tests for auth_router.py — GET /auth/me and _authenticate_user helper."""
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
-from auth.jwt import create_access_token
 from main import app
+from tests.auth_helpers import create_access_token
 
 
 @pytest.fixture
-def client():
+def client(auth_store):
     with patch("main.init_db", new_callable=AsyncMock), \
          patch("main.close_db", new_callable=AsyncMock), \
          patch("main.init_redis", new_callable=AsyncMock), \

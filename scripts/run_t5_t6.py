@@ -42,7 +42,14 @@ from pathlib import Path
 from core.calibration import RECAL_LAMBDA, choose_theta
 from core.constants import THETA
 from core.logger import get_logger
-from scripts.eval_baseline_vs_pipeline import collect_cases, print_report, run
+from scripts.eval_baseline_vs_pipeline import (
+    _binary_metrics,
+    collect_cases,
+    get_token,
+    print_report,
+    run,
+)
+from scripts.eval_protocol import split_cases, valid_prediction, validate_manifest
 
 logger = get_logger(__name__)
 
@@ -66,24 +73,13 @@ async def sanity_check_llm(backend: str) -> bool:
     LLM_FALLBACK_SCORE (0.5) para una URL que normalmente no lo es."""
     import httpx
 
-    from core.constants import LLM_FALLBACK_SCORE
-
     async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{backend}/api/v1/auth/login",
-            json={"username": "admin", "password": "Admin1234!"},
-            timeout=10.0,
-        )
-        token = resp.json()["access_token"]
-        resp = await client.post(
-            f"{backend}/api/v1/analyze",
-            json={"url": "https://xn--pypal-4ve.com"},  # homógrafo conocido, sube el LLM
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=30.0,
-        )
+        token = await get_token(backend)
+        resp = await client.get(f"{backend}/api/v1/settings",
+                                headers={"Authorization": f"Bearer {token}"}, timeout=10)
         resp.raise_for_status()
-        s_llm = (resp.json().get("agent_scores") or {}).get("s_llm")
-        return s_llm is not None and s_llm != LLM_FALLBACK_SCORE
+        validate_manifest(resp.json().get("evaluation", {}))
+        return True  # run() checks actual inference on the first corpus URL.
 
 
 # ---------------------------------------------------------------------------
@@ -147,11 +143,21 @@ def score_distribution(samples: list[tuple[float, bool]]) -> dict:
 
 
 def run_t6_analysis(raw_results: list[dict]) -> dict:
+    if not raw_results or not all(valid_prediction(r) for r in raw_results):
+        raise ValueError("T6 requires valid agent telemetry; legacy/fallback rows are not calibration evidence")
+    if any(r.get("split") not in ("calibration", "test") for r in raw_results):
+        raise ValueError("T6 requires a predefined grouped calibration/test split")
+    groups = {part: {r.get("group") for r in raw_results if r["split"] == part}
+              for part in ("calibration", "test")}
+    if not all(groups.values()) or None in groups["calibration"] | groups["test"] or groups["calibration"] & groups["test"]:
+        raise ValueError("Calibration and held-out test groups must be nonempty and disjoint")
     samples = [
         (r["s_risk"], r["expected"] == "PHISHING")
         for r in raw_results
-        if r.get("pipeline_verdict") != "ERROR" and r.get("s_risk") is not None
+        if r["split"] == "calibration"
     ]
+    heldout = [(r["s_risk"], r["expected"] == "PHISHING")
+               for r in raw_results if r["split"] == "test"]
     curve = roc_curve(samples)
     # Rango amplio a propósito: T12 (producción) limita el ajuste a ±0.10 del
     # θ vigente para no saltar de golpe con poco feedback; T6 es la
@@ -159,6 +165,10 @@ def run_t6_analysis(raw_results: list[dict]) -> dict:
     recal = choose_theta(samples, base_theta=THETA, drift_max=1.0, min_samples=1)
     return {
         "n_samples": len(samples),
+        "n_test": len(heldout),
+        "selection_split": "calibration",
+        "test_metrics": _binary_metrics([(s >= recal.new_theta, truth) for s, truth in heldout]),
+        "test_auc": auc(roc_curve(heldout)),
         "theta_base": THETA,
         "lambda_asimetrica": RECAL_LAMBDA,
         "theta_recalibrado": {
@@ -229,7 +239,7 @@ async def main() -> int:
         dataset=_HF_DATASET,
         limit=_HF_LIMIT,
     )
-    cases = collect_cases(cases_args)
+    cases = split_cases(collect_cases(cases_args))
     print(
         f"Corpus T5: {len(cases)} casos "
         f"({sum(1 for c in cases if c['expected']=='PHISHING')} phishing / "
@@ -247,6 +257,9 @@ async def main() -> int:
     eval_file.write_text(json.dumps(report, indent=2, ensure_ascii=False))
     print(f"\nReporte T5 → {eval_file}")
 
+    if not report["valid_for_comparison"]:
+        print("T6 aborted: report contains unavailable agents or changed evidence.")
+        return 1
     t6 = run_t6_analysis(report["raw_results"])
     print_t6_report(t6)
 

@@ -1,6 +1,7 @@
 """Tests for scripts/schema.sql integrity"""
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 class TestSchemaSql:
@@ -10,11 +11,9 @@ class TestSchemaSql:
         assert path.exists(), f"schema.sql debe existir en scripts/ (buscado en {path})"
         return path.read_text()
 
-    def test_schema_has_9_tables(self, schema_content):
-        # 8 base + theta_calibrations (T12: auditoría de recalibración adaptativa)
-        tables = [l.strip() for l in schema_content.split("\n")
-                  if l.strip().startswith("CREATE TABLE")]
-        assert len(tables) == 9, f"Se esperan 9 tablas, hay {len(tables)}: {tables}"
+    def test_both_paths_use_one_canonical_schema(self):
+        root = Path(__file__).resolve().parents[2]
+        assert (root / "scripts/schema.sql").resolve() == root / "deploy/schema.sql"
 
     def test_schema_has_theta_calibrations_table(self, schema_content):
         assert "CREATE TABLE IF NOT EXISTS theta_calibrations" in schema_content
@@ -31,13 +30,12 @@ class TestSchemaSql:
     def test_schema_has_simulation_events_table(self, schema_content):
         assert "CREATE TABLE IF NOT EXISTS simulation_events" in schema_content
 
-    def test_no_pii_email_columns(self, schema_content):
-        """Ninguna tabla debe tener columna 'email' directa — solo hashes."""
-        lines = schema_content.lower().split("\n")
-        email_columns = [l for l in lines if "email" in l and "hash" not in l and "CREATE" not in l and "--" not in l and l.strip()]
-        # Solo deben existir columnas email_hash o student_hash, no 'email' raw
-        raw_email = [l for l in email_columns if "varchar" in l or "text" in l]
-        assert len(raw_email) == 0, f"Columnas de email raw encontradas: {raw_email}"
+    def test_schema_supports_current_persistence_and_versioned_upgrade(self, schema_content):
+        for column in ("email", "email_subject", "email_body_html", "agent_status", "event_id"):
+            assert column in schema_content
+        assert "RENAME COLUMN username TO email" in schema_content
+        assert "schema_migrations" in schema_content
+        assert "DROP TABLE" not in schema_content
 
     def test_schema_has_indexes(self, schema_content):
         indexes = [l for l in schema_content.split("\n") if "CREATE INDEX" in l]

@@ -1,0 +1,122 @@
+sssssssssssssssssssssssss............................................... [  7%]
+.......................................................s.........s...... [ 14%]
+..........s............................................................. [ 21%]
+........................................................................ [ 28%]
+........................................................................ [ 36%]
+........................................................................ [ 43%]
+........................................................................ [ 50%]
+........................................................................ [ 57%]
+........................................................................ [ 64%]
+........................................................................ [ 72%]
+........................................................................ [ 79%]
+........................................................................ [ 86%]
+........................................................................ [ 93%]
+................................................................         [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+tests/integration/test_analyze_endpoint.py::TestAnalyzeGenericExceptionPaths::test_domain_extraction_failure_returns_422
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/fastapi/routing.py:328: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+tests/unit/test_jwt.py::TestDecodeToken::test_wrong_secret_raises_authentication_error
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 12 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.5-final-0 _______________
+
+Name                                 Stmts   Miss  Cover   Missing
+------------------------------------------------------------------
+agents/__init__.py                       0      0   100%
+agents/bktree.py                        83      0   100%
+agents/confusables_loader.py            68      5    93%   44, 116, 125-127
+agents/fusion_agent.py                 125      6    95%   135-138, 310, 352, 433
+agents/hf_agent.py                     108     13    88%   66-67, 172, 202-214, 244
+agents/idn_agent.py                    107      1    99%   232
+agents/llm_agent.py                    166     10    94%   212, 274, 288-290, 294-296, 326, 533-534
+agents/web_probe_agent.py              145      3    98%   152-153, 284
+auth/__init__.py                         0      0   100%
+auth/dependencies.py                    25      0   100%
+auth/jwt.py                             23      0   100%
+core/__init__.py                         0      0   100%
+core/calibration.py                     54      3    94%   65-67
+core/config.py                          69      0   100%
+core/constants.py                       51      0   100%
+core/exceptions.py                      12      0   100%
+core/llm_gateway.py                     81      1    99%   181
+core/logger.py                          14      0   100%
+core/online_calibration.py              82      4    95%   79-84, 125
+core/rate_limiter.py                    30      0   100%
+core/redaction.py                       20      0   100%
+core/security.py                        11      0   100%
+data_pipeline/__init__.py                0      0   100%
+data_pipeline/cache_manager.py          46      0   100%
+data_pipeline/hybrid_retrieval.py       99      1    99%   64
+data_pipeline/knowledge_updater.py     113      2    98%   169-170
+data_pipeline/rag_policy.py             21      0   100%
+data_pipeline/reference_ingest.py      138      1    99%   162
+data_pipeline/reranker.py               42      0   100%
+data_pipeline/threat_intel.py          134      5    96%   250-251, 377, 387-388
+main.py                                 48      2    96%   90-92
+models/__init__.py                       0      0   100%
+models/database.py                      48     10    79%   29, 41-43, 105-123
+models/redis_client.py                  42      4    90%   27, 39-41
+routers/__init__.py                      6      0   100%
+routers/analyze_router.py              115     37    68%   204-205, 211, 255, 264, 323-395
+routers/auth_router.py                  86      3    97%   180-181, 188
+routers/eml_router.py                   66     37    44%   77-202
+routers/health_router.py                 8      0   100%
+routers/incidents_router.py            154     35    77%   240-265, 289-308, 343-377, 452, 477-478, 526-527
+schemas/__init__.py                      0      0   100%
+schemas/analyze.py                     152      7    95%   143-147, 177, 180
+schemas/auth.py                         25      0   100%
+schemas/feedback.py                     13      0   100%
+schemas/incidents.py                    30      0   100%
+services/__init__.py                     0      0   100%
+services/analysis.py                    67     11    84%   21, 118-119, 150, 195-197, 207, 212-213, 220
+services/orchestrator.py                88      2    98%   113, 152
+services/persistence.py                 43     11    74%   77-121, 187-225
+utils/__init__.py                        0      0   100%
+utils/email_parser.py                  147     13    91%   174-180, 184-185, 276-277, 289-290
+utils/url_parser.py                     70      0   100%
+------------------------------------------------------------------
+TOTAL                                 3075    227    93%
+Required test coverage of 90% reached. Total coverage: 92.62%
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_agents_live.py:85: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:89: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:93: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:103: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:107: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:110: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:131: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:141: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:146: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:151: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:156: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:163: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:184: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:189: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:200: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:206: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:211: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:225: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:235: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:241: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:247: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:251: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:265: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:272: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/integration/test_agents_live.py:294: live backend not reachable at http://localhost:8000 — start docker-compose first
+SKIPPED [1] tests/security/test_llm01_prompt_injection.py: live: exportá SECURITY_LIVE=1 para correrlos
+SKIPPED [1] tests/security/test_llm02_info_disclosure.py: live: exportá SECURITY_LIVE=1 para correrlos
+SKIPPED [1] tests/security/test_llm05_output_and_dos.py: live: exportá SECURITY_LIVE=1 para correrlos
+972 passed, 28 skipped, 4 warnings in 13.31s

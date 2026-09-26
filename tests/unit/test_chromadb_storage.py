@@ -78,3 +78,27 @@ async def test_empty_upsert_does_not_create_collection():
     with patch("models.chromadb_client.get_or_create_collection") as get_collection:
         await upsert_documents("security_knowledge", [], [])
     get_collection.assert_not_called()
+
+
+async def test_automatic_upsert_leaves_bm25_on_ttl():
+    collection = AsyncMock()
+    with patch("models.chromadb_client.get_or_create_collection", return_value=collection), \
+         patch("models.chromadb_client._embedding_function", return_value=None), \
+         patch.object(hybrid_retriever, "invalidate") as invalidate:
+        await upsert_documents("email_embeddings", ["auto"], ["new prediction"], [{"source": "auto_high"}])
+    collection.upsert.assert_awaited_once()
+    invalidate.assert_not_called()
+
+
+async def test_corpus_fetch_is_paginated_and_bounded():
+    from models.chromadb_client import get_all_documents
+    collection = AsyncMock()
+    async def page(**kwargs):
+        return {"ids": [str(i) for i in range(kwargs["offset"], kwargs["offset"] + kwargs["limit"])],
+                "documents": ["doc"] * kwargs["limit"], "metadatas": [{}] * kwargs["limit"]}
+    collection.get.side_effect = page
+    with patch("models.chromadb_client.get_or_create_collection", return_value=collection):
+        rows = await get_all_documents("email_embeddings", max_documents=350)
+    assert len(rows) == 350
+    assert [call.kwargs["limit"] for call in collection.get.call_args_list] == [300, 50]
+    assert [call.kwargs["offset"] for call in collection.get.call_args_list] == [0, 300]

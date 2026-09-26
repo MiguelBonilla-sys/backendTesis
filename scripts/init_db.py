@@ -3,22 +3,22 @@ Script de inicialización de base de datos.
 Ejecutar una vez: python scripts/init_db.py
 """
 import asyncio
-import asyncpg
 import os
 from pathlib import Path
+
+import asyncpg
 
 
 async def init_database() -> None:
     db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/phishing_detector")
-    schema_path = Path(__file__).parent / "schema.sql"
+    schema_path = Path(__file__).resolve().parents[1] / "deploy" / "schema.sql"
 
     if not schema_path.exists():
-        print(f"ERROR: schema.sql not found at {schema_path}")
-        return
+        raise FileNotFoundError(f"schema.sql not found at {schema_path}")
 
     schema_sql = schema_path.read_text()
 
-    conn = await asyncpg.connect(db_url)
+    conn = await asyncpg.connect(db_url.replace("postgresql+asyncpg://", "postgresql://", 1))
     try:
         await conn.execute(schema_sql)
         print("Database schema initialized successfully")

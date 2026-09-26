@@ -6,7 +6,7 @@ Por qué: el vector denso difumina señal **léxica** que en phishing IDN es
 decisiva — dominios homógrafos (`xn--pypal-4ve`), tokens de marca (`paypal`,
 `1xbet`, `usbbog`), sufijos raros. BGE-M3 haría esto en una pasada pero pesa
 1.2 GB; acá el canal sparse es `rank_bm25` in-process (RAM despreciable) sobre el
-corpus traído de ChromaDB, refrescado por TTL / invalidado en cada upsert.
+corpus traído de ChromaDB, refrescado por TTL o cambios confirmados/purgas.
 
 Degradación: sin `rank_bm25`, con colección vacía, o ante cualquier fallo del
 índice → denso-solo. `RAG_HYBRID_ENABLED=False` también fuerza denso-solo.
@@ -85,33 +85,44 @@ class HybridRetriever:
     def __init__(self) -> None:
         # colección -> (BM25Okapi | None, docs, built_at_monotonic)
         self._index: dict[str, tuple[object, list[dict], float]] = {}
+        self._locks: dict[str, asyncio.Lock] = {}
+        self._generation: dict[str, int] = {}
 
     def invalidate(self, collection: str | None = None) -> None:
-        if collection is None:
-            self._index.clear()
-        else:
-            self._index.pop(collection, None)
+        names = set(self._index) | set(self._locks) if collection is None else {collection}
+        for name in names:
+            self._generation[name] = self._generation.get(name, 0) + 1
+            self._index.pop(name, None)
 
     async def _get_index(self, collection: str) -> tuple[object, list[dict]]:
-        now = time.monotonic()
-        cached = self._index.get(collection)
-        if cached is not None and now - cached[2] < RAG_BM25_INDEX_TTL_S:
-            return cached[0], cached[1]
+        # One build per collection even when many requests hit a cold/expired cache.
+        async with self._locks.setdefault(collection, asyncio.Lock()):
+            now = time.monotonic()
+            cached = self._index.get(collection)
+            if cached is not None and now - cached[2] < RAG_BM25_INDEX_TTL_S:
+                return cached[0], cached[1]
+            generation = self._generation.get(collection, 0)
+            from rank_bm25 import BM25Plus
 
-        from rank_bm25 import BM25Plus  # positive IDF also for tiny collections
+            from models.chromadb_client import get_all_documents
 
-        from models.chromadb_client import get_all_documents
+            raw = await get_all_documents(collection, max_documents=settings.RAG_BM25_MAX_DOCUMENTS)
 
-        docs = [d for d in await get_all_documents(collection) if eligible_document(d)]
-        corpus = [_tokenize(d["document"]) for d in docs]
-        # Drop tokenless documents: BM25's average length must be positive.
-        pairs = [(d, tokens) for d, tokens in zip(docs, corpus, strict=True) if tokens]
-        docs = [d for d, _ in pairs]
-        corpus = [tokens for _, tokens in pairs]
-        idx = BM25Plus(corpus, delta=0) if corpus else None
-        self._index[collection] = (idx, docs, now)
-        logger.debug("bm25_index_built", collection=collection, n_docs=len(docs))
-        return idx, docs
+            def build():
+                docs = [d for d in raw if eligible_document(d)]
+                pairs = [(d, _tokenize(d["document"])) for d in docs]
+                pairs = [(d, tokens) for d, tokens in pairs if tokens]
+                docs = [d for d, _ in pairs]
+                corpus = [tokens for _, tokens in pairs]
+                return BM25Plus(corpus, delta=0) if corpus else None, docs
+
+            idx, docs = await asyncio.to_thread(build)
+            if self._generation.get(collection, 0) != generation:
+                # A purge during the build must not publish a stale sparse snapshot.
+                return None, []
+            self._index[collection] = (idx, docs, time.monotonic())
+            logger.debug("bm25_index_built", collection=collection, n_docs=len(docs))
+            return idx, docs
 
     async def search(
         self, collection: str, query: str, n_results: int

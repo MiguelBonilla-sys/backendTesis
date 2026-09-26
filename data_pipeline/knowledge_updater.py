@@ -28,8 +28,9 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
+from core.config import settings
 from core.constants import (
     COLLECTION_BASELINE,
     COLLECTION_EMAIL,
@@ -40,6 +41,14 @@ from core.constants import (
 )
 from core.logger import get_logger
 from core.redaction import redact
+from data_pipeline.knowledge_admission import (
+    AUTO_SOURCES,
+    COLLECTION_PREFIXES,
+    admit_automatic,
+    canonical_entity_url,
+    entity_id,
+    knowledge_write_lock,
+)
 from models.chromadb_client import delete_document, upsert_documents
 from models.database import execute, fetch
 
@@ -117,7 +126,8 @@ def build_baseline_document(parsed) -> tuple[str, str, dict]:
 
 
 def is_usb_baseline_candidate(
-    *, sender_domain: str, spf_pass: bool, dkim_pass: bool, verdict: str, s_risk: float
+    *, sender_domain: str, spf_pass: bool | None, dkim_pass: bool | None,
+    verdict: str, s_risk: float, authentication_verified: bool = False,
 ) -> bool:
     """
     Gate estricto del baseline incremental (T10): dominio institucional propio
@@ -126,6 +136,8 @@ def is_usb_baseline_candidate(
     LEGITIMATE de muy baja incertidumbre. Cualquier condición que falle excluye
     el correo del baseline; no degrada a un gate más laxo.
     """
+    if not authentication_verified:
+        return False
     if verdict != "LEGITIMATE" or s_risk > USB_BASELINE_MAX_RISK:
         return False
     if not (spf_pass and dkim_pass):
@@ -217,7 +229,9 @@ class KnowledgeUpdaterService:
         """
         ts = datetime.now(UTC).isoformat()
         source = tier if auto_ingested else "admin_confirmed"
-        doc_id = incident_id or hashlib.sha256(f"{url}:{ts}".encode()).hexdigest()[:32]
+        doc_id = entity_id(url)
+        if auto_ingested and tier not in AUTO_SOURCES:
+            raise ValueError("Automatic ingestion requires an automatic source tier")
 
         confusable_str = (
             ", ".join(repr(c) for c in confusable_chars) if confusable_chars else "none"
@@ -263,40 +277,48 @@ class KnowledgeUpdaterService:
             "s_risk": str(round(s_risk, 4)),
             "source": source,
             "ingested_at": ts,
+            "entity_id": doc_id,
+            "incident_id": incident_id or "",
         }
+        if auto_ingested:
+            metadata["expires_at"] = (datetime.now(UTC) + timedelta(days=settings.AUTO_INGEST_RETENTION_DAYS)).isoformat()
 
         try:
-            await upsert_documents(
-                COLLECTION_EMAIL,
-                ids=[f"email_{doc_id}"],
-                documents=[redact(email_doc)],
-                metadatas=[metadata],
-            )
-            await upsert_documents(
-                COLLECTION_IDN,
-                ids=[f"idn_{doc_id}"],
-                documents=[redact(idn_doc)],
-                metadatas=[
-                    {
-                        **metadata,
-                        "is_mixed_script": str(is_mixed_script),
-                        "homograph_ratio": str(homograph_ratio),
-                    }
-                ],
-            )
-            await upsert_documents(
-                COLLECTION_TI,
-                ids=[f"ti_{doc_id}"],
-                documents=[redact(ti_doc)],
-                metadatas=[
-                    {
-                        **metadata,
-                        "s_vt": str(s_vt),
-                        "s_urlscan": str(s_urlscan),
-                        "s_gsb": str(s_gsb),
-                    }
-                ],
-            )
+            async with knowledge_write_lock() as conn:
+                if auto_ingested and not await admit_automatic(conn, url=url, incident_id=incident_id, doc_id=doc_id):
+                    logger.info("knowledge_admission_denied", doc_id=doc_id)
+                    return
+                await upsert_documents(
+                    COLLECTION_EMAIL,
+                    ids=[f"email_{doc_id}"],
+                    documents=[redact(email_doc)],
+                    metadatas=[metadata],
+                )
+                await upsert_documents(
+                    COLLECTION_IDN,
+                    ids=[f"idn_{doc_id}"],
+                    documents=[redact(idn_doc)],
+                    metadatas=[
+                        {
+                            **metadata,
+                            "is_mixed_script": str(is_mixed_script),
+                            "homograph_ratio": str(homograph_ratio),
+                        }
+                    ],
+                )
+                await upsert_documents(
+                    COLLECTION_TI,
+                    ids=[f"ti_{doc_id}"],
+                    documents=[redact(ti_doc)],
+                    metadatas=[
+                        {
+                            **metadata,
+                            "s_vt": str(s_vt),
+                            "s_urlscan": str(s_urlscan),
+                            "s_gsb": str(s_gsb),
+                        }
+                    ],
+                )
             logger.info(
                 "knowledge_ingested",
                 doc_id=doc_id,
@@ -335,7 +357,7 @@ class KnowledgeUpdaterService:
     ) -> None:
         """Ingesta feedback confirmado por admin y marca el registro como procesado."""
         if confirmed_verdict == "LEGITIMATE":
-            await self.purge_incident_documents(incident_id)
+            await self.purge_incident_documents(incident_id, url=url)
             await execute(
                 "UPDATE feedback SET ingested = true, ingested_at = NOW() WHERE id = $1",
                 feedback_id,
@@ -380,6 +402,9 @@ class KnowledgeUpdaterService:
         para que ambas rutas convivan en la colección sin duplicar lógica.
         Falla silenciosamente — no debe interrumpir la respuesta de /analyze_eml.
         """
+        if not getattr(parsed, "authentication_verified", False):
+            logger.info("usb_baseline_unverified_rejected")
+            return
         doc_id, doc, metadata = build_baseline_document(parsed)
         try:
             await upsert_documents(
@@ -396,26 +421,27 @@ class KnowledgeUpdaterService:
         except Exception as exc:
             logger.error("usb_baseline_ingest_failed", error=str(exc))
 
-    async def purge_incident_documents(self, incident_id: str) -> None:
-        """
-        Remueve los documentos de un incidente de las 3 ChromaDB collections.
+    async def purge_incident_documents(self, incident_id: str, *, url: str | None = None) -> None:
+        """Delete stable entity evidence and legacy incident IDs under admission lock.
 
-        Anti-envenenamiento (T11): cuando un admin marca un incidente como
-        falso positivo (confirmed_verdict=LEGITIMATE), sus documentos
-        auto-ingestados dejan de existir como contexto RAG — un FP en el
-        conocimiento refuerza futuros FPs sobre dominios parecidos.
-
-        Los doc ids siguen la convención ``{email|idn|ti}_{incident_id}``
-        (``ingest_from_analysis`` con ``incident_id`` explícito).
-        ``delete_document`` ignora ids inexistentes, por lo que es seguro
-        llamarlo para incidentes que nunca fueron auto-ingestados.
+        Persist LEGITIMATE feedback first: admission checks it even when a prior
+        Chroma delete failed, and feedback remains pending until purge succeeds.
         """
-        for collection, prefix in (
-            (COLLECTION_EMAIL, "email_"),
-            (COLLECTION_IDN, "idn_"),
-            (COLLECTION_TI, "ti_"),
-        ):
-            await delete_document(collection, f"{prefix}{incident_id}")
+        async with knowledge_write_lock() as conn:
+            if url is None:
+                url = await conn.fetchval("SELECT url FROM incidents WHERE id=$1::uuid", incident_id)
+            legacy_ids = {incident_id}
+            if url:
+                rows = await conn.fetch(
+                    "SELECT id FROM incidents WHERE split_part(url, '#', 1)=$1",
+                    canonical_entity_url(url),
+                )
+                legacy_ids.update(str(row["id"]) for row in rows)
+            for collection, prefix in COLLECTION_PREFIXES:
+                if url:
+                    await delete_document(collection, prefix + entity_id(url))
+                for legacy_id in sorted(legacy_ids):
+                    await delete_document(collection, prefix + legacy_id)
         _invalidate_bm25()
         logger.info("knowledge_purged", incident_id=incident_id)
 

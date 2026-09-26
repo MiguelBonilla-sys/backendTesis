@@ -2,27 +2,29 @@
 from __future__ import annotations
 
 import asyncio
-import re
 
 from agents.fusion_agent import fusion_agent
 from agents.hf_agent import hf_agent
 from agents.idn_agent import idn_agent
 from agents.llm_agent import llm_agent
 from agents.web_probe_agent import web_probe_agent
+from core.agent_signal import SignalScore, telemetry_of
+from core.background import schedule
+from core.config import settings
 from core.exceptions import LLMTimeoutError
 from data_pipeline.threat_intel import threat_intel_service
-from schemas.analyze import AnalyzeResponse, EmailSignals
+from schemas.analyze import AgentTelemetry, AnalyzeResponse, EmailSignals, TIResult, WebProbeResult
+from services.analysis_limits import bounded_analysis
+from utils.email_parser import _extract_email_domain
 from utils.url_parser import extract_effective_domain
 
 
 def _sender_domain(email_from: str | None) -> str:
     """Extrae el dominio del campo From del email."""
-    if not email_from:
-        return ""
-    m = re.search(r"@([\w.\-]+)", email_from)
-    return m.group(1).lower() if m else ""
+    return _extract_email_domain(email_from or "")
 
 
+@bounded_analysis
 async def run_pipeline_core(
     url: str,
     domain: str,
@@ -42,12 +44,23 @@ async def run_pipeline_core(
     El timeout del LLM se degrada acá (score neutral 0.5) — comportamiento
     idéntico en todos los endpoints.
     """
-    idn_result, ti_result, s_hf, probe_result = await asyncio.gather(
-        idn_agent.analyze(url),
-        threat_intel_service.analyze(url, domain),
-        hf_agent.analyze(url, email_body_snippet),
-        web_probe_agent.analyze(url),
-    )
+    if settings.EVALUATION_MODE:
+        from core.evaluation import evaluation_manifest, evidence_for
+        evidence = evidence_for(url)
+        manifest = evaluation_manifest()
+        idn_result, s_hf = await asyncio.gather(
+            idn_agent.analyze(url), hf_agent.analyze(url, email_body_snippet),
+        )
+        ti_result = TIResult.model_validate(evidence["ti_result"])
+        probe_result = WebProbeResult.model_validate(evidence["probe_result"])
+    else:
+        manifest = {"frozen": False}
+        idn_result, ti_result, s_hf, probe_result = await asyncio.gather(
+            idn_agent.analyze(url),
+            threat_intel_service.analyze(url, domain),
+            hf_agent.analyze(url, email_body_snippet),
+            web_probe_agent.analyze(url),
+        )
 
     _confusable_str = (
         ", ".join(repr(c) for c in idn_result.confusable_chars[:5])
@@ -72,7 +85,7 @@ async def run_pipeline_core(
             idn_result_summary=idn_summary,
         )
     except LLMTimeoutError:
-        s_llm = 0.5
+        s_llm = SignalScore(0.5, AgentTelemetry(status="timeout", model=settings.LLM_MODEL))
         llm_reason = "LLM timed out — neutral fallback applied"
 
     # Gate anti-FP del probe (T3): manda el dominio efectivo post-redirect.
@@ -99,7 +112,12 @@ async def run_pipeline_core(
     # Conductor: segunda pasada deliberada para casos borderline (opt-in).
     from services.orchestrator import apply_conductor
 
-    return await apply_conductor(response)
+    response.agent_status = {
+        "hf": telemetry_of(s_hf), "llm": telemetry_of(s_llm),
+        **getattr(s_hf, "components", {}),
+    }
+    response.evaluation = manifest
+    return response if settings.EVALUATION_MODE else await apply_conductor(response)
 
 
 async def _analyze_single_url_for_email(
@@ -146,12 +164,14 @@ def schedule_autoingest(response: AnalyzeResponse) -> None:
         tier_for,
     )
 
+    if settings.EVALUATION_MODE:
+        return
     if not settings.LEARN_FROM_EVERY_ANALYSIS and response.s_risk < AUTO_INGEST_THRESHOLD:
         return
 
     tier = tier_for(response.verdict, response.s_risk)
 
-    asyncio.create_task(
+    schedule(
         knowledge_updater.ingest_from_analysis(
             tier=tier,
             url=response.url,
@@ -211,10 +231,10 @@ def _aggregate_email_reasons(
     if email_signals.has_suspicious_attachments:
         names = ", ".join(email_signals.attachment_names[:3])
         _add(f"Suspicious attachments detected: {names}")
-    if not email_signals.spf_pass and email_signals.sender_domain:
-        _add(f"SPF authentication failed for {email_signals.sender_domain!r}")
-    if not email_signals.dkim_pass and email_signals.sender_domain:
-        _add(f"DKIM signature verification failed for {email_signals.sender_domain!r}")
+    if email_signals.spf_pass is False and email_signals.sender_domain:
+        _add(f"SPF failure declared for {email_signals.sender_domain!r}")
+    if email_signals.dkim_pass is False and email_signals.sender_domain:
+        _add(f"DKIM failure declared for {email_signals.sender_domain!r}")
 
     if not reasons:
         reasons.append("No suspicious indicators detected in email or URLs")

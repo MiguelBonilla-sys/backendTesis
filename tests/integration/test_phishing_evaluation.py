@@ -38,13 +38,14 @@ Thesis acceptance criteria
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
 from main import app
-from auth.jwt import create_access_token
-from schemas.analyze import AnalyzeResponse, TIResult, IDNResult
+from schemas.analyze import AnalyzeResponse, TIResult
+from tests.auth_helpers import create_access_token
 
 
 def _auth_headers() -> dict:
@@ -55,7 +56,7 @@ def _auth_headers() -> dict:
 # ─── Shared fixtures ───────────────────────────────────────────────────────────
 
 @pytest.fixture
-def client():
+def client(auth_store):
     """TestClient with patched lifespan — no real DB/Redis needed."""
     with patch("main.init_db", new_callable=AsyncMock), \
          patch("main.close_db", new_callable=AsyncMock), \

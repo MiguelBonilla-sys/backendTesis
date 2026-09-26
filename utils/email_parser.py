@@ -20,6 +20,7 @@ import html as html_module
 import re
 from dataclasses import dataclass, field
 from email.message import Message
+from email.utils import getaddresses
 
 from core.logger import get_logger
 from utils.url_parser import extract_urls_from_html, extract_urls_from_text, normalize_url
@@ -55,10 +56,10 @@ _SUSPICIOUS_ATTACHMENT_EXTS: frozenset[str] = frozenset({
 _HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 # Auth result pattern: e.g. "dkim=pass" or "spf=fail"
-_AUTH_RESULT_RE = re.compile(r"\b(spf|dkim)=(pass|fail|neutral|softfail)", re.IGNORECASE)
-
-# Email address domain extractor
-_EMAIL_DOMAIN_RE = re.compile(r"@([\w.\-]+)", re.IGNORECASE)
+_AUTH_RESULT_RE = re.compile(
+    r"\b(spf|dkim)\s*=\s*(pass|fail|neutral|softfail|none|temperror|permerror)\b",
+    re.IGNORECASE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -76,14 +77,17 @@ class ParsedEmail:
     return_path_domain: str
     reply_to_domain: str
     sender_domain_mismatch: bool
-    spf_pass: bool
-    dkim_pass: bool
+    spf_pass: bool | None
+    dkim_pass: bool | None
     urls: list[str] = field(default_factory=list)
     body_text: str = ""
     is_urgent: bool = False
     urgency_score: float = 0.0
     attachment_names: list[str] = field(default_factory=list)
     has_suspicious_attachments: bool = False
+    # An uploaded file only declares authentication outcomes. It cannot attest
+    # that a trusted receiver verified SPF/DKIM for the institutional sender.
+    authentication_verified: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -186,12 +190,24 @@ def _decode_header(value: str | None) -> str:
 
 
 def _extract_email_domain(header: str) -> str:
-    """Extract the domain from an email address in a header value."""
-    match = _EMAIL_DOMAIN_RE.search(header)
-    return match.group(1).lower() if match else ""
+    """Parse the mailbox, ignoring addresses embedded in its display name."""
+    try:
+        addresses = getaddresses([header])
+        if len(addresses) != 1:
+            return ""  # multiple or ambiguous senders cannot establish identity
+        address = addresses[0][1]
+        local, separator, domain = address.rpartition("@")
+        if not separator or not local or not domain or any(c.isspace() for c in domain):
+            return ""
+        domain = domain.rstrip(".").encode("idna").decode("ascii").lower()
+        if not re.fullmatch(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*", domain):
+            return ""
+        return domain
+    except (ValueError, UnicodeError):
+        return ""
 
 
-def _parse_auth_results(msg: Message) -> tuple[bool, bool]:
+def _parse_auth_results(msg: Message) -> tuple[bool | None, bool | None]:
     """
     Read SPF and DKIM verdicts from authentication-related headers.
 
@@ -206,23 +222,22 @@ def _parse_auth_results(msg: Message) -> tuple[bool, bool]:
     )
     combined = " ".join(str(h) for h in auth_headers).lower()
 
-    spf_pass = False
-    dkim_pass = False
-
+    outcomes: dict[str, set[str]] = {"spf": set(), "dkim": set()}
     for match in _AUTH_RESULT_RE.finditer(combined):
-        proto, result = match.group(1).lower(), match.group(2).lower()
-        if proto == "spf" and result == "pass":
-            spf_pass = True
-        elif proto == "dkim" and result == "pass":
-            dkim_pass = True
+        outcomes[match.group(1).lower()].add(match.group(2).lower())
+    if not outcomes["spf"]:
+        received_spf = re.match(r"^(pass|fail|softfail)\b", str(msg.get("Received-SPF", "")).lower())
+        if received_spf:
+            outcomes["spf"].add(received_spf.group(1))
 
-    # Fallback: Received-SPF header
-    if not spf_pass:
-        received_spf = str(msg.get("Received-SPF", "")).lower()
-        if received_spf.startswith("pass"):
-            spf_pass = True
+    def declared_result(values: set[str]) -> bool | None:
+        if values == {"pass"}:
+            return True
+        if values and values <= {"fail", "softfail"}:
+            return False
+        return None  # absent, contradictory or indeterminate evidence
 
-    return spf_pass, dkim_pass
+    return declared_result(outcomes["spf"]), declared_result(outcomes["dkim"])
 
 
 def _strip_html(html_content: str) -> str:
@@ -242,7 +257,6 @@ def _extract_body_and_urls(msg: Message) -> tuple[str, list[str]]:
        same base URL with different tracking fragments from inflating counts.
     """
     text_chunks: list[str] = []
-    raw_urls: list[str] = []
     seen_normalized: set[str] = set()
     deduped_urls: list[str] = []
 

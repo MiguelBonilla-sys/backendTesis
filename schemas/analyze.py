@@ -79,6 +79,16 @@ class ShapExplanation(BaseModel):
     feature_contributions: dict[str, float]
 
 
+class AgentTelemetry(BaseModel):
+    """Availability is separate from the numeric fallback supplied to fusion."""
+
+    status: Literal["ok", "partial", "timeout", "unavailable", "error", "unknown"] = "unknown"
+    model: str | None = None
+    revision: str | None = None
+    latency_ms: float = Field(default=0.0, ge=0.0)
+    error: str | None = None
+
+
 class EmailSignals(BaseModel):
     """Señales extraídas del contexto del email completo (cabeceras + cuerpo)."""
 
@@ -90,8 +100,9 @@ class EmailSignals(BaseModel):
     has_suspicious_attachments: bool = False
     is_urgent: bool = False
     urgency_score: float = Field(default=0.0, ge=0.0, le=1.0)
-    spf_pass: bool = False
-    dkim_pass: bool = False
+    spf_pass: bool | None = None
+    dkim_pass: bool | None = None
+    authentication_verified: bool = False
     extracted_urls: list[str] = Field(default_factory=list)
     attachment_names: list[str] = Field(default_factory=list)
 
@@ -112,6 +123,8 @@ class AnalyzeResponse(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     processing_ms: float
     timestamp: datetime
+    agent_status: dict[str, AgentTelemetry] = Field(default_factory=dict)
+    evaluation: dict = Field(default_factory=dict)
 
 
 class EmailAnalysisResponse(BaseModel):
@@ -125,6 +138,9 @@ class EmailAnalysisResponse(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     processing_ms: float
     timestamp: datetime
+    analysis_status: Literal["complete", "partial", "indeterminate"] = "complete"
+    failed_urls: list[str] = Field(default_factory=list)
+    content_analysis: AnalyzeResponse | None = None
 
 
 class BatchAnalyzeRequest(BaseModel):
@@ -154,6 +170,8 @@ class BatchAnalyzeResponse(BaseModel):
     worst: AnalyzeResponse  # URL con el s_risk más alto
     processing_ms: float
     timestamp: datetime
+    analysis_status: Literal["complete", "partial", "indeterminate"] = "complete"
+    failed_urls: list[str] = Field(default_factory=list)
 
 
 class AnalyzeEmailRequest(BaseModel):
@@ -190,6 +208,8 @@ class AnalyzeEmailResponse(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     processing_ms: float
     timestamp: datetime
+    analysis_status: Literal["complete", "partial", "indeterminate"] = "complete"
+    failed_urls: list[str] = Field(default_factory=list)
 
 
 class ReportRequest(BaseModel):

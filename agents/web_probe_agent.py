@@ -17,12 +17,11 @@ Safety controls:
     rest of the pipeline is unaffected.
 
 DNS validation checks every returned IPv4/IPv6 address. The HTTP transport
-resolves again when connecting, so this is not protection against DNS rebinding;
-deployment egress rules must also deny access to internal/metadata networks.
+pins each connection to a validated numeric address, preventing DNS rebinding.
 """
 from __future__ import annotations
 
-import ipaddress
+import asyncio
 import re
 import socket
 from urllib.parse import urlparse
@@ -40,6 +39,8 @@ from core.constants import (
     PROBE_TIMEOUT_S,
 )
 from core.logger import get_logger
+from core.probe_transport import PublicProbeTransport
+from core.probe_transport import is_blocked_address as _is_blocked_address
 from schemas.analyze import WebProbeResult
 
 logger = get_logger(__name__)
@@ -48,12 +49,6 @@ logger = get_logger(__name__)
 # SSRF policy — only globally routable unicast addresses
 # ---------------------------------------------------------------------------
 
-
-def _is_blocked_address(address: str) -> bool:
-    ip = ipaddress.ip_address(address)
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        ip = ip.ipv4_mapped
-    return not ip.is_global or ip.is_multicast
 
 # ---------------------------------------------------------------------------
 # Brand keyword list for impersonation detection (lowercase, Colombian context)
@@ -116,7 +111,7 @@ def _is_ssrf_blocked(host: str) -> bool:
     except ValueError:
         pass  # Not an IP literal — continue to DNS
 
-    # DNS resolution (synchronous — fast for cached entries, acceptable in pipeline)
+    # Called in a worker thread by the async probe.
     try:
         addresses = socket.getaddrinfo(
             host, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM
@@ -216,12 +211,14 @@ class WebProbeAgent:
             max_redirects=PROBE_MAX_REDIRECTS,
             follow_redirects=False,
             verify=False,  # nosec — intentional: probe even invalid-cert phishing pages
+            transport=PublicProbeTransport(),
+            trust_env=False,
         ) as client:
             try:
                 current_url = httpx.URL(url)
                 redirect_count = 0
                 while True:
-                    error = _probe_url_error(current_url)
+                    error = await asyncio.to_thread(_probe_url_error, current_url)
                     if error:
                         return WebProbeResult(error=error, redirect_count=redirect_count)
 

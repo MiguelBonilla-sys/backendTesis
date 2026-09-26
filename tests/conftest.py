@@ -47,3 +47,18 @@ def _stub_startup_knowledge_io(request):
                new_callable=PropertyMock, return_value=True), \
          patch("models.chromadb_client.init_chromadb", new_callable=AsyncMock):
         yield
+
+
+@pytest.fixture
+def auth_store(monkeypatch):
+    """Opt-in auth persistence double; all security checks remain active."""
+    from auth import sessions
+    from core import rate_limiter
+    from tests import auth_helpers
+
+    store = auth_helpers.AuthStore()
+    monkeypatch.setattr(auth_helpers, "_active_store", store)
+    monkeypatch.setattr(sessions, "get_redis", lambda: store)
+    monkeypatch.setattr(sessions, "fetchrow", store.fetchrow)
+    monkeypatch.setattr(rate_limiter, "get_redis", lambda: store)
+    return store

@@ -44,6 +44,10 @@ class UserInfo(BaseModel):
 
 
 class TokenPayload(BaseModel):
-    sub: str  # username
-    role: str  # "admin" | "student" | "viewer"
-    exp: int  # unix timestamp
+    sub: str = Field(..., min_length=1)
+    role: Literal["admin", "student", "viewer"]
+    type: Literal["access", "refresh"]
+    sid: str = Field(..., min_length=1)
+    jti: str = Field(..., min_length=1)
+    iat: int
+    exp: int

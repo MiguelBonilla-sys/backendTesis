@@ -2,13 +2,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from auth.jwt import create_access_token
 from main import app
 from schemas.analyze import (
     AgentScores,
@@ -17,7 +16,7 @@ from schemas.analyze import (
     ShapExplanation,
     TIResult,
 )
-
+from tests.auth_helpers import create_access_token
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -64,7 +63,7 @@ def _make_mock_analyze_response(
             }
         ),
         processing_ms=250.0,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
 
 
@@ -82,7 +81,7 @@ def _auth_headers() -> dict:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
-def client():
+def client(auth_store):
     """TestClient with patched lifespan so no real DB/Redis is needed."""
     # Patch the functions as called inside main.py's lifespan
     with patch("main.init_db", new_callable=AsyncMock), \
@@ -527,7 +526,7 @@ class TestAnalyzeGenericExceptionPaths:
     """Cover lines 80-81, 113-115, 145-147, 166-168 in analyze_router.py."""
 
     @pytest.fixture
-    def client(self):
+    def client(self, auth_store):
         with patch("main.init_db", new_callable=AsyncMock), \
              patch("main.close_db", new_callable=AsyncMock), \
              patch("main.init_redis", new_callable=AsyncMock), \

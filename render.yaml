@@ -18,8 +18,8 @@ services:
     plan: starter           # 'free' duerme a los 15 min (cold start justo cuando el primario ya cayó). Starter no duerme.
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips "*"
-    healthCheckPath: /health
+    dockerCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --no-proxy-headers
+    healthCheckPath: /ready
     autoDeploy: true        # push a main → redeploy, igual que Coolify
     envVars:
       # --- No secretos: idénticos a Coolify ---
@@ -65,7 +65,7 @@ services:
       - key: CHROMA_DATABASE
         sync: false
       - key: SECRET_KEY
-        sync: false          # MISMO valor que Coolify o los JWT no cruzan al conmutar
+        sync: false          # Mismo secreto; conservar sesión requiere además Redis compartido
       - key: JWT_SECRET_KEY
         sync: false
       - key: LLM_API_KEY

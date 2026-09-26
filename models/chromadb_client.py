@@ -284,7 +284,10 @@ async def upsert_documents(
         )
         from data_pipeline.hybrid_retrieval import hybrid_retriever
 
-        hybrid_retriever.invalidate(collection_name)
+        # Automatic evidence is picked up on TTL; do not rebuild for every scan.
+        automatic = {"auto_ingest", "auto_high", "auto_mid", "auto_low"}
+        if not metadatas or any(m.get("source") not in automatic for m in metadatas):
+            hybrid_retriever.invalidate(collection_name)
     except Exception as exc:
         raise DatabaseError(
             message=f"ChromaDB upsert failed on collection '{collection_name}'",
@@ -367,27 +370,31 @@ async def query_collection(
     return flat
 
 
-async def get_all_documents(collection_name: str) -> list[dict]:
-    """Todos los documentos de una colección — ``[{id, document, metadata}]``.
+async def get_all_documents(collection_name: str, *, max_documents: int | None = None) -> list[dict]:
+    """Paginated corpus read; BM25 supplies a fixed document work budget.
 
-    Usado por el retriever híbrido para construir el índice BM25 (canal léxico).
-    Ante cualquier fallo devuelve ``[]`` (el híbrido cae a denso-solo).
+    No partial result on storage failure: the hybrid retriever falls back to
+    dense retrieval. Chroma Cloud limits each page to 300 rows.
     """
+    documents: list[dict] = []
     try:
         collection = await get_or_create_collection(collection_name)
-        res = await collection.get(include=["documents", "metadatas"])
+        offset = 0
+        while max_documents is None or offset < max_documents:
+            limit = 300 if max_documents is None else min(300, max_documents - offset)
+            res = await collection.get(include=["documents", "metadatas"], limit=limit, offset=offset)
+            ids = res.get("ids") or []
+            docs = res.get("documents") or []
+            metas = res.get("metadatas") or []
+            documents.extend({
+                "id": did,
+                "document": docs[i] if i < len(docs) else "",
+                "metadata": metas[i] if i < len(metas) else {},
+            } for i, did in enumerate(ids))
+            if len(ids) < limit:
+                break
+            offset += len(ids)
     except Exception as exc:  # noqa: BLE001
         logger.warning("chromadb_get_all_failed", collection=collection_name, error=str(exc))
         return []
-
-    ids = res.get("ids") or []
-    docs = res.get("documents") or []
-    metas = res.get("metadatas") or []
-    return [
-        {
-            "id": ids[i],
-            "document": docs[i] if i < len(docs) else "",
-            "metadata": metas[i] if i < len(metas) else {},
-        }
-        for i in range(len(ids))
-    ]
+    return documents

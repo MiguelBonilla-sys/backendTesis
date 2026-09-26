@@ -1,5 +1,7 @@
 # Protocolo de comparación multiagente vs. monolítico — resultados (T4–T7)
 
+> **Revisión 2026-09-26:** el contenido siguiente se conserva como registro histórico. No valida el detector corregido ni permite sostener aún la comparación estadística: 600 filas contienen 480 URLs únicas; 420 scores HF de 0,5 carecen de telemetría de disponibilidad; calibración y evaluación compartían casos. Ver [correcciones y protocolo vigente](correcciones-revision-integral-2026-09-26.md). Es necesaria una nueva corrida con grupos independientes, snapshots y señales disponibles verificadas.
+
 **Fecha:** 2026-09-15
 **Autores:** Juan Sebastián Fandiño Novoa & Miguel Ángel Bonilla Torres — USB Bogotá
 **Objetivo de tesis cubierto:** 7 — "Definir un protocolo reproducible para comparar la arquitectura multiagente con un modelo monolítico"

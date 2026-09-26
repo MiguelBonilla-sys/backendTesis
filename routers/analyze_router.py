@@ -3,8 +3,7 @@ Analyze router — POST /api/v1/analyze  |  /analyze_email  |  /analyze_batch
 
 Orquesta el pipeline de análisis por URL (etapas 1–3 en
 services.analysis.run_pipeline_core): IDN + TI + HF + WebProbe (paralelo)
-→ LLM → Fusión. El resultado se persiste en PostgreSQL de forma asíncrona
-(fire-and-forget) para no añadir latencia al response.
+→ LLM → Fusión. El resultado se persiste en PostgreSQL antes de responder.
 
 Los endpoints /analyze_eml y /report viven en routers.eml_router.
 
@@ -17,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -77,7 +76,7 @@ async def analyze_url(
     3. IDN Agent + ThreatIntel en paralelo (asyncio.gather).
     4. LLM Agent recibe el contexto IDN como pista adicional.
     5. Fusion Agent combina los tres scores → S_risk, veredicto, SHAP.
-    6. Persiste el incidente en PostgreSQL (fire-and-forget).
+    6. Persiste el incidente en PostgreSQL antes de responder.
     """
     # Rate limiting: 100 req/min por IP (CA-2)
     client_ip = get_client_ip(http_request)
@@ -118,6 +117,8 @@ async def analyze_url(
             email_hash=body.email_hash,
             email_body_snippet=body.email_body_snippet,
         )
+    except HTTPException:
+        raise
     except IDNAnalysisError as exc:
         logger.error("idn_analysis_failed", url=url, error=str(exc))
         raise HTTPException(
@@ -137,11 +138,8 @@ async def analyze_url(
             detail="Analysis pipeline error",
         ) from exc
 
-    # Persistir (fire-and-forget) + auto-ingesta de alta confianza (T11)
-    asyncio.create_task(
-        _persist_incident(response, body),
-        name=f"persist_{response.request_id}",
-    )
+    # Only persisted analyses may become knowledge that admins can correct.
+    await _persist_incident(response, body)
     schedule_autoingest(response)
 
     logger.info(
@@ -185,7 +183,7 @@ async def analyze_email(
     5. Para cada URL → _analyze_single_url_for_email (paralelo con asyncio.gather).
     6. Agregar veredicto email = max(s_risk) de todas las URLs.
     7. Generar razones agregadas (_aggregate_email_reasons).
-    8. Persistir cada resultado como incidente individual (fire-and-forget).
+    8. Esperar el guardado de cada resultado como incidente individual.
     9. Responder con url_analyses[] + worst + reasons + email_verdict.
     """
     client_ip = get_client_ip(http_request)
@@ -255,16 +253,15 @@ async def analyze_email(
             logger.warning("email_url_failed", url=unique_urls[i], error=str(result))
         else:
             url_analyses.append(result)
-            asyncio.create_task(
-                _persist_email_incident(result, body),
-                name=f"persist_email_{result.request_id}",
-            )
 
-    if not url_analyses:
+    if len(url_analyses) != len(unique_urls):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="All URL analyses failed — check that URLs are reachable http/https addresses.",
+            status_code=503,
+            detail="Email analysis incomplete — retry the analysis before treating the message as safe",
         )
+
+    for result in url_analyses:
+        await _persist_email_incident(result, body)
 
     worst = max(url_analyses, key=lambda a: a.s_risk)
     email_verdict = worst.verdict
@@ -287,7 +284,7 @@ async def analyze_email(
         email_verdict=email_verdict,
         reasons=reasons,
         processing_ms=round(processing_ms, 1),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
 
 
@@ -317,7 +314,7 @@ async def analyze_url_batch(
     2. Deduplica URLs (normaliza fragmentos de tracking).
     3. Construye EmailSignals mínimas desde el contexto del correo.
     4. Ejecuta _analyze_single_url_for_email para cada URL en paralelo.
-    5. Persiste cada resultado como incidente individual (fire-and-forget).
+    5. Espera el guardado de cada resultado como incidente individual.
     6. Devuelve todos los resultados + el de mayor s_risk como «worst».
     """
     client_ip = get_client_ip(http_request)
@@ -368,16 +365,15 @@ async def analyze_url_batch(
             logger.warning("batch_url_failed", url=unique_urls[i], error=str(result))
         else:
             url_analyses.append(result)
-            asyncio.create_task(
-                _persist_batch_incident(result, body),
-                name=f"persist_batch_{result.request_id}",
-            )
 
-    if not url_analyses:
+    if len(url_analyses) != len(unique_urls):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="All URL analyses failed — check that URLs are reachable http/https addresses.",
+            status_code=503,
+            detail="Batch analysis incomplete — retry the failed analysis",
         )
+
+    for result in url_analyses:
+        await _persist_batch_incident(result, body)
 
     worst = max(url_analyses, key=lambda a: a.s_risk)
     processing_ms = (time.perf_counter() - t_start) * 1000.0
@@ -396,6 +392,5 @@ async def analyze_url_batch(
         url_analyses=url_analyses,
         worst=worst,
         processing_ms=round(processing_ms, 1),
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
-

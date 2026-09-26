@@ -3,17 +3,18 @@ sin romper el flujo Bearer que sigue usando la extensión."""
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
 
-from auth.jwt import create_access_token, create_refresh_token
 from core.config import settings
 from core.constants import ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE
+from tests.auth_helpers import create_access_token, create_refresh_token
 
 
 @pytest.fixture
-def client():
+def client(auth_store):
     with (
         patch("main.init_db", new_callable=AsyncMock),
         patch("main.close_db", new_callable=AsyncMock),
@@ -52,7 +53,7 @@ def test_me_authenticates_via_cookie_only(client):
 def test_refresh_via_cookie_without_body(client):
     refresh = create_refresh_token({"sub": "admin", "role": "admin"})
     client.cookies.set(REFRESH_TOKEN_COOKIE, refresh)
-    resp = client.post("/api/v1/auth/refresh")
+    resp = client.post("/api/v1/auth/refresh", headers={"Origin": "http://localhost:5173"})
     assert resp.status_code == 200
     assert resp.json()["access_token"]
 

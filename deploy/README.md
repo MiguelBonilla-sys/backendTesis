@@ -23,7 +23,7 @@ docker exec -i "$PC" psql -U postgres -d phishing_detector -v ON_ERROR_STOP=1 < 
 docker exec -i "$PC" psql -U postgres -d phishing_detector -v ON_ERROR_STOP=1 < deploy/seed_users.sql
 ```
 
-`schema.sql` es idempotente (`CREATE ... IF NOT EXISTS`) — re-ejecutarlo no rompe nada.
+`schema.sql` es la fuente canónica: incluye migraciones aditivas versionadas y se aplica en una transacción. El inicializador y el enlace `scripts/schema.sql` usan este mismo archivo. Respaldar y aplicar en ambas instancias antes de actualizar la aplicación; conserva IDs, contraseñas y nombres antiguos.
 
 ## Seed del RAG (ChromaDB) — después de que `backend` esté healthy
 
@@ -70,7 +70,7 @@ Cron en el **host de Coolify** (`*/15 * * * *`), con `APP_UUID`, `STANDBY_DATABA
 | Componente | Cómo | Nota |
 |---|---|---|
 | **PostgreSQL** | `pg_dump --clean --if-exists` del contenedor local → `psql --single-transaction` a Neon | restore atómico; ventana de pérdida ≤ intervalo del cron |
-| **ChromaDB** | `scripts.sync_chroma_standby` — copia `documents`+`metadatas` de las 5 colecciones y **re-embebe con HF** antes de escribir en Chroma Cloud. Paginado de a 300 (límite free tier) | `--check` compara conteo+dimensión; `--reverse` hidrata un Chroma local; `--prune` propaga borrados |
+| **ChromaDB** | `scripts.sync_chroma_standby` — copia `documents`+`metadatas` de las 5 colecciones y **re-embebe con HF** antes de escribir en Chroma Cloud. Paginado de a 300 (límite free tier) | `--check` compara conteo+dimensión; `--authority local|standby` elige el origen; requiere `--replica-fenced --source-quiesced` para copiar actualizaciones y borrados. Ver [operación segura](../docs/synchronization-and-learning.md) |
 | **Redis** | **no se sincroniza** | caché de TI (TTL 1h); tras el failover se repuebla solo desde las TI APIs, dentro de la cuota gratis |
 
 **Por qué re-embebe y no copia vectores.** Coolify embebe con Ollama (GGUF) y

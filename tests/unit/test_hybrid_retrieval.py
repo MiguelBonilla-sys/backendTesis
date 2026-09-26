@@ -115,3 +115,24 @@ class TestSearch:
             retriever.invalidate("idn_patterns")
             await retriever.search("idn_patterns", "paypal", 2)
             assert gad.await_count == 2        # rebuild tras invalidate
+
+
+async def test_cold_concurrent_reads_only_build_once(retriever):
+    import asyncio
+    async def get_docs(*args, **kwargs):
+        await asyncio.sleep(0)
+        return [_d("one", "phishing paypal")]
+    with patch("models.chromadb_client.get_all_documents", side_effect=get_docs) as read:
+        results = await asyncio.gather(*[retriever._get_index("idn_patterns") for _ in range(10)])
+    assert read.await_count == 1
+    assert all(result[1][0]["id"] == "one" for result in results)
+    assert read.call_args.kwargs["max_documents"] > 0
+
+
+async def test_invalidation_during_build_discards_stale_documents(retriever):
+    async def get_docs(*args, **kwargs):
+        retriever.invalidate("idn_patterns")
+        return [_d("purged", "old phishing")]
+    with patch("models.chromadb_client.get_all_documents", side_effect=get_docs):
+        assert await retriever._get_index("idn_patterns") == (None, [])
+    assert "idn_patterns" not in retriever._index

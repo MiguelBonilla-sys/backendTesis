@@ -6,6 +6,8 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from auth.jwt import decode_token
+from auth.origins import validate_origin
+from auth.sessions import validate_session
 from core.constants import ACCESS_TOKEN_COOKIE
 from core.exceptions import AuthenticationError
 
@@ -41,7 +43,10 @@ async def require_auth(
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        return decode_token(token)
+        payload = decode_token(token, expected_type="access")
+        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+            validate_origin(request, cookie_auth=credentials is None)
+        return await validate_session(payload)
     except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

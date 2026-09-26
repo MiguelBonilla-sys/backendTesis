@@ -11,6 +11,7 @@ import re
 import time
 from itertools import zip_longest
 
+from core.agent_signal import CompletionText, SignalScore
 from core.config import settings
 from core.constants import (
     COLLECTION_BASELINE,
@@ -30,6 +31,7 @@ from core.llm_gateway import llm_gateway
 from core.logger import get_logger
 from core.redaction import redact
 from data_pipeline.rag_policy import eligible_document
+from schemas.analyze import AgentTelemetry
 
 logger = get_logger(__name__)
 
@@ -169,14 +171,26 @@ class LLMAgent:
                 elapsed_ms=round(elapsed_ms, 1),
             )
 
-            return score, reason
+            valid = any(re.search(p, response_text, re.IGNORECASE) for p in self._SCORE_PATTERNS)
+            return SignalScore(score, AgentTelemetry(
+                status="ok" if valid else "error",
+                error=None if valid else "invalid_output",
+                model=str(getattr(response_text, "model", settings.LLM_MODEL)),
+                latency_ms=elapsed_ms,
+            )), reason
 
         except LLMTimeoutError:
-            return LLM_FALLBACK_SCORE, "LLM analysis timed out — fallback score applied"
+            return SignalScore(LLM_FALLBACK_SCORE, AgentTelemetry(
+                status="timeout", model=settings.LLM_MODEL,
+                latency_ms=(time.perf_counter() - t0) * 1000,
+            )), "LLM analysis timed out — fallback score applied"
 
         except Exception as exc:
             logger.error("llm_analysis_error", url=url, error=str(exc))
-            return LLM_FALLBACK_SCORE, f"LLM error: {str(exc)[:100]}"
+            return SignalScore(LLM_FALLBACK_SCORE, AgentTelemetry(
+                status="error", model=settings.LLM_MODEL, error="provider_error",
+                latency_ms=(time.perf_counter() - t0) * 1000,
+            )), "LLM unavailable — neutral fallback applied"
 
     # ------------------------------------------------------------------
     # RAG retrieval
@@ -204,6 +218,9 @@ class LLMAgent:
         Retorna hasta 15 chunks con procedencia y presupuesto compartido.
         Si ChromaDB no está disponible devuelve lista vacía (graceful degradation).
         """
+        if settings.EVALUATION_MODE:
+            from core.evaluation import evidence_for
+            return list(evidence_for(url)["rag_context"])
         try:
             from data_pipeline.hybrid_retrieval import hybrid_retriever
 
@@ -437,7 +454,7 @@ Where SCORE=1.0 means definitely phishing, SCORE=0.0 means definitely legitimate
             timeout=LLM_TIMEOUT_S,
             thinking=False,  # respuesta directa en formato; sin cadena de razonamiento
         )
-        return result.text
+        return CompletionText(result.text, result.model)
 
     # ------------------------------------------------------------------
     # Conductor adjudication pass (segunda opinión deliberada)

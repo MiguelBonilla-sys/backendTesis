@@ -2,8 +2,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from core.config import settings
+from core.exceptions import DatabaseError
 from core.logger import logger
 from models.database import close_db, init_db
 from models.redis_client import close_redis, init_redis
@@ -56,6 +58,9 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         logger.info("Shutting down BackendTesis...")
+        from core.background import drain
+
+        await drain()
         await close_db()
         await close_redis()
         await llm_gateway.aclose()
@@ -70,10 +75,15 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+
+@app.exception_handler(DatabaseError)
+async def database_unavailable(request, exc: DatabaseError):
+    return JSONResponse(status_code=503, content={"detail": "Storage temporarily unavailable"},
+                        headers={"Retry-After": "5"})
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=settings.CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

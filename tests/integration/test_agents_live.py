@@ -2,7 +2,7 @@
 Integration tests — live agent pipeline against running backend (localhost:8000).
 
 Run ONLY when the backend + data stores are active:
-    pytest tests/integration/test_agents_live.py -v --no-cov
+    RUN_LIVE_TESTS=1 pytest tests/integration/test_agents_live.py -v --no-cov
 
 Tests verify:
   1. IDN Agent detects real confusable domains (Cyrillic, mixed-script)
@@ -14,29 +14,35 @@ Tests verify:
 from __future__ import annotations
 
 import os
-import pytest
+
 import httpx
+import pytest
 
 BASE_URL = os.getenv("TEST_BACKEND_URL", "http://localhost:8000")
-TIMEOUT = 20.0
+TIMEOUT = 60.0
 
 
 def _backend_available() -> bool:
     """True si el backend live responde — evita 22 fallos cuando el stack está abajo."""
     try:
-        resp = httpx.get(f"{BASE_URL}/api/v1/health", timeout=2.0)
+        resp = httpx.get(f"{BASE_URL}/ready", timeout=2.0)
         return resp.status_code == 200
     except httpx.HTTPError:
         return False
 
 
 pytestmark = pytest.mark.skipif(
-    not _backend_available(),
-    reason=f"live backend not reachable at {BASE_URL} — start docker-compose first",
+    os.getenv("RUN_LIVE_TESTS") != "1",
+    reason="Opt in with RUN_LIVE_TESTS=1 and seeded test credentials",
 )
 
-ADMIN_EMAIL = "mabonillat@academia.usbbog.edu.co"
-ADMIN_PASSWORD = "admin1234"
+
+@pytest.fixture(scope="module", autouse=True)
+def require_live_backend():
+    assert _backend_available(), f"Requested live backend is not ready at {BASE_URL}/ready"
+
+ADMIN_EMAIL = os.getenv("TEST_ADMIN_EMAIL", "")
+ADMIN_PASSWORD = os.getenv("TEST_ADMIN_PASSWORD", "")
 
 
 # ---------------------------------------------------------------------------
@@ -45,15 +51,14 @@ ADMIN_PASSWORD = "admin1234"
 
 def _get_token() -> str:
     """Obtain JWT from the running backend using seeded admin credentials."""
+    if not ADMIN_EMAIL or not ADMIN_PASSWORD:
+        pytest.fail("Live tests require TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD")
     resp = httpx.post(
         f"{BASE_URL}/api/v1/auth/login",
         json={"username": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
         timeout=TIMEOUT,
     )
-    if resp.status_code != 200:
-        # Fallback: generate token locally if auth endpoint differs
-        from auth.jwt import create_access_token
-        return create_access_token({"sub": ADMIN_EMAIL, "role": "admin"})
+    resp.raise_for_status()
     return resp.json()["access_token"]
 
 

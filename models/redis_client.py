@@ -24,7 +24,7 @@ async def init_redis() -> None:
         )
         # Validate connection eagerly
         await _client.ping()
-        logger.info("Redis client initialised", url=settings.REDIS_URL)
+        logger.info("Redis client initialised")
     except Exception as exc:
         raise DatabaseError(
             message="Failed to initialise Redis client",

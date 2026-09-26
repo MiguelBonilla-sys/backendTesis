@@ -70,6 +70,9 @@ async def load_effective_weights_from_db() -> None:
     """Carga la última calibración desde ``weight_calibrations`` (si existe).
     Falla en silencio: sin DB/tabla, siguen los pesos de tesis."""
     try:
+        from core.config import settings
+        if settings.EVALUATION_MODE:
+            return
         from models.database import fetchrow
 
         row = await fetchrow(

@@ -1,6 +1,6 @@
 """Regression tests for lost evidence, source poisoning and outbound redaction."""
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -81,7 +81,8 @@ async def test_context_includes_reference_provenance_and_honest_benign_label():
             return [doc("SPF and DMARC alignment", "official_reference",
                         source_url="https://learn.microsoft.com/reference")]
         if collection == "email_embeddings":
-            return [doc("Legitimate announcement", "auto_low", verdict="LEGITIMATE")]
+            return [doc("Legitimate announcement", "auto_low", verdict="LEGITIMATE",
+                        expires_at="2999-01-01")]
         if collection == "usb_baseline":
             return [doc("Institutional baseline", "institutional_baseline")]
         return []

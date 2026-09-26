@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
 from auth.dependencies import require_auth
+from core.config import settings
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from data_pipeline.knowledge_updater import is_usb_baseline_candidate, knowledge_updater
@@ -31,6 +32,7 @@ from schemas.analyze import (
     ReportResponse,
 )
 from services.analysis import _aggregate_email_reasons, _analyze_single_url_for_email
+from services.email_analysis import analyze_email_content
 from services.persistence import _persist_eml_incident, _persist_manual_report
 from utils.email_parser import ParsedEmail, parse_eml
 
@@ -84,7 +86,7 @@ async def analyze_eml_file(
         )
 
     t_start = time.perf_counter()
-    content = await file.read()
+    content = await file.read(_EML_MAX_BYTES + 1)
 
     if len(content) > _EML_MAX_BYTES:
         raise HTTPException(
@@ -93,13 +95,16 @@ async def analyze_eml_file(
         )
 
     try:
-        parsed: ParsedEmail = parse_eml(content)
+        parsed: ParsedEmail = await asyncio.to_thread(parse_eml, content)
     except Exception as exc:
         logger.error("eml_parse_failed", filename=file.filename, error=str(exc))
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Failed to parse .eml file: {exc}",
         ) from exc
+
+    if len(parsed.urls) > _EML_MAX_URLS:
+        raise HTTPException(422, f"Email contains more than {_EML_MAX_URLS} distinct links")
 
     email_signals = EmailSignals(
         subject=parsed.subject,
@@ -112,6 +117,7 @@ async def analyze_eml_file(
         urgency_score=parsed.urgency_score,
         spf_pass=parsed.spf_pass,
         dkim_pass=parsed.dkim_pass,
+        authentication_verified=parsed.authentication_verified,
         extracted_urls=parsed.urls[:_EML_MAX_URLS],
         attachment_names=parsed.attachment_names,
     )
@@ -121,7 +127,6 @@ async def analyze_eml_file(
     logger.info(
         "eml_analysis_start",
         email_hash=parsed.email_hash,
-        subject=parsed.subject[:80],
         url_count=len(unique_urls),
         is_urgent=parsed.is_urgent,
         sender_domain=parsed.sender_domain,
@@ -142,52 +147,51 @@ async def analyze_eml_file(
 
     raw_results = await asyncio.gather(*url_tasks, return_exceptions=True)
     url_analyses: list[AnalyzeResponse] = [r for r in raw_results if isinstance(r, AnalyzeResponse)]
-
-    # Un incidente por URL analizada — igual que /analyze_email (fire-and-forget).
-    # Antes esta ruta no persistía nada: no aparecía en Historial ni en las
-    # métricas de "hoy" pese a haber corrido el pipeline completo.
+    failed_urls = [url for url, result in zip(unique_urls, raw_results, strict=True)
+                   if not isinstance(result, AnalyzeResponse)]
+    # Do not label a partly analysed message as safe in older clients that do
+    # not know the additive analysis_status field.
+    if failed_urls:
+        raise HTTPException(503, detail={
+            "message": "Email analysis incomplete; retry the failed analysis",
+            "analysis_status": "indeterminate" if not url_analyses else "partial",
+            "failed_urls": failed_urls,
+        })
     for result in url_analyses:
-        asyncio.create_task(
-            _persist_eml_incident(result, parsed, unique_urls),
-            name=f"persist_eml_{result.request_id}",
-        )
-
-    for i, r in enumerate(raw_results):
-        if isinstance(r, Exception):
-            logger.warning(
-                "eml_url_analysis_failed",
-                url=unique_urls[i],
-                error=str(r),
-            )
+        await _persist_eml_incident(result, parsed, unique_urls)
 
     # Compute email-level verdict
+    content_analysis = None
+    analysis_status = "complete"
     if url_analyses:
         worst = max(url_analyses, key=lambda a: a.s_risk)
         email_s_risk = worst.s_risk
         email_verdict = worst.verdict
     else:
-        # No URLs found — derive a partial risk score from email signals only
-        email_s_risk = round(min(email_signals.urgency_score * 0.40, 0.39), 4)
-        email_verdict = "SUSPICIOUS" if email_s_risk >= 0.40 else "LEGITIMATE"
+        if settings.EVALUATION_MODE:
+            raise HTTPException(422, "Content-only emails require a separate frozen evaluation")
+        content_analysis, analysis_status = await analyze_email_content(
+            email_signals, parsed.body_text, parsed.email_hash,
+        )
+        email_s_risk = content_analysis.s_risk
+        email_verdict = content_analysis.verdict
+        await _persist_eml_incident(content_analysis, parsed, [])
 
-    # Aprendizaje incremental del baseline USB (T10) — fire-and-forget, no
-    # bloquea la respuesta. Gate estricto: dominio institucional + SPF/DKIM
-    # pass + veredicto LEGITIMATE de muy baja incertidumbre (ver
-    # is_usb_baseline_candidate). No requiere autorización T9: solo aprende
-    # del correo que el propio usuario ya pidió analizar.
-    if is_usb_baseline_candidate(
+    # Uploaded headers never attest authentication. Only a separate verified
+    # receiver integration can supply the provenance required for admission.
+    if not settings.EVALUATION_MODE and analysis_status == "complete" and is_usb_baseline_candidate(
         sender_domain=parsed.sender_domain,
         spf_pass=parsed.spf_pass,
         dkim_pass=parsed.dkim_pass,
         verdict=email_verdict,
         s_risk=email_s_risk,
+        authentication_verified=parsed.authentication_verified,
     ):
-        asyncio.create_task(
-            knowledge_updater.ingest_legit_baseline(parsed),
-            name=f"usb_baseline_{parsed.email_hash}",
-        )
+        await knowledge_updater.ingest_legit_baseline(parsed)
 
-    email_reasons = _aggregate_email_reasons(url_analyses, email_signals)
+    email_reasons = _aggregate_email_reasons(
+        url_analyses or ([content_analysis] if content_analysis else []), email_signals,
+    )
     processing_ms = (time.perf_counter() - t_start) * 1000.0
 
     logger.info(
@@ -208,6 +212,8 @@ async def analyze_eml_file(
         reasons=email_reasons,
         processing_ms=round(processing_ms, 1),
         timestamp=datetime.now(UTC),
+        analysis_status=analysis_status,
+        content_analysis=content_analysis,
     )
 
 
@@ -242,17 +248,13 @@ async def report_url(
     report_id = str(uuid.uuid4())
     now = datetime.now(UTC)
 
-    # Persist as manual incident — fire-and-forget to avoid blocking the response
-    asyncio.create_task(
-        _persist_manual_report(
+    await _persist_manual_report(
             report_id=report_id,
             url=body.url,
             verdict=body.reported_verdict,
             reporter=current_user.get("sub", "unknown"),
             note=body.reporter_note,
             timestamp=now,
-        ),
-        name=f"persist_report_{report_id}",
     )
 
     logger.info(
@@ -267,6 +269,6 @@ async def report_url(
         report_id=report_id,
         url=body.url,
         reported_verdict=body.reported_verdict,
-        message="Report received and queued for processing",
+        message="Report saved",
         timestamp=now,
     )

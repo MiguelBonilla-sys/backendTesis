@@ -11,14 +11,18 @@ or any call fails — never blocks the main analysis pipeline.
 from __future__ import annotations
 
 import asyncio
+import math
+import time
 from threading import Lock
 
 import httpx
 
+from core.agent_signal import SignalScore, telemetry_of
 from core.config import settings
 from core.constants import HF_FALLBACK_SCORE, HF_TIMEOUT_S
 from core.logger import get_logger
 from core.redaction import redact
+from schemas.analyze import AgentTelemetry
 
 logger = get_logger(__name__)
 
@@ -107,6 +111,7 @@ class HFAgent:
         El clasificador de URL corre local (ONNX) y no necesita API key; el de
         contenido usa la Inference API y degrada a 0.5 sin key.
         """
+        started = time.perf_counter()
         tasks: list = [self._classify_url(url)]
         if email_body_snippet:
             tasks.append(self._classify_content(email_body_snippet))
@@ -114,14 +119,20 @@ class HFAgent:
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         scores: list[float] = []
-        for r in results:
+        components: dict[str, AgentTelemetry] = {}
+        for name, r in zip(("hf_url", "hf_content"), results):
             if isinstance(r, float):
                 scores.append(r)
+                components[name] = telemetry_of(r)
             else:
                 logger.warning("hf_classify_exception", error=str(r))
+                components[name] = AgentTelemetry(status="error", error="classifier_error")
 
         if not scores:
-            return HF_FALLBACK_SCORE
+            return SignalScore(HF_FALLBACK_SCORE, AgentTelemetry(
+                status="error", error="all_classifiers_failed",
+                latency_ms=(time.perf_counter() - started) * 1000,
+            ), components)
 
         s_hf = sum(scores) / len(scores)
         logger.info(
@@ -130,7 +141,30 @@ class HFAgent:
             s_hf=round(s_hf, 4),
             classifiers_used=len(scores),
         )
-        return float(min(max(s_hf, 0.0), 1.0))
+        statuses = [m.status for m in components.values()]
+        status = ("ok" if all(s == "ok" for s in statuses)
+                  else statuses[0] if len(set(statuses)) == 1 else "partial")
+        meta = AgentTelemetry(
+            status=status, model=str(settings.HF_URL_MODEL),
+            revision=str(settings.HF_URL_MODEL_REVISION),
+            latency_ms=(time.perf_counter() - started) * 1000,
+        )
+        return SignalScore(float(min(max(s_hf, 0.0), 1.0)), meta, components)
+
+    async def analyze_content_with_status(self, text: str) -> tuple[float, AgentTelemetry]:
+        """Content-only classification, with explicit unavailable/timeout state."""
+        started = time.perf_counter()
+        try:
+            value = await self._classify_content(text)
+            meta = telemetry_of(value)
+        except Exception:
+            value = HF_FALLBACK_SCORE
+            meta = AgentTelemetry(status="error", error="classifier_error")
+        meta = meta.model_copy(update={
+            "model": settings.HF_EMAIL_MODEL,
+            "latency_ms": (time.perf_counter() - started) * 1000,
+        })
+        return float(value), meta
 
     # ------------------------------------------------------------------
     # Internal classifiers
@@ -139,6 +173,7 @@ class HFAgent:
     async def _classify_url(self, url: str) -> float:
         """Score de phishing de la URL. Prioriza el modelo ONNX local; si no
         está disponible cae a la API, dentro de un único presupuesto de tiempo."""
+        started = time.perf_counter()
         try:
             async with asyncio.timeout(HF_TIMEOUT_S):
                 score = await self._url_onnx_score(url)
@@ -147,11 +182,16 @@ class HFAgent:
                 return await self._call_hf_api(settings.HF_URL_MODEL, url)
         except TimeoutError:
             logger.warning("hf_url_timeout", timeout_s=HF_TIMEOUT_S)
-            return HF_FALLBACK_SCORE
+            return SignalScore(HF_FALLBACK_SCORE, AgentTelemetry(
+                status="timeout", model=str(settings.HF_URL_MODEL),
+                revision=str(settings.HF_URL_MODEL_REVISION),
+                latency_ms=(time.perf_counter() - started) * 1000,
+            ))
 
     async def _url_onnx_score(self, url: str) -> float | None:
         """Inferencia ONNX local (LinearSVM). ``None`` si el modelo no cargó o
         la inferencia falla. Salida: ``run(...)[1]`` = ``[[p_legit, p_phish]]``."""
+        started = time.perf_counter()
         sess = await asyncio.to_thread(_get_url_onnx)
         if sess is None:
             return None
@@ -162,14 +202,22 @@ class HFAgent:
                 sess.run, None, {"inputs": np.array([url], dtype="str")}
             )
             p_phish = float(probs[1][0][1])
-            return min(max(p_phish, 0.0), 1.0)
+            if not math.isfinite(p_phish):
+                raise ValueError("non-finite model output")
+            return SignalScore(min(max(p_phish, 0.0), 1.0), AgentTelemetry(
+                status="ok", model=str(settings.HF_URL_MODEL),
+                revision=str(settings.HF_URL_MODEL_REVISION),
+                latency_ms=(time.perf_counter() - started) * 1000,
+            ))
         except Exception as exc:  # noqa: BLE001
             logger.warning("hf_url_onnx_infer_failed", error=str(exc))
             return None
 
     async def _classify_content(self, text: str) -> float:
         if not settings.HUGGINGFACE_API_KEY:
-            return HF_FALLBACK_SCORE
+            return SignalScore(HF_FALLBACK_SCORE, AgentTelemetry(
+                status="unavailable", model=str(settings.HF_EMAIL_MODEL), error="missing_api_key",
+            ))
         return await self._call_hf_api(settings.HF_EMAIL_MODEL, text)
 
     async def _call_hf_api(self, model: str, text: str) -> float:
@@ -179,6 +227,16 @@ class HFAgent:
         Endpoint: ``POST {_HF_BASE}/{model}``
         Auth: ``Authorization: Bearer {HUGGINGFACE_API_KEY}``
         """
+        started = time.perf_counter()
+
+        def result(value: float, status: str, error: str | None = None):
+            return SignalScore(value, AgentTelemetry(
+                status=status, model=str(model), error=error,
+                # The hosted endpoint does not attest the pinned ONNX revision.
+                revision=None,
+                latency_ms=(time.perf_counter() - started) * 1000,
+            ))
+
         headers = {
             "Authorization": f"Bearer {settings.HUGGINGFACE_API_KEY}",
             "Content-Type": "application/json",
@@ -201,19 +259,21 @@ class HFAgent:
                 data = resp.json()
         except httpx.TimeoutException:
             logger.warning("hf_timeout", model=model)
-            return HF_FALLBACK_SCORE
+            return result(HF_FALLBACK_SCORE, "timeout")
         except httpx.HTTPStatusError as exc:
             logger.warning(
                 "hf_http_error",
                 model=model,
                 status=exc.response.status_code,
             )
-            return HF_FALLBACK_SCORE
+            return result(HF_FALLBACK_SCORE, "unavailable", f"http_{exc.response.status_code}")
         except Exception as exc:
             logger.warning("hf_call_failed", model=model, error=str(exc))
-            return HF_FALLBACK_SCORE
+            return result(HF_FALLBACK_SCORE, "error", "provider_error")
 
-        return self._extract_phishing_score(data)
+        value = self._extract_phishing_score(data)
+        meta = telemetry_of(value)
+        return result(float(value), meta.status, meta.error)
 
     # ------------------------------------------------------------------
     # Score extraction
@@ -237,20 +297,25 @@ class HFAgent:
             data = data[0]
 
         if not isinstance(data, list):
-            return HF_FALLBACK_SCORE
+            return SignalScore(HF_FALLBACK_SCORE, AgentTelemetry(status="error", error="invalid_output"))
 
         for item in data:
             if not isinstance(item, dict):
                 continue
             label: str = str(item.get("label", "")).lower()
-            score: float = float(item.get("score", 0.5))
+            try:
+                score: float = float(item["score"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if not math.isfinite(score):
+                continue
 
             if any(k in label for k in ("phish", "malicious", "label_1")):
-                return min(max(score, 0.0), 1.0)
+                return SignalScore(min(max(score, 0.0), 1.0), AgentTelemetry(status="ok"))
             if any(k in label for k in ("safe", "legitimate", "benign", "clean", "label_0")):
-                return min(max(1.0 - score, 0.0), 1.0)
+                return SignalScore(min(max(1.0 - score, 0.0), 1.0), AgentTelemetry(status="ok"))
 
-        return HF_FALLBACK_SCORE
+        return SignalScore(HF_FALLBACK_SCORE, AgentTelemetry(status="error", error="invalid_output"))
 
 
 # ---------------------------------------------------------------------------

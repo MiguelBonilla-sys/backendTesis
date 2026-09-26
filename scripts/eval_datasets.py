@@ -232,35 +232,30 @@ def load_hf_cases(dataset_key: str, limit: int) -> list[dict]:
         raise RuntimeError("datasets library not installed")
 
     cfg = DATASETS[dataset_key]
+    revision = cfg.get("revision") or os.environ.get("EVAL_DATASET_REVISION")
+    if not revision:
+        raise ValueError("Set EVAL_DATASET_REVISION to a fixed dataset commit before loading")
     print(f"  Loading {cfg['hf_id']} (config={cfg['config']}, split={cfg['split']})…")
     ds = load_dataset(
         cfg["hf_id"],
         cfg["config"],
         split=cfg["split"],
         trust_remote_code=False,
+        revision=revision,
     )
     # Sample evenly: half phishing, half legitimate for balanced evaluation
     phishing_val = cfg["phishing_value"]
     url_col = cfg["url_col"]
     label_col = cfg["label_col"]
 
-    phishing = [r for r in ds if r[label_col] == phishing_val][:limit // 2]
-    legitimate = [r for r in ds if r[label_col] != phishing_val][:limit // 2]
-
-    cases = []
-    for r in phishing:
-        cases.append({
-            "url": r[url_col],
-            "expected": "PHISHING",
-            "source": cfg["hf_id"],
-        })
-    for r in legitimate:
-        cases.append({
-            "url": r[url_col],
-            "expected": "LEGITIMATE",
-            "source": cfg["hf_id"],
-        })
-    return cases
+    from scripts.eval_protocol import unique_cases
+    cases = unique_cases([
+        {"url": r[url_col], "expected": "PHISHING" if r[label_col] == phishing_val else "LEGITIMATE",
+         "source": cfg["hf_id"], "revision": revision,
+         "dataset_fingerprint": getattr(ds, "_fingerprint", None)} for r in ds
+    ])
+    return ([r for r in cases if r["expected"] == "PHISHING"][:limit // 2]
+            + [r for r in cases if r["expected"] == "LEGITIMATE"][:limit // 2])
 
 
 # ─── Main evaluation loop ──────────────────────────────────────────────────────
@@ -404,7 +399,7 @@ async def main() -> None:
     lines = [
         f"Evaluation Summary — {datetime.utcnow().isoformat()}",
         f"Backend: {args.backend}",
-        f"Thesis targets: Precision ≥ 0.80 | Recall ≥ 0.75",
+        "Thesis targets: Precision ≥ 0.80 | Recall ≥ 0.75",
         "",
     ]
     for m in all_metrics:

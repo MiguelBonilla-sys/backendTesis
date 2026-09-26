@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from core.exceptions import DatabaseError
 from schemas.analyze import (
     AgentScores,
     AnalyzeRequest,
@@ -105,15 +106,15 @@ class TestPersistIncident:
         assert call_args[2] == ""  # email_hash positional arg
 
     @pytest.mark.asyncio
-    async def test_db_failure_is_swallowed(self):
-        """DB errors must never propagate — fire-and-forget guarantees API response."""
+    async def test_db_failure_prevents_success_acknowledgement(self):
+        """A failed durable write must propagate to the HTTP 503 handler."""
         from services.persistence import _persist_incident
 
         response = _make_response()
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             mock_exec.side_effect = Exception("DB connection lost")
-            # Must not raise
-            await _persist_incident(response, _make_body(email_hash="hash"))
+            with pytest.raises(DatabaseError):
+                await _persist_incident(response, _make_body(email_hash="hash"))
 
     @pytest.mark.asyncio
     async def test_legitimate_verdict_persisted_correctly(self):
@@ -186,15 +187,16 @@ class TestPersistEmlIncident:
         assert json.loads(call_args[15]) == urls  # all_urls
 
     @pytest.mark.asyncio
-    async def test_db_failure_is_swallowed(self):
-        """DB errors must never propagate — fire-and-forget guarantees API response."""
+    async def test_db_failure_prevents_success_acknowledgement(self):
+        """A failed durable write must propagate to the HTTP 503 handler."""
         from services.persistence import _persist_eml_incident
 
         response = _make_response()
         parsed = _make_parsed_email()
         with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
             mock_exec.side_effect = Exception("DB connection lost")
-            await _persist_eml_incident(response, parsed, parsed.urls)
+            with pytest.raises(DatabaseError):
+                await _persist_eml_incident(response, parsed, parsed.urls)
 
 
 # ─── _persist_manual_report ───────────────────────────────────────────────────
@@ -276,12 +278,13 @@ class TestPersistManualReport:
         mock_exec.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_db_failure_is_swallowed(self):
-        """DB failures in manual report persist must never propagate."""
+    async def test_db_failure_prevents_success_acknowledgement(self):
+        """A manual report cannot be acknowledged without saving it."""
         from services.persistence import _persist_manual_report
 
         now = datetime.now(UTC)
-        with patch("models.database.execute", new_callable=AsyncMock) as mock_exec:
+        with patch("models.database.execute", new_callable=AsyncMock) as mock_exec, \
+             pytest.raises(DatabaseError):
             mock_exec.side_effect = RuntimeError("DB down")
             await _persist_manual_report(
                 report_id="rep4",

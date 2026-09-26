@@ -15,9 +15,10 @@ La función pura ``choose_theta()`` vive acá para ser unit-testeable sin DB.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
-from core.constants import THETA
+from core.constants import GAMMA, THETA
 from core.logger import get_logger
 
 logger = get_logger(__name__)
@@ -34,13 +35,35 @@ _effective_theta: float = THETA
 
 def get_effective_theta() -> float:
     """θ vigente para el veredicto PHISHING. Default: ``THETA`` (constante ROC)."""
-    return _effective_theta
+    from core.config import settings
+
+    if settings.EVALUATION_MODE:
+        return THETA
+    return max(_effective_theta, minimum_safe_theta())
+
+
+def minimum_safe_theta(gamma: float | None = None) -> float:
+    """Keep the neutral state strictly below the phishing threshold.
+
+    The margin covers the response's four-decimal score rounding. Re-evaluate
+    on every access because weights may load after theta during startup.
+    """
+    if gamma is None:
+        from core.config import settings
+        from core.online_calibration import get_effective_weights
+
+        gamma = (get_effective_weights()["gamma"]
+                 if settings.ONLINE_CALIBRATION_ENABLED and not settings.EVALUATION_MODE
+                 else GAMMA)
+    return round((1.0 - gamma) * 0.5 + 0.01, 4)
 
 
 def set_effective_theta(value: float) -> None:
     """Fija el θ efectivo (clampeado a los guardrails). Uso: lifespan + tests."""
     global _effective_theta
-    lo, hi = THETA - THETA_DRIFT_MAX, THETA + THETA_DRIFT_MAX
+    if not math.isfinite(value):
+        raise ValueError("theta must be finite")
+    lo, hi = max(THETA - THETA_DRIFT_MAX, minimum_safe_theta()), THETA + THETA_DRIFT_MAX
     _effective_theta = min(max(value, lo), hi)
 
 
@@ -56,6 +79,9 @@ async def load_effective_theta_from_db() -> None:
     Falla en silencio: sin DB o sin tabla, el θ base sigue vigente.
     """
     try:
+        from core.config import settings
+        if settings.EVALUATION_MODE:
+            return
         from models.database import fetchrow
 
         row = await fetchrow(
@@ -129,7 +155,9 @@ def choose_theta(
             reason=f"insufficient_feedback ({len(samples)} < {min_samples})",
         )
 
-    lo, hi = base_theta - drift_max, base_theta + drift_max
+    lo = max(0.0, base_theta - drift_max, minimum_safe_theta())
+    hi = min(1.0, base_theta + drift_max)
+    current = min(max(current, lo), hi)
     best_theta, best_loss = current, _loss(samples, current, lam)
 
     theta = lo

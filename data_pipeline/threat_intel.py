@@ -8,11 +8,12 @@ Fórmula de agregación:
 
 Pesos base definidos en core/constants.py (W_VT=0.50, W_URLSCAN=0.30, W_GSB=0.20).
 WhoisXML actúa como modificador adicional con WHOIS_WEIGHT=0.10 (no altera pesos del paper).
-Cache Redis: key = ti:{domain_2ld}, TTL = settings.TI_CACHE_TTL (3600s).
+Cache Redis: claves por proveedor y URL/host/dominio, TTL = settings.TI_CACHE_TTL (3600s).
 """
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from datetime import UTC
 
 import httpx
@@ -22,7 +23,7 @@ from core.constants import W_GSB, W_URLSCAN, W_VT, W_WHOIS
 from core.logger import get_logger
 from data_pipeline.cache_manager import get_ti_cache, set_ti_cache
 from schemas.analyze import TIResult
-from utils.url_parser import extract_registrable_domain
+from utils.url_parser import extract_registrable_domain, normalize_url
 
 logger = get_logger(__name__)
 
@@ -61,13 +62,10 @@ class ThreatIntelService:
         """
         # Dominio registrable (eTLD+1) — clave de cache y `domainName` de WhoisXML.
         # `email.mg.abdataclassactionmail.com` → `abdataclassactionmail.com`.
-        domain_2ld = extract_registrable_domain(domain)
-
-        # --- 1. Cache check ---------------------------------------------------
-        cached = await get_ti_cache(domain_2ld)
-        if cached is not None:
-            logger.debug("ti_cache_return", domain=domain_2ld)
-            return TIResult(**cached)
+        # IDN analysis may supply a domain extracted from a CDN filename.
+        # Reputation providers must query the actual network host of the URL.
+        host = httpx.URL(url).host.lower().rstrip(".")
+        domain_2ld = extract_registrable_domain(host)
 
         # --- 2. Dev/test mode: todas las keys vacías --------------------------
         no_keys = (
@@ -83,15 +81,18 @@ class ThreatIntelService:
                 message="All TI API keys empty — returning S_TI=0.0 (dev/test mode)",
             )
             result = TIResult(s_vt=0.0, s_urlscan=0.0, s_gsb=0.0, s_ti=0.0)
-            await set_ti_cache(domain_2ld, result.model_dump(), ttl=settings.TI_CACHE_TTL)
             return result
 
         # --- 3. Consulta concurrente a las 4 APIs ----------------------------
+        # Versioned keys deliberately ignore legacy domain-wide aggregates.
+        # Paths/query strings matter for GSB; host reputation must not leak
+        # between tenants. Only WHOIS shares a registrable-domain result.
+        url_key = hashlib.sha256(normalize_url(url).encode()).hexdigest()
         vt_score, urlscan_score, gsb_score, (whois_score, age_days) = await asyncio.gather(
-            self._query_virustotal(url, domain),
-            self._query_urlscan(url, domain),
-            self._query_gsb(url),
-            self._query_whoisxml(domain_2ld),
+            self._cached("vt", host, lambda: self._query_virustotal(url, host)),
+            self._cached("urlscan", host, lambda: self._query_urlscan(url, host)),
+            self._cached("gsb", url_key, lambda: self._query_gsb(url)),
+            self._cached("whois", domain_2ld, lambda: self._query_whoisxml(domain_2ld)),
         )
 
         # --- 4. Agregación ponderada -----------------------------------------
@@ -114,7 +115,6 @@ class ThreatIntelService:
         )
 
         # --- 5. Guardar en cache ----------------------------------------------
-        await set_ti_cache(domain_2ld, result.model_dump(), ttl=settings.TI_CACHE_TTL)
         logger.info(
             "ti_analysis_complete",
             domain=domain_2ld,
@@ -127,6 +127,15 @@ class ThreatIntelService:
         )
 
         return result
+
+    async def _cached(self, provider: str, target: str, query):
+        key = f"v2:{provider}:{target}"
+        cached = await get_ti_cache(key)
+        if isinstance(cached, dict) and "value" in cached:
+            return cached["value"]
+        value = await query()
+        await set_ti_cache(key, {"value": value}, ttl=settings.TI_CACHE_TTL)
+        return value
 
     # -------------------------------------------------------------------------
     # Private helpers — one per TI API

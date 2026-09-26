@@ -1,0 +1,107 @@
+{
+  "refresh_as_access": {
+    "status": 200,
+    "role": "admin"
+  },
+  "credentialed_cors": {
+    "status": 200,
+    "allow_origin": "https://review-untrusted.vercel.app",
+    "allow_credentials": "true",
+    "returns_tokens": true
+  },
+  "old_refresh_reuse": {
+    "status_after_prior_refresh": 200
+  },
+  "eml_all_urls_failed": {
+    "status": 200,
+    "verdict": "LEGITIMATE",
+    "risk": 0.0,
+    "url_analyses": 0
+  },
+  "baseline_untrusted_headers": {
+    "sender_domain": "usbbog.edu.co",
+    "spf_pass": true,
+    "dkim_pass": true,
+    "status": 200,
+    "ingestion_called": true
+  },
+  "health_routes": {
+    "health": 200,
+    "api_v1_health": 404
+  },
+  "ti_cache_paths": {
+    "second_s_gsb": 0.0,
+    "provider_calls": 1,
+    "cache_keys": [
+      "example.test"
+    ]
+  },
+  "ti_cache_tenants": {
+    "second_s_gsb": 0.0,
+    "provider_calls": 1,
+    "cache_keys": [
+      "vercel.app"
+    ]
+  },
+  "calibration_neutral_floor": {
+    "new_theta": 0.2,
+    "loss": 0.0,
+    "before": "LEGITIMATE",
+    "after": "PHISHING",
+    "risk": 0.25
+  },
+  "probe_gate": {
+    "raw_probe": 0.6,
+    "effective_probe": 0.0,
+    "risk": 0.25,
+    "verdict": "LEGITIMATE"
+  },
+  "existing_evaluation": {
+    "path": "reports/baseline_vs_pipeline_20260915_002802.json",
+    "sha256": "a093e80a1887f992d0009a4e3fb4f4e4f58bb53cacc86467b812a1081529b451",
+    "rows": 600,
+    "unique_urls": 480,
+    "hf_exact_neutral": 420,
+    "fp_at_exact_neutral": 204,
+    "baseline": {
+      "tp": 258,
+      "fp": 216,
+      "fn": 42,
+      "tn": 84,
+      "precision": 0.5443,
+      "recall": 0.86,
+      "f1": 0.6667,
+      "accuracy": 0.57,
+      "meets_thesis_target": false
+    },
+    "pipeline_at_theta_030": {
+      "tp": 200,
+      "fp": 0,
+      "fn": 100,
+      "tn": 300,
+      "precision": 1.0,
+      "recall": 0.6667,
+      "f1": 0.8,
+      "accuracy": 0.8333,
+      "meets_thesis_target": false
+    },
+    "case_fields": [
+      "url",
+      "source",
+      "synthetic",
+      "pipeline_verdict",
+      "s_hf",
+      "s_risk",
+      "expected"
+    ]
+  },
+  "chroma_deleted_document_resurrection": {
+    "forward_upserts": 0,
+    "reverse_upserts": 1,
+    "restored_id": "email_deleted_incident"
+  },
+  "postgres_same_id_update": {
+    "rows_considered": 0,
+    "writes": 0
+  }
+}

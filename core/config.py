@@ -1,3 +1,6 @@
+from urllib.parse import urlsplit
+
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,6 +10,12 @@ class Settings(BaseSettings):
     # App
     APP_ENV: str = "development"
     DEBUG: bool = False
+    # Bound concurrent analysis work and total processing time per URL/email.
+    ANALYSIS_CONCURRENCY: int = Field(default=8, ge=1, le=128)
+    ANALYSIS_QUEUE_TIMEOUT_S: float = Field(default=10.0, gt=0, le=120)
+    ANALYSIS_TIMEOUT_S: float = Field(default=45.0, gt=0, le=300)
+    STORE_EMAIL_CONTENT: bool = False
+    EMAIL_METADATA_RETENTION_DAYS: int = Field(default=30, ge=1, le=3650)
 
     # Database
     DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/phishing_detector"
@@ -41,7 +50,8 @@ class Settings(BaseSettings):
     # AUTH_COOKIE_DOMAIN: en prod, "mangel.dpdns.org" — Coolify (back-tesi.) y
     # Render (render.) están mapeados como subdominios de ESE dominio (ver
     # render.yaml / docker-compose.coolify.yml), así que comparten la cookie:
-    # el failover entre instancias ya no pierde la sesión. Vacío = cookie
+    # Redis debe compartirse para conservar sesiones en failover; si cambia,
+    # hay que volver a iniciar sesión. Vacío = cookie
     # host-only (solo sirve para el dominio exacto que la puso).
     AUTH_COOKIE_DOMAIN: str = ""
     AUTH_COOKIE_SECURE: bool = True
@@ -50,20 +60,40 @@ class Settings(BaseSettings):
     # Registro self-service — solo correos institucionales USB
     ALLOWED_SIGNUP_DOMAINS: list[str] = ["usbbog.edu.co", "academia.usbbog.edu.co"]
 
-    # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
-    # Orígenes por patrón (además de CORS_ORIGINS exactos): extensión, ngrok,
-    # cualquier subdominio propio (*.mangel.dpdns.org — onboardingtes, dashdect…)
-    # y cualquier deploy de Vercel / Render. El JWT protege igual.
-    CORS_ORIGIN_REGEX: str = (
-        r"https://([a-z0-9-]+\.)*(mangel\.dpdns\.org|vercel\.app|onrender\.com)"
-        r"|https://.*\.ngrok-free\.(app|dev)"
-        r"|chrome-extension://.*"
-    )
+    # Exact product/browser origins only. Extension IDs must be explicitly added.
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:5173", "http://localhost:3000",
+        "https://dashdect.mangel.dpdns.org", "https://onboardingtes.mangel.dpdns.org",
+        "chrome-extension://hpcgpdffecpcljmofigneicgkdfhplhf",
+    ]
 
-    # Rate Limiting
+    @field_validator("CORS_ORIGINS")
+    @classmethod
+    def exact_cors_origins(cls, origins: list[str]) -> list[str]:
+        for origin in origins:
+            parsed = urlsplit(origin)
+            if (
+                "*" in origin
+                or parsed.scheme not in {"https", "http", "chrome-extension", "moz-extension"}
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.path or parsed.query or parsed.fragment
+            ):
+                raise ValueError("CORS_ORIGINS must contain exact origins without wildcards or paths")
+            # Trigger validation of malformed ports rather than accepting inert entries.
+            _ = parsed.port
+        return origins
+
+    # Rate limiting. Socket peer is authoritative unless an explicit proxy CIDR
+    # is configured and the entire right-hand proxy chain is trusted.
+    TRUSTED_PROXY_CIDRS: list[str] = []
     RATE_LIMIT_ANALYZE: int = 100
     RATE_LIMIT_REPORT: int = 20
+    RATE_LIMIT_LOGIN_IP: int = 20
+    RATE_LIMIT_LOGIN_IDENTITY: int = 10
+    RATE_LIMIT_LOGIN_WINDOW_SECONDS: int = 300
+    AUTH_HASH_CONCURRENCY: int = 4
 
     # Threat Intelligence API keys
     VIRUSTOTAL_API_KEY: str = ""
@@ -100,12 +130,21 @@ class Settings(BaseSettings):
     # s_risk alto), con tier de confianza en la metadata y una cuota de docs
     # auto-ingestados sin confirmación humana (anti-envenenamiento).
     LEARN_FROM_EVERY_ANALYSIS: bool = True
-    AUTO_INGEST_QUOTA: float = 0.60  # fracción máx del corpus sin confirmar
+    AUTO_INGEST_QUOTA: float = Field(default=0.60, ge=0.0, le=1.0)
+    AUTO_INGEST_MAX_DOCUMENTS: int = Field(default=2000, ge=0)  # per collection
+    AUTO_INGEST_RETENTION_DAYS: int = Field(default=30, ge=1, le=365)
+    AUTO_INGEST_SCAN_LIMIT: int = Field(default=10000, ge=1)
+    RAG_BM25_MAX_DOCUMENTS: int = Field(default=10000, ge=1)
 
     # Calibración online del vector de pesos de fusión {α, γ, w_hf}.
     # Kill-switch: default False — los pesos de tesis quedan congelados como
     # baseline del eval. Ver core/online_calibration.py.
     ONLINE_CALIBRATION_ENABLED: bool = False
+
+    # Evaluation is explicit: frozen per-URL TI/RAG evidence, no learning or
+    # adaptive calibration. Missing evidence aborts instead of consulting live TI.
+    EVALUATION_MODE: bool = False
+    EVALUATION_SNAPSHOT_PATH: str = ""
 
     # HuggingFace
     # - URL model (pirocheto/…): sklearn/ONNX, se corre LOCAL vía onnxruntime.

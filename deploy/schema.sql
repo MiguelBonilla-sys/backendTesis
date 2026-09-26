@@ -1,24 +1,31 @@
--- =============================================================
--- phishing_detector — schema de despliegue (Coolify / producción)
--- =============================================================
--- Fuente de verdad para el schema que consume el código actual.
--- Reconcilia la deriva entre backendTesis/scripts/schema.sql (users.username,
--- incidents sin columnas de email) e infraTesis/scripts/schema.sql (users.email,
--- incidents completo, sin tablas auxiliares). Ver tarea T1 (sync tesis <-> código).
---
---   users, incidents, feedback            -> forma de infraTesis (auth usa users.email;
---                                            persistence.py inserta 19 columnas en incidents)
---   analyzed_urls, idn_scores, ti_results,
---   audit_log, simulation_events,
---   theta_calibrations                    -> backendTesis/scripts/schema.sql
---   weight_calibrations                   -> scripts/recalibrate_weights.py (T12 online)
---
--- Idempotente: CREATE ... IF NOT EXISTS en todo. Lo aplica el entrypoint de
--- postgres:15-alpine desde /docker-entrypoint-initdb.d/ (solo en primer init).
--- Authors: Juan Sebastián Fandiño Novoa & Miguel Ángel Bonilla Torres — USB Bogotá, 2026
--- =============================================================
-
+-- Canonical PostgreSQL schema and ordered, additive migrations.
+-- Used by docker-entrypoint-initdb.d, scripts/schema.sql (symlink) and init_db.py.
+-- Safe on empty DB and legacy username schemas; preserves IDs, passwords and rows.
+BEGIN;
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+    version TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 001: reconcile the historical users.username contract before email indexes.
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
+               AND table_name='users' AND column_name='username') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public'
+                       AND table_name='users' AND column_name='email') THEN
+            ALTER TABLE users RENAME COLUMN username TO email;
+        ELSE
+            UPDATE users SET email = username WHERE email IS NULL;
+            ALTER TABLE users ALTER COLUMN username DROP NOT NULL;
+        END IF;
+        ALTER TABLE users ALTER COLUMN email TYPE VARCHAR(255);
+        -- Historical non-email usernames are preserved for explicit operator mapping.
+        -- Do not invent addresses or create users with new identifiers.
+    END IF;
+END $$;
 
 -- -----------------------------------------------------------
 -- 1. users  (auth_router.py consulta por email)
@@ -28,7 +35,7 @@ CREATE TABLE IF NOT EXISTS users (
     email         VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(72)  NOT NULL,          -- bcrypt
     role          VARCHAR(20)  NOT NULL DEFAULT 'student'
-                      CHECK (role IN ('student', 'admin')),
+                      CHECK (role IN ('student', 'admin', 'viewer')),
     is_active     BOOLEAN      NOT NULL DEFAULT true,
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -39,7 +46,7 @@ CREATE INDEX IF NOT EXISTS ix_users_email ON users(email);
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS incidents (
     id                  UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
-    email_hash          VARCHAR(64),                        -- SHA-256 del correo, nunca PII cruda
+    email_hash          VARCHAR(64),                        -- content digest; other email fields may contain PII
     url                 TEXT         NOT NULL,
     domain              VARCHAR(253) NOT NULL,
     verdict             VARCHAR(20)  NOT NULL
@@ -198,3 +205,31 @@ CREATE TABLE IF NOT EXISTS weight_calibrations (
     reason     TEXT             NOT NULL,
     created_at TIMESTAMPTZ      NOT NULL DEFAULT NOW()
 );
+
+-- 001 continued: CREATE TABLE IF NOT EXISTS does not upgrade existing tables.
+ALTER TABLE users ALTER COLUMN email TYPE VARCHAR(255);
+ALTER TABLE users ALTER COLUMN password_hash TYPE VARCHAR(255);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('student', 'admin', 'viewer'));
+ALTER TABLE incidents ALTER COLUMN analyzed_by TYPE VARCHAR(255);
+ALTER TABLE audit_log ALTER COLUMN actor TYPE VARCHAR(255);
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS email_subject TEXT NOT NULL DEFAULT '';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS email_from TEXT NOT NULL DEFAULT '';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS email_to TEXT NOT NULL DEFAULT '';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS all_urls JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS reasons JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS email_body_html TEXT NOT NULL DEFAULT '';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS email_images JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS email_attachments JSONB NOT NULL DEFAULT '[]';
+INSERT INTO schema_migrations(version) VALUES ('001_legacy_schema_reconciliation') ON CONFLICT DO NOTHING;
+
+-- 002: global audit identity survives independent sequences and clock skew.
+ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS event_id UUID NOT NULL DEFAULT gen_random_uuid();
+CREATE UNIQUE INDEX IF NOT EXISTS ix_audit_event_id ON audit_log(event_id);
+INSERT INTO schema_migrations(version) VALUES ('002_audit_event_identity') ON CONFLICT DO NOTHING;
+
+-- 003: preserve detector availability separately from numeric scores.
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS agent_status JSONB NOT NULL DEFAULT '{}';
+INSERT INTO schema_migrations(version) VALUES ('003_agent_status') ON CONFLICT DO NOTHING;
+COMMIT;

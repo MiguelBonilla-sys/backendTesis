@@ -1,9 +1,8 @@
 """Tests for core/rate_limiter.py"""
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
-from starlette.requests import Request
 
 
 class TestCheckRateLimit:
@@ -51,13 +50,13 @@ class TestCheckRateLimit:
             await check_rate_limit("test_key", limit=100, window_seconds=60)
 
     def test_get_client_ip_from_x_forwarded_for(self):
-        """Debe extraer la primera IP del header X-Forwarded-For."""
+        """An untrusted socket peer cannot choose its rate-limit identity."""
         from core.rate_limiter import get_client_ip
         mock_request = MagicMock()
         mock_request.headers = {"X-Forwarded-For": "10.0.0.1, 172.16.0.1"}
         mock_request.client = MagicMock(host="192.168.1.1")
         ip = get_client_ip(mock_request)
-        assert ip == "10.0.0.1"
+        assert ip == "192.168.1.1"
 
     def test_get_client_ip_fallback_to_client_host(self):
         """Sin X-Forwarded-For, usa client.host."""

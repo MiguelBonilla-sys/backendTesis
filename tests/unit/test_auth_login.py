@@ -1,13 +1,14 @@
 """Tests for routers/auth_router.py and auth/dependencies.py"""
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-from fastapi.testclient import TestClient
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 
 class TestLoginEndpoint:
     @pytest.fixture
-    def client(self):
+    def client(self, auth_store):
         with patch("main.init_db", new_callable=AsyncMock), \
              patch("main.close_db", new_callable=AsyncMock), \
              patch("main.init_redis", new_callable=AsyncMock), \
@@ -25,7 +26,7 @@ class TestLoginEndpoint:
         assert resp.status_code == 422
 
     def test_login_dev_mode_success(self, client):
-        """En dev mode (sin ADMIN_PASSWORD_HASH), cualquier password funciona."""
+        """A successful credential check creates a persisted, signed session."""
         with patch("routers.auth_router._authenticate_user") as mock_auth:
             from schemas.auth import UserInfo
             mock_auth.return_value = UserInfo(username="admin", role="admin")
@@ -117,7 +118,7 @@ class TestRequireRole:
 
 class TestRegisterEndpoint:
     @pytest.fixture
-    def client(self):
+    def client(self, auth_store):
         with patch("main.init_db", new_callable=AsyncMock), \
              patch("main.close_db", new_callable=AsyncMock), \
              patch("main.init_redis", new_callable=AsyncMock), \

@@ -10,21 +10,21 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from auth.dependencies import require_admin
-from data_pipeline.knowledge_updater import knowledge_updater
-from schemas.feedback import FeedbackRequest, FeedbackResponse
 from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
 from core.exceptions import DatabaseError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
+from data_pipeline.knowledge_updater import knowledge_updater
 from models.database import execute, fetch, fetchrow
+from schemas.feedback import FeedbackRequest, FeedbackResponse
 from schemas.incidents import IncidentListResponse, IncidentRecord
 
 _T = TypeVar("_T")
@@ -61,6 +61,7 @@ class FusionSettings(BaseModel):
     ti_gsb_weight: float
     effective_theta: float | None = None
     last_calibration: ThetaCalibrationInfo | None = None
+    evaluation: dict = Field(default_factory=dict)
 
 logger = get_logger(__name__)
 router = APIRouter(tags=["incidents"])
@@ -125,7 +126,7 @@ async def list_incidents(
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
                    email_subject, email_from, email_to, all_urls, reasons,
-                   email_body_html, email_images, email_attachments
+                   email_body_html, email_images, email_attachments, agent_status
             FROM incidents
         """
 
@@ -193,7 +194,7 @@ async def get_incident(
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
                    email_subject, email_from, email_to, all_urls, reasons,
-                   email_body_html, email_images, email_attachments
+                   email_body_html, email_images, email_attachments, agent_status
             FROM incidents
             WHERE id = $1
             """,
@@ -238,7 +239,7 @@ async def get_metrics_summary(
 ) -> MetricsSummary:
     """Retorna totales de hoy agrupados por veredicto."""
     try:
-        today_start = datetime.now(timezone.utc).replace(
+        today_start = datetime.now(UTC).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
         rows = await fetch(
@@ -287,6 +288,7 @@ async def get_settings(
     (T12) cuando existe — auditoría visible para el admin.
     """
     from core.calibration import get_effective_theta
+    from core.evaluation import evaluation_manifest
 
     last_calibration: ThetaCalibrationInfo | None = None
     try:
@@ -316,6 +318,7 @@ async def get_settings(
         ti_gsb_weight=W_GSB,
         effective_theta=get_effective_theta(),
         last_calibration=last_calibration,
+        evaluation=evaluation_manifest(),
     )
 
 
@@ -358,7 +361,7 @@ async def get_incidents_by_hash(
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
                    email_subject, email_from, email_to, all_urls, reasons,
-                   email_body_html, email_images, email_attachments
+                   email_body_html, email_images, email_attachments, agent_status
             FROM incidents
             WHERE email_hash = $1
             ORDER BY created_at DESC
@@ -409,6 +412,7 @@ def _row_to_record(row: dict) -> IncidentRecord:
         s_ti=float(row["s_ti"]),
         llm_reason=row["llm_reason"] or "",
         shap_contributions=shap_contributions,
+        agent_status=_parse_jsonb(row.get("agent_status"), {}),
         created_at=row["created_at"],
         email_subject=row.get("email_subject") or "",
         email_from=row.get("email_from") or "",
@@ -459,7 +463,7 @@ async def submit_feedback(
         """,
         incident_id,
         body.confirmed_verdict,
-        getattr(current_user, "id", None),
+        UUID(current_user["id"]),
         body.note,
     )
 
@@ -468,7 +472,7 @@ async def submit_feedback(
         # Falso positivo confirmado (T11): purgar los documentos auto-ingestados
         # del incidente en el mismo flujo — un FP en el RAG refuerza futuros FPs.
         try:
-            await knowledge_updater.purge_incident_documents(str(incident_id))
+            await knowledge_updater.purge_incident_documents(str(incident_id), url=incident["url"])
             await execute(
                 "UPDATE feedback SET ingested = true, ingested_at = NOW() WHERE id = $1",
                 feedback_id["id"],

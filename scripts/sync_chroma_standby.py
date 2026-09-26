@@ -1,34 +1,10 @@
-"""Sincroniza / verifica las 5 colecciones de ChromaDB entre la instancia
-autoritativa (Coolify, DBs locales) y la standby free-tier (Chroma Cloud), para
-que Render tenga el MISMO corpus RAG que Coolify.
+"""Mirror Chroma collections from an explicitly chosen authority.
 
-Regla: se seedea UNA sola vez (Coolify) y el resto es COPIA, no un re-seed
-independiente — los feeds tipo OpenPhish cambian a diario, un re-seed daría otro corpus.
-
-Dos modos según el embedder de cada lado:
-- **re-embed** (por defecto si hay `STANDBY_EMBED_*`): copia `documents` + `metadatas`
-  y RE-CALCULA los vectores con el embedder del destino. Necesario cuando origen y
-  destino usan stacks distintos del mismo modelo — p. ej. Coolify sirve
-  embeddinggemma por Ollama (GGUF) y Render por HuggingFace: los vectores NO son
-  intercambiables (cos ~0.6 para el mismo texto).
-- **vector-copy** (si no hay `STANDBY_EMBED_*`): copia también `embeddings` tal cual.
-  Solo válido si ambos lados usan exactamente el mismo endpoint de embeddings.
-
-`.get()` paginado de a 300 (límite del free tier). Upsert-only salvo `--prune`.
-
-Direcciones:
-    (default)    settings (Chroma local)  ->  STANDBY_CHROMA_* (Cloud)
-    --reverse    STANDBY_CHROMA_* (Cloud) ->  settings (hidratar un Chroma local nuevo)
-    --check      no escribe: conteo + dimensión de ambos lados
-
-Env:
-    STANDBY_CHROMA_HOST / _PORT / _API_KEY / _TENANT / _DATABASE   (destino Chroma)
-    STANDBY_EMBED_PROVIDER=hf          (re-embed; default hf si hay STANDBY_EMBED_MODEL)
-    STANDBY_EMBED_MODEL=google/embeddinggemma-300m
-    STANDBY_EMBED_BASE_URL=https://router.huggingface.co/hf-inference/models
-    STANDBY_EMBED_API_KEY=hf_...
-
-Uso:  python -m scripts.sync_chroma_standby [--check] [--reverse] [--prune]
+Writes require a fenced replica and a quiesced source across PG/Chroma sync.
+Missing documents are deletions and current document/metadata updates propagate.
+Bilateral missing-ID merges are rejected: they resurrect purged evidence.
+Re-embedding preserves separate embedding spaces; no collection is ever deleted.
+See docs/synchronization-and-learning.md.
 """
 
 from __future__ import annotations
@@ -150,43 +126,44 @@ async def _check(src, dst) -> int:
     print(
         "\nen paridad (conteo y dimensión)"
         if not drift
-        else f"\n{drift} colección(es) con drift → correr el sync (o re-seedear si es DIM MISMATCH)"
+        else f"\n{drift} colección(es) con drift; verify embedding model/space before sync"
     )
     return 1 if drift else 0
 
 
 async def _sync_collection(
-    name: str, src, dst, *, batch: int, prune: bool, dest_embed
+    name: str, src, dst, *, batch: int, prune: bool, dest_embed,
+    source_space: str | None = None, destination_space: str | None = None,
 ) -> tuple[int, int]:
     try:
         src_col = await src.get_collection(name)
-    except Exception:
-        logger.info("sync_skip_missing_source", collection=name)
-        return (0, 0)
+    except Exception as exc:
+        raise RuntimeError(f"Missing/unavailable authoritative collection {name}; refusing partial mirror") from exc
+
+    if not source_space or (src_col.metadata or {}).get("embedding_space") != source_space:
+        raise RuntimeError(f"{name}: source embedding space is unknown or does not match the declared space")
+    if not destination_space or (dest_embed is None and source_space != destination_space):
+        raise RuntimeError(f"{name}: vector copy requires identical declared embedding spaces")
 
     include = ["documents", "metadatas"] if dest_embed else ["documents", "metadatas", "embeddings"]
     data = await _get_all(src_col, include)
     src_ids = data["ids"]
-    if not src_ids:
-        return (0, 0)
-    if not dest_embed and not data["embeddings"]:
+    if src_ids and not dest_embed and not data["embeddings"]:
         raise SystemExit(f"[{name}] origen sin embeddings y sin STANDBY_EMBED_* para re-calcular")
 
-    dst_col = await dst.get_or_create_collection(name)
-    dst_ids = set((await _get_all(dst_col, []))["ids"])
+    dst_col = await dst.get_or_create_collection(name, metadata={"embedding_space": destination_space})
+    if (dst_col.metadata or {}).get("embedding_space") != destination_space:
+        raise RuntimeError(f"{name}: destination embedding space is unknown or incompatible")
+    dst_data = await _get_all(dst_col, ["documents", "metadatas"])
+    dst_ids = set(dst_data["ids"])
+    dst_values = {
+        did: (dst_data["documents"][i], dst_data["metadatas"][i] or {})
+        for i, did in enumerate(dst_data["ids"])
+    }
 
-    pruned = 0
-    if prune:
-        stale = list(dst_ids - set(src_ids))
-        for i in range(0, len(stale), batch):
-            await dst_col.delete(ids=stale[i : i + batch])
-        pruned = len(stale)
-
-    # Solo los docs que faltan en el destino → en régimen estable, cero llamadas al
-    # embedder (clave para el modo bidireccional cada 15 min).
-    new_idx = [i for i, did in enumerate(src_ids) if did not in dst_ids]
-    if not new_idx:
-        return (0, pruned)
+    # Copy current metadata too (confirmation, expiry, provenance), even if ID exists.
+    new_idx = [i for i, did in enumerate(src_ids)
+               if dst_values.get(did) != (data["documents"][i], data["metadatas"][i] or {})]
     ids = [src_ids[i] for i in new_idx]
     docs = [data["documents"][i] for i in new_idx]
     metas = [data["metadatas"][i] for i in new_idx]
@@ -195,6 +172,17 @@ async def _sync_collection(
     for i in range(0, len(ids), batch):
         sl = slice(i, i + batch)
         embs = await asyncio.to_thread(dest_embed, docs[sl]) if dest_embed else src_embs[sl]
+        if len(embs) != len(ids[sl]):
+            raise RuntimeError(f"{name}: embedder returned the wrong number of vectors")
+        existing = await dst_col.get(include=["embeddings"], limit=1)
+        vectors = existing.get("embeddings")
+        if vectors is not None and len(vectors) and any(len(e) != len(vectors[0]) for e in embs):
+            raise RuntimeError(f"{name}: incompatible destination dimensions")
+        # Chroma upsert merges metadata. Remove replaced rows so expired/quarantine
+        # fields absent from the authority cannot survive a confirmation update.
+        replacing = [did for did in ids[sl] if did in dst_ids]
+        if replacing:
+            await dst_col.delete(ids=replacing)
         await dst_col.upsert(
             ids=ids[sl],
             documents=docs[sl] or None,
@@ -202,6 +190,12 @@ async def _sync_collection(
             embeddings=embs,
         )
 
+    pruned = 0
+    if prune:
+        stale = list(dst_ids - set(src_ids))
+        for i in range(0, len(stale), batch):
+            await dst_col.delete(ids=stale[i : i + batch])
+        pruned = len(stale)
     logger.info(
         "sync_collection_done",
         collection=name,
@@ -215,18 +209,22 @@ async def _sync_collection(
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--batch", type=int, default=128)
-    ap.add_argument("--prune", action="store_true", help="borrar en destino ids ausentes en origen")
-    ap.add_argument("--reverse", action="store_true", help="Cloud → local (hidratar dev)")
-    ap.add_argument(
-        "--bidirectional",
-        action="store_true",
-        help="merge en ambos sentidos (upsert-only, sin prune) — para failback",
-    )
-    ap.add_argument("--check", action="store_true", help="solo comparar conteo/dim, no escribir")
+    ap.add_argument("--authority", choices=("local", "standby"), required=True)
+    ap.add_argument("--replica-fenced", action="store_true")
+    ap.add_argument("--source-quiesced", action="store_true")
+    ap.add_argument("--source-space", help="verified embedding_space metadata of every source collection")
+    ap.add_argument("--destination-space", help="verified embedding_space metadata and destination embedder identity")
+    ap.add_argument("--bidirectional", action="store_true", help=argparse.SUPPRESS)
+    ap.add_argument("--check", action="store_true", help="compare counts/dimensions only; not a content parity proof")
     args = ap.parse_args()
-
-    if args.bidirectional and args.prune:
-        raise SystemExit("--bidirectional es incompatible con --prune (borraría lo del otro lado)")
+    if args.bidirectional:
+        ap.error("bilateral merge is unsafe; choose the current --authority")
+    if args.batch < 1 or args.batch > _PAGE:
+        ap.error(f"--batch must be between 1 and {_PAGE}")
+    if not args.check and not (args.replica_fenced and args.source_quiesced):
+        ap.error("writes require --replica-fenced and --source-quiesced")
+    if not args.check and not (args.source_space and args.destination_space):
+        ap.error("writes require --source-space and --destination-space; unknown embedding spaces cannot be copied")
 
     # El cliente con auth (Chroma Cloud) DEBE crearse primero: chromadb comparte
     # estado de auth a nivel de proceso, y si el primer AsyncHttpClient es el local
@@ -235,24 +233,25 @@ async def main() -> int:
     settings_client = await _client_from_settings()
 
     if args.check:
-        src, dst = (env_client, settings_client) if args.reverse else (settings_client, env_client)
+        src, dst = (env_client, settings_client) if args.authority == "standby" else (settings_client, env_client)
         return await _check(src, dst)
 
     # (origen, destino, embedder-del-destino)
     fwd = (settings_client, env_client, _standby_embedder())  # local → Cloud (re-embed HF)
     rev = (env_client, settings_client, _embedding_function())  # Cloud → local (re-embed settings)
-    passes = [rev] if args.reverse else ([fwd, rev] if args.bidirectional else [fwd])
+    passes = [rev] if args.authority == "standby" else [fwd]
 
     total_up = total_pruned = 0
     for src, dst, dest_embed in passes:
         for name in _COLLECTIONS:
             up, pr = await _sync_collection(
-                name, src, dst, batch=args.batch, prune=args.prune, dest_embed=dest_embed
+                name, src, dst, batch=args.batch, prune=True, dest_embed=dest_embed,
+                source_space=args.source_space, destination_space=args.destination_space,
             )
             total_up += up
             total_pruned += pr
 
-    mode = "bidireccional" if args.bidirectional else ("reverse" if args.reverse else "forward")
+    mode = f"authority={args.authority}"
     logger.info("sync_chroma_standby_done", upserted=total_up, pruned=total_pruned, mode=mode)
     print(f"OK — {mode} — upserted {total_up}, pruned {total_pruned}")
     return 0

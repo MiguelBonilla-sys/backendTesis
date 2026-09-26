@@ -1,24 +1,11 @@
-"""Merge bidireccional de PostgreSQL entre Coolify (local, autoritativo) y Neon
-(standby free-tier). Reemplaza el TRUNCATE+COPY una-vía por un upsert por PK en
-LOS DOS SENTIDOS, para que si Coolify se cae y vuelve, lo que Render escribió en
-Neon durante la caída se reintegre a Coolify — y viceversa.
+"""Authoritative PostgreSQL replica sync (historical filename retained).
 
-Modelo (no es multi-master real, alcanza para este caso):
-- Tablas con PK UUID (users, incidents, idn_scores, ti_results, feedback,
-  analyzed_urls, simulation_events, theta_calibrations, weight_calibrations):
-  merge en ambos sentidos. `INSERT ... ON CONFLICT (id) DO NOTHING`. Los UUID no
-  colisionan entre instancias → append seguro.
-- `audit_log` (PK BIGSERIAL → colisiona): una sola vía LOCAL→REMOTE, por watermark
-  de `occurred_at`.
-- Orden de inserción respeta las FK (users → incidents → hijas).
-
-Limitación: los BORRADOS no se propagan (no hay TRUNCATE). Para borrar una fila:
-hacerlo en los dos lados en la misma ventana, o parar el cron, borrar, reanudar.
-
-Env: STANDBY_DATABASE_URL (Neon, libpq, endpoint DIRECTO).
-Uso:  python -m scripts.sync_pg_bilateral [--dry-run]
+Requires an explicitly selected authority and a fenced destination. Replicates
+updates and deletions transactionally; never merges stale security state back.
+Audit events are append-only in both directions using global event_id UUIDs.
+Apply deploy/schema.sql on BOTH databases before running. See
+ docs/synchronization-and-learning.md for failover/failback guarantees.
 """
-
 from __future__ import annotations
 
 import argparse
@@ -26,21 +13,10 @@ import asyncio
 import os
 
 from core.config import settings
-from core.logger import get_logger
 
-logger = get_logger(__name__)
-
-# Orden = FK-safe (padres primero).
 _UUID_TABLES = [
-    "users",
-    "incidents",
-    "analyzed_urls",
-    "idn_scores",
-    "ti_results",
-    "feedback",
-    "simulation_events",
-    "theta_calibrations",
-    "weight_calibrations",
+    "users", "incidents", "analyzed_urls", "idn_scores", "ti_results", "feedback",
+    "simulation_events", "theta_calibrations", "weight_calibrations",
 ]
 _BATCH = 500
 
@@ -48,92 +24,104 @@ _BATCH = 500
 async def _cols(conn, table: str) -> list[str]:
     rows = await conn.fetch(
         "select column_name from information_schema.columns "
-        "where table_schema = 'public' and table_name = $1 order by ordinal_position",
-        table,
+        "where table_schema = 'public' and table_name = $1 order by ordinal_position", table,
     )
     return [r["column_name"] for r in rows]
 
 
 async def _merge_uuid_table(src, dst, table: str, *, dry: bool) -> int:
-    src_ids = {r["id"] for r in await src.fetch(f'select id from "{table}"')}
-    if not src_ids:
-        return 0
-    dst_ids = {r["id"] for r in await dst.fetch(f'select id from "{table}"')}
-    missing = list(src_ids - dst_ids)
-    if not missing:
-        return 0
-    if dry:
-        return len(missing)
-
+    """Copy every current value, including role, password, active and ingested."""
+    if table not in _UUID_TABLES:
+        raise ValueError("Unsupported replica table")
     cols = await _cols(src, table)
+    if not cols or set(cols) != set(await _cols(dst, table)):
+        raise RuntimeError(f"Schema mismatch for {table}; migrate both databases first")
     collist = ", ".join(f'"{c}"' for c in cols)
     placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
-    ins = f'insert into "{table}" ({collist}) values ({placeholders}) on conflict (id) do nothing'
+    updates = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols if c != "id")
+    ins = f'INSERT INTO "{table}" ({collist}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {updates}'
     moved = 0
-    for i in range(0, len(missing), _BATCH):
-        chunk = missing[i : i + _BATCH]
-        rows = await src.fetch(f'select {collist} from "{table}" where id = any($1::uuid[])', chunk)
-        await dst.executemany(ins, [tuple(r) for r in rows])
-        moved += len(rows)
+    async for row in src.cursor(f'SELECT {collist} FROM "{table}" ORDER BY id', prefetch=_BATCH):
+        if not dry:
+            await dst.execute(ins, *tuple(row))
+        moved += 1
     return moved
 
 
+async def _prune_table(src, dst, table: str, *, dry: bool) -> int:
+    if table not in _UUID_TABLES:
+        raise ValueError("Unsupported replica table")
+    src_ids = {r["id"] for r in await src.fetch(f'SELECT id FROM "{table}"')}
+    dst_ids = {r["id"] for r in await dst.fetch(f'SELECT id FROM "{table}"')}
+    stale = list(dst_ids - src_ids)
+    if not dry:
+        for i in range(0, len(stale), _BATCH):
+            await dst.execute(f'DELETE FROM "{table}" WHERE id = ANY($1::uuid[])', stale[i:i + _BATCH])
+    return len(stale)
+
+
 async def _append_audit_log(src, dst, *, dry: bool) -> int:
-    hwm = await dst.fetchval(
-        "select coalesce(max(occurred_at), 'epoch'::timestamptz) from audit_log"
-    )
-    rows = await src.fetch(
-        "select event_type, actor, resource, ip_address, status, detail, occurred_at "
-        "from audit_log where occurred_at > $1 order by occurred_at",
-        hwm,
-    )
-    if not rows or dry:
-        return len(rows)
-    await dst.executemany(
-        "insert into audit_log "
-        "(event_type, actor, resource, ip_address, status, detail, occurred_at) "
-        "values ($1, $2, $3, $4, $5, $6, $7)",
-        [tuple(r) for r in rows],
-    )
-    return len(rows)
+    """No timestamp watermark: independent serial IDs and clocks cannot skip events."""
+    dst_ids = {r["event_id"] for r in await dst.fetch("SELECT event_id FROM audit_log")}
+    moved = 0
+    async for row in src.cursor(
+        "SELECT event_id, event_type, actor, resource, ip_address, status, detail, occurred_at "
+        "FROM audit_log ORDER BY id", prefetch=_BATCH,
+    ):
+        if row["event_id"] in dst_ids:
+            continue
+        if not dry:
+            await dst.execute(
+                "INSERT INTO audit_log (event_id, event_type, actor, resource, ip_address, status, detail, occurred_at) "
+                "VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (event_id) DO NOTHING", *tuple(row),
+            )
+        moved += 1
+    return moved
+
+
+async def sync(src, dst, *, dry: bool = False) -> dict[str, int]:
+    """One atomic replica snapshot; destination business rows mirror authority."""
+    tables = ", ".join(f'"{t}"' for t in [*_UUID_TABLES, "audit_log"])
+    async with src.transaction(isolation="repeatable_read"):
+        async with dst.transaction(isolation="repeatable_read"):
+            for conn in (src, dst):
+                await conn.execute("SET LOCAL lock_timeout = '5s'")
+                await conn.execute(f"LOCK TABLE {tables} IN EXCLUSIVE MODE")
+            # Validate every table BEFORE deleting any rows (transaction rolls back on error).
+            for table in _UUID_TABLES:
+                if not await _cols(src, table) or set(await _cols(src, table)) != set(await _cols(dst, table)):
+                    raise RuntimeError(f"Schema mismatch for {table}")
+            pruned = sum([await _prune_table(src, dst, t, dry=dry) for t in reversed(_UUID_TABLES) if t != "users"])
+            copied = sum([await _merge_uuid_table(src, dst, t, dry=dry) for t in _UUID_TABLES])
+            pruned += await _prune_table(src, dst, "users", dry=dry)
+            audit = await _append_audit_log(src, dst, dry=dry)
+            audit += await _append_audit_log(dst, src, dry=dry)
+    return {"copied": copied, "deleted": pruned, "audit_appended": audit}
 
 
 async def main() -> int:
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--authority", choices=("local", "standby"), required=True)
+    ap.add_argument("--replica-fenced", action="store_true", help="operator asserts destination writers are stopped")
+    ap.add_argument("--source-quiesced", action="store_true", help="operator asserts source writers/learning are paused through PG and Chroma sync")
     args = ap.parse_args()
-
+    if not args.dry_run and not (args.replica_fenced and args.source_quiesced):
+        ap.error("writes require --replica-fenced and --source-quiesced; see docs/synchronization-and-learning.md")
     import asyncpg
 
     local_dsn = settings.DATABASE_URL.replace("postgresql+asyncpg://", "postgresql://", 1)
-    remote_dsn = os.environ["STANDBY_DATABASE_URL"]
     local = await asyncpg.connect(local_dsn, statement_cache_size=0)
-    remote = await asyncpg.connect(remote_dsn, statement_cache_size=0)
-
-    tot_l2r = tot_r2l = 0
     try:
-        for t in _UUID_TABLES:
-            r = await _merge_uuid_table(local, remote, t, dry=args.dry_run)
-            tot_l2r += r
-            if r:
-                logger.info("pg_merge", table=t, direction="local->neon", rows=r)
-        for t in _UUID_TABLES:
-            r = await _merge_uuid_table(remote, local, t, dry=args.dry_run)
-            tot_r2l += r
-            if r:
-                logger.info("pg_merge", table=t, direction="neon->local", rows=r)
-        al = await _append_audit_log(local, remote, dry=args.dry_run)
-        if al:
-            logger.info("pg_merge", table="audit_log", direction="local->neon", rows=al)
+        remote = await asyncpg.connect(os.environ["STANDBY_DATABASE_URL"], statement_cache_size=0)
+        try:
+            src, dst = (local, remote) if args.authority == "local" else (remote, local)
+            counts = await sync(src, dst, dry=args.dry_run)
+        finally:
+            await remote.close()
     finally:
         await local.close()
-        await remote.close()
-
-    tag = "DRY-RUN " if args.dry_run else ""
-    print(f"{tag}pg bilateral — local->neon {tot_l2r} · neon->local {tot_r2l}")
-    logger.info(
-        "sync_pg_bilateral_done", local_to_neon=tot_l2r, neon_to_local=tot_r2l, dry=args.dry_run
-    )
+    print(f"{'DRY RUN ' if args.dry_run else ''}authority={args.authority}: {counts}")
     return 0
 
 

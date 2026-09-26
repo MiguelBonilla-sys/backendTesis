@@ -25,10 +25,12 @@ import asyncio
 import json
 import os
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
+
+from scripts.eval_protocol import corpus_hash, unique_cases, valid_prediction, validate_manifest
 
 BASELINE_THRESHOLD = 0.5
 
@@ -59,6 +61,8 @@ def load_jsonl_cases(path: Path, expected: str) -> list[dict]:
                         "expected": expected,
                         "source": path.name,
                         "synthetic": rec.get("synthetic", False),
+                        "base": rec.get("base"),
+                        "campaign": rec.get("campaign"),
                     }
                 )
     return cases
@@ -91,6 +95,8 @@ async def analyze(client: httpx.AsyncClient, backend: str, url: str, token_holde
                 "pipeline_verdict": data.get("verdict", "ERROR"),
                 "s_hf": s_hf,
                 "s_risk": data.get("s_risk"),
+                "agent_status": data.get("agent_status", {}),
+                "evaluation": data.get("evaluation", {}),
             }
         except httpx.HTTPStatusError as exc:
             last_error = exc
@@ -126,7 +132,7 @@ async def get_token(backend: str) -> str:
                 return resp.json()["access_token"]
         except httpx.HTTPError:
             pass
-    return "dev-token"
+    raise RuntimeError("Evaluation requires a successful login with EVAL_ADMIN_EMAIL/PASSWORD")
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +212,13 @@ def mcnemar(baseline_correct: list[bool], pipeline_correct: list[bool]) -> dict:
 
 
 async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
+    cases = unique_cases(cases)
+    if concurrency < 1:
+        raise ValueError("Concurrency must be positive")
+    grouped = any(c.get("split") for c in cases)
+    if grouped and (any(c.get("split") not in ("test", "calibration") for c in cases)
+                    or not any(c["split"] == "test" for c in cases)):
+        raise ValueError("A grouped comparison requires an explicit held-out test split")
     token_holder = {"token": await get_token(backend)}
     sem = asyncio.Semaphore(concurrency)
     start = time.perf_counter()
@@ -217,7 +230,16 @@ async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
             return r
 
     async with httpx.AsyncClient() as client:
-        results = await asyncio.gather(*[one(client, c) for c in cases])
+        precheck = await client.get(f"{backend}/api/v1/settings", headers={
+            "Authorization": f"Bearer {token_holder['token']}"}, timeout=10)
+        precheck.raise_for_status()
+        manifest = precheck.json().get("evaluation", {})
+        validate_manifest(manifest)
+        # One valid URL-model inference is required before spending the run's budget.
+        first = await one(client, cases[0]) if cases else None
+        if first is None or not valid_prediction(first) or first.get("evaluation") != manifest:
+            raise ValueError("Evaluation preflight failed: unavailable agents or changed evidence")
+        results = [first, *await asyncio.gather(*[one(client, c) for c in cases[1:]])]
 
     baseline_pairs: list[tuple[bool, bool]] = []
     pipeline_pairs: list[tuple[bool, bool]] = []
@@ -225,9 +247,11 @@ async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
     pipeline_correct: list[bool] = []
     errors = 0
 
-    for r in results:
-        if r["pipeline_verdict"] == "ERROR" or r.get("s_hf") is None:
+    for case, r in zip(cases, results, strict=True):
+        if not valid_prediction(r) or r.get("evaluation") != manifest:
             errors += 1
+            continue
+        if grouped and case["split"] != "test":
             continue
         actual = r["expected"] == "PHISHING"
         base_pred = r["s_hf"] >= BASELINE_THRESHOLD
@@ -245,12 +269,16 @@ async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
     return {
         "n_cases": len(cases),
         "n_evaluated": len(baseline_pairs),
+        "comparison_split": "test" if grouped else "all (fixed threshold)",
         "errors": errors,
+        "valid_for_comparison": errors == 0,
+        "evaluation": manifest,
+        "corpus_sha256": corpus_hash(cases),
         "elapsed_s": round(elapsed, 2),
-        "baseline": _binary_metrics(baseline_pairs),
-        "pipeline": _binary_metrics(pipeline_pairs),
-        "mcnemar": mcnemar(baseline_correct, pipeline_correct),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "baseline": _binary_metrics(baseline_pairs) if not errors else None,
+        "pipeline": _binary_metrics(pipeline_pairs) if not errors else None,
+        "mcnemar": mcnemar(baseline_correct, pipeline_correct) if not errors else None,
+        "timestamp": datetime.now(UTC).isoformat(),
         # Crudo por-caso — evidencia reproducible para la tesis y para
         # recalibrate_theta.py (T6) sin tener que volver a pegarle al backend.
         "raw_results": [
@@ -258,6 +286,8 @@ async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
                 "url": c.get("url"),
                 "source": c.get("source"),
                 "synthetic": c.get("synthetic", False),
+                "base": c.get("base"), "campaign": c.get("campaign"),
+                "split": c.get("split"), "group": c.get("group"),
                 **r,
             }
             for c, r in zip(cases, results, strict=True)
@@ -266,6 +296,9 @@ async def run(backend: str, cases: list[dict], concurrency: int) -> dict:
 
 
 def print_report(report: dict) -> None:
+    if not report.get("valid_for_comparison", True):
+        print(f"INVALID COMPARISON: {report['errors']} unavailable/unknown/changed results; raw evidence retained")
+        return
     b, p, m = report["baseline"], report["pipeline"], report["mcnemar"]
     print("\n" + "=" * 64)
     print(f"{'BASELINE (HF standalone) vs PIPELINE (5 señales)':^64}")
@@ -303,7 +336,7 @@ def collect_cases(args) -> list[dict]:
         from scripts.eval_datasets import load_hf_cases
 
         cases += load_hf_cases(args.dataset, args.limit)
-    return cases
+    return unique_cases(cases)
 
 
 async def main() -> int:
@@ -327,7 +360,7 @@ async def main() -> int:
 
     out_dir = Path(args.output)
     out_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     out_file = out_dir / f"baseline_vs_pipeline_{ts}.json"
     out_file.write_text(json.dumps(report, indent=2, ensure_ascii=False))
     print(f"\nReporte → {out_file}")

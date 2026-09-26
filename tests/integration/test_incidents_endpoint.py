@@ -3,14 +3,14 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from auth.jwt import create_access_token
 from main import app
+from tests.auth_helpers import create_access_token
 
 
 def _auth_headers() -> dict:
@@ -31,12 +31,12 @@ def _make_row(incident_id: str = None, verdict: str = "PHISHING") -> dict:
         "s_ti": 0.89,
         "llm_reason": "Suspicious domain",
         "shap_contributions": json.dumps({"s_idn_local": 0.27}),
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
 
 
 @pytest.fixture
-def client():
+def client(auth_store):
     with patch("main.init_db", new_callable=AsyncMock), \
          patch("main.close_db", new_callable=AsyncMock), \
          patch("main.init_redis", new_callable=AsyncMock), \
@@ -182,7 +182,7 @@ class TestRowToRecord:
             "s_ti": 0.89,
             "llm_reason": "Test",
             "shap_contributions": '{"s_idn_local": 0.27}',
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         record = _row_to_record(row)
         assert record.shap_contributions["s_idn_local"] == 0.27
@@ -201,7 +201,7 @@ class TestRowToRecord:
             "s_ti": 0.89,
             "llm_reason": "Test",
             "shap_contributions": {"s_idn_local": 0.27},
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         record = _row_to_record(row)
         assert record.shap_contributions["s_idn_local"] == 0.27
@@ -220,7 +220,7 @@ class TestRowToRecord:
             "s_ti": 0.89,
             "llm_reason": "Test",
             "shap_contributions": None,
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         record = _row_to_record(row)
         assert record.shap_contributions == {}
@@ -239,7 +239,7 @@ class TestRowToRecord:
             "s_ti": 0.0,
             "llm_reason": "Clean",
             "shap_contributions": "{}",
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         record = _row_to_record(row)
         assert record.email_hash == ""
@@ -314,7 +314,7 @@ class TestFeedbackFalsePositivePurge:
         data = resp.json()
         assert data["ingested"] is True
         assert "purged" in data["message"]
-        mock_purge.assert_awaited_once_with(incident_id)
+        mock_purge.assert_awaited_once_with(incident_id, url=incident_row["url"])
         mock_execute.assert_awaited()  # feedback marcado ingested=true
 
     def test_phishing_feedback_does_not_purge(self, client):

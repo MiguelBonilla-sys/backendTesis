@@ -13,6 +13,17 @@ from data_pipeline.knowledge_updater import (
 )
 
 
+@pytest.fixture(autouse=True)
+def admission_storage(monkeypatch):
+    from tests.support.knowledge_storage import MemoryCollection, MemoryKnowledgePool
+    pool = MemoryKnowledgePool()
+    collections = {name: MemoryCollection({"seed": {"source": "admin_confirmed"}})
+                   for name in (COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI)}
+    monkeypatch.setattr("data_pipeline.knowledge_admission.get_pool", lambda: pool)
+    monkeypatch.setattr("data_pipeline.knowledge_admission.get_or_create_collection", AsyncMock(side_effect=lambda name: collections[name]))
+    return pool
+
+
 class TestContextHeader:
     def test_basic(self):
         h = context_header(verdict="PHISHING", domain="paypa1.com")
@@ -74,7 +85,7 @@ class TestIngestFromAnalysis:
             "data_pipeline.knowledge_updater.upsert_documents",
             new_callable=AsyncMock,
         ) as mock_upsert:
-            await svc.ingest_from_analysis(**_BASE_ANALYSIS)
+            await svc.ingest_from_analysis(**_BASE_ANALYSIS, incident_id="persisted-incident")
 
         assert mock_upsert.call_count == 3
         collections_used = {c.args[0] for c in mock_upsert.call_args_list}
@@ -84,7 +95,7 @@ class TestIngestFromAnalysis:
             assert c.kwargs["documents"][0].startswith("[ctx verdict=PHISHING")
 
     @pytest.mark.asyncio
-    async def test_doc_ids_use_incident_id_when_provided(self):
+    async def test_doc_ids_deduplicate_by_entity_and_preserve_incident_metadata(self):
         svc = KnowledgeUpdaterService()
         with patch(
             "data_pipeline.knowledge_updater.upsert_documents",
@@ -93,7 +104,9 @@ class TestIngestFromAnalysis:
             await svc.ingest_from_analysis(**_BASE_ANALYSIS, incident_id="abc123")
 
         all_ids = [c.kwargs["ids"][0] for c in mock_upsert.call_args_list]
-        assert all("abc123" in id_ for id_ in all_ids)
+        from data_pipeline.knowledge_admission import entity_id
+        assert all(entity_id(_BASE_ANALYSIS["url"]) in id_ for id_ in all_ids)
+        assert all(c.kwargs["metadatas"][0]["incident_id"] == "abc123" for c in mock_upsert.call_args_list)
 
     @pytest.mark.asyncio
     async def test_source_auto_ingest_when_flag_true(self):
@@ -102,7 +115,7 @@ class TestIngestFromAnalysis:
             "data_pipeline.knowledge_updater.upsert_documents",
             new_callable=AsyncMock,
         ) as mock_upsert:
-            await svc.ingest_from_analysis(**_BASE_ANALYSIS, auto_ingested=True)
+            await svc.ingest_from_analysis(**_BASE_ANALYSIS, incident_id="persisted-incident", auto_ingested=True)
 
         for c in mock_upsert.call_args_list:
             metadata = c.kwargs["metadatas"][0]
@@ -130,7 +143,7 @@ class TestIngestFromAnalysis:
             side_effect=RuntimeError("chromadb unavailable"),
         ):
             # Must not raise — graceful degradation
-            await svc.ingest_from_analysis(**_BASE_ANALYSIS)
+            await svc.ingest_from_analysis(**_BASE_ANALYSIS, incident_id="persisted-incident")
 
     @pytest.mark.asyncio
     async def test_verdict_in_document_text(self):
@@ -141,7 +154,7 @@ class TestIngestFromAnalysis:
             captured_docs.extend(documents)
 
         with patch("data_pipeline.knowledge_updater.upsert_documents", side_effect=_capture_upsert):
-            await svc.ingest_from_analysis(**_BASE_ANALYSIS)
+            await svc.ingest_from_analysis(**_BASE_ANALYSIS, incident_id="persisted-incident")
 
         assert any("PHISHING" in doc for doc in captured_docs)
 
@@ -179,7 +192,7 @@ class TestIngestConfirmedFeedback:
                 feedback_id="fb", incident_id="inc", confirmed_verdict="LEGITIMATE",
                 note=None, **_FEEDBACK_ANALYSIS,
             )
-        assert delete.await_count == 3
+        assert delete.await_count == 6
         upsert.assert_not_awaited()
         execute.assert_awaited_once()
 
@@ -336,7 +349,7 @@ class TestProcessFeedbackQueue:
 class TestPurgeIncidentDocuments:
     @pytest.mark.asyncio
     async def test_purges_all_three_collections(self):
-        from unittest.mock import AsyncMock, call, patch
+        from unittest.mock import AsyncMock, patch
 
         from core.constants import COLLECTION_EMAIL, COLLECTION_IDN, COLLECTION_TI
         from data_pipeline.knowledge_updater import KnowledgeUpdaterService
@@ -367,6 +380,7 @@ class TestIsUsbBaselineCandidate:
     def _kwargs(self, **overrides):
         base = dict(
             sender_domain="registro.usbbog.edu.co",
+            authentication_verified=True,
             spf_pass=True,
             dkim_pass=True,
             verdict="LEGITIMATE",
@@ -436,6 +450,7 @@ class TestIngestLegitBaseline:
             (),
             {
                 "sender_domain": "registro.usbbog.edu.co",
+                "authentication_verified": True,
                 "subject": "Comunicado para Juan Pérez sobre matrícula",
                 "spf_pass": True,
                 "dkim_pass": True,
@@ -470,6 +485,7 @@ class TestIngestLegitBaseline:
             (),
             {
                 "sender_domain": "usbbog.edu.co",
+                "authentication_verified": True,
                 "subject": "Aviso",
                 "spf_pass": True,
                 "dkim_pass": True,

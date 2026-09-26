@@ -1,11 +1,11 @@
 """Tests for data_pipeline/threat_intel.py — ThreatIntelService."""
 from __future__ import annotations
 
-import json
-
-import pytest
-import httpx
+from datetime import UTC
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+import pytest
 
 from core.constants import W_GSB, W_URLSCAN, W_VT, W_WHOIS
 from data_pipeline.threat_intel import ThreatIntelService
@@ -41,18 +41,23 @@ class TestThreatIntelDevMode:
 
     @pytest.mark.asyncio
     async def test_returns_cached_result_on_cache_hit(self, service: ThreatIntelService):
-        cached_data = {"s_vt": 0.9, "s_urlscan": 0.8, "s_gsb": 1.0, "s_ti": 0.89}
+        async def cached(key):
+            return {"value": {"vt": 0.9, "urlscan": 0.8, "gsb": 1.0,
+                              "whois": [0.0, None]}[key.split(":")[1]]}
         with patch("data_pipeline.threat_intel.get_ti_cache",
-                   new_callable=AsyncMock, return_value=cached_data):
+                   side_effect=cached), patch("data_pipeline.threat_intel.settings") as s:
+            s.DOMAIN_AGE_SUSPICIOUS_DAYS = 30
             result = await service.analyze("https://paypal.com", "paypal.com")
         assert result.s_ti == 0.89
         assert result.s_vt == 0.9
 
     @pytest.mark.asyncio
     async def test_cached_result_is_ti_result_instance(self, service: ThreatIntelService):
-        cached_data = {"s_vt": 0.0, "s_urlscan": 0.0, "s_gsb": 0.0, "s_ti": 0.0}
+        async def cached(key):
+            return {"value": [0.0, None] if ":whois:" in key else 0.0}
         with patch("data_pipeline.threat_intel.get_ti_cache",
-                   new_callable=AsyncMock, return_value=cached_data):
+                   side_effect=cached), patch("data_pipeline.threat_intel.settings") as s:
+            s.DOMAIN_AGE_SUSPICIOUS_DAYS = 30
             result = await service.analyze("https://paypal.com", "paypal.com")
         assert isinstance(result, TIResult)
 
@@ -320,9 +325,9 @@ class TestQueryWhoisXML:
     @pytest.mark.asyncio
     async def test_new_domain_returns_high_score(self, service: ThreatIntelService):
         """Domain registered < DOMAIN_AGE_SUSPICIOUS_DAYS → score 0.8."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        created = (datetime.now(timezone.utc) - timedelta(days=10)).strftime(
+        created = (datetime.now(UTC) - timedelta(days=10)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
         mock_response = MagicMock()
@@ -342,9 +347,9 @@ class TestQueryWhoisXML:
     @pytest.mark.asyncio
     async def test_moderate_domain_returns_medium_score(self, service: ThreatIntelService):
         """Domain 30–90 days old → score 0.4."""
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        created = (datetime.now(timezone.utc) - timedelta(days=45)).strftime(
+        created = (datetime.now(UTC) - timedelta(days=45)).strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
         mock_response = MagicMock()

@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import hashlib
 
-import pytest
-
 from utils.email_parser import (
     ParsedEmail,
     _detect_urgency,
@@ -210,13 +208,13 @@ class TestParseAuthResults:
         spf_pass, _ = _parse_auth_results(msg)
         assert spf_pass is False
 
-    def test_no_auth_headers_returns_false(self):
+    def test_no_auth_headers_returns_unknown(self):
         import email
         raw = b"From: a@b.com\n\nBody"
         msg = email.message_from_bytes(raw)
         spf_pass, dkim_pass = _parse_auth_results(msg)
-        assert spf_pass is False
-        assert dkim_pass is False
+        assert spf_pass is None
+        assert dkim_pass is None
 
     def test_received_spf_fallback(self):
         import email

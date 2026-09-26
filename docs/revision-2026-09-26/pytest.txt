@@ -1,0 +1,106 @@
+sssssssssssssssssssssssss............................................... [  6%]
+.......................................................................s [ 12%]
+.........s................s............................................. [ 19%]
+........................................................................ [ 25%]
+........................................................................ [ 32%]
+........................................................................ [ 38%]
+........................................................................ [ 45%]
+........................................................................ [ 51%]
+........................................................................ [ 58%]
+........................................................................ [ 64%]
+........................................................................ [ 71%]
+........................................................................ [ 77%]
+........................................................................ [ 83%]
+........................................................................ [ 90%]
+........................................................................ [ 96%]
+...................................                                      [100%]
+=============================== warnings summary ===============================
+.venv/lib/python3.14/site-packages/fastapi/testclient.py:1
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+.venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128: 1 warning
+tests/integration/test_chroma_replica.py: 37 warnings
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/chromadb/telemetry/opentelemetry/__init__.py:128: DeprecationWarning: 'asyncio.iscoroutinefunction' is deprecated and slated for removal in Python 3.16; use inspect.iscoroutinefunction() instead
+    if asyncio.iscoroutinefunction(f):
+
+tests/integration/test_analyze_endpoint.py::TestAnalyzeGenericExceptionPaths::test_domain_extraction_failure_returns_422
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/fastapi/routing.py:328: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+tests/unit/test_jwt.py::TestDecodeToken::test_wrong_secret_raises_authentication_error
+  /Users/mangel/Documents/DEVs/TesisDEV/backendTesis/.venv/lib/python3.14/site-packages/jwt/api_jwt.py:147: InsecureKeyLengthWarning: The HMAC key is 12 bytes long, which is below the minimum recommended length of 32 bytes for SHA256. See RFC 7518 Section 3.2.
+    return self._jws.encode(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform darwin, python 3.14.5-final-0 _______________
+
+Name                                   Stmts   Miss  Cover   Missing
+--------------------------------------------------------------------
+agents/__init__.py                         0      0   100%
+agents/bktree.py                          83      0   100%
+agents/confusables_loader.py              68      5    93%   44, 116, 125-127
+agents/fusion_agent.py                   128      8    94%   135-138, 311, 353, 395, 397, 444
+agents/hf_agent.py                       143     24    83%   70-71, 156-167, 206, 260-272, 304, 308-309
+agents/idn_agent.py                      107      1    99%   232
+agents/llm_agent.py                      172     10    94%   229, 291, 305-307, 311-313, 343, 550-551
+agents/web_probe_agent.py                142      3    98%   147-148, 281
+auth/__init__.py                           0      0   100%
+auth/dependencies.py                      30      0   100%
+auth/jwt.py                               33      0   100%
+auth/origins.py                           13      0   100%
+auth/sessions.py                          71      8    89%   85-86, 103, 110, 126-127, 136-137
+core/__init__.py                           0      0   100%
+core/agent_signal.py                      15      0   100%
+core/background.py                        21      1    95%   21
+core/calibration.py                       71      4    94%   84, 91-93
+core/config.py                            95      0   100%
+core/constants.py                         51      0   100%
+core/evaluation.py                        37      4    89%   22, 26, 40, 46
+core/exceptions.py                        12      0   100%
+core/llm_gateway.py                       81      1    99%   181
+core/logger.py                            14      0   100%
+core/online_calibration.py                85      5    94%   75, 82-87, 128
+core/probe_transport.py                   42      3    93%   53, 57, 63
+core/rate_limiter.py                      46      0   100%
+core/redaction.py                         20      0   100%
+core/security.py                          18      0   100%
+data_pipeline/__init__.py                  0      0   100%
+data_pipeline/cache_manager.py            46      0   100%
+data_pipeline/hybrid_retrieval.py        109      1    99%   64
+data_pipeline/knowledge_admission.py      80      4    95%   56, 61-63, 87
+data_pipeline/knowledge_updater.py       138      3    98%   181-182, 234
+data_pipeline/rag_policy.py               30      1    97%   24
+data_pipeline/reference_ingest.py        138      1    99%   162
+data_pipeline/reranker.py                 42      0   100%
+data_pipeline/threat_intel.py            139      5    96%   259-260, 386, 396-397
+main.py                                   55      2    96%   100-102
+models/__init__.py                         0      0   100%
+models/chromadb_client.py                189     65    66%   74-77, 81, 84, 89, 97-110, 113, 116, 125-128, 132, 135, 139, 142-154, 157, 160, 178, 185, 208-230, 242-244, 249-256, 343-344, 395, 397-399
+models/database.py                        48     10    79%   29, 41-43, 105-123
+models/redis_client.py                    42      4    90%   27, 39-41
+routers/__init__.py                        6      0   100%
+routers/analyze_router.py                119     39    67%   121, 202-203, 209, 253, 258, 320-391
+routers/auth_router.py                   103      0   100%
+routers/eml_router.py                     76     11    86%   83, 92, 99-101, 161, 167-169, 172, 190
+routers/health_router.py                  31      0   100%
+routers/incidents_router.py              156     36    77%   241-266, 290-310, 346-380, 456, 481-482, 530-531
+schemas/__init__.py                        0      0   100%
+schemas/analyze.py                       168      7    96%   159-163, 195, 198
+schemas/auth.py                           29      0   100%
+schemas/feedback.py                       13      0   100%
+schemas/incidents.py                      32      0   100%
+services/__init__.py                       0      0   100%
+services/analysis.py                      81     11    86%   136-137, 170, 215-217, 227, 232-233, 235, 237
+services/analysis_limits.py               27      0   100%
+services/email_analysis.py                26      2    92%   63-64
+services/orchestrator.py                  88      2    98%   113, 152
+services/persistence.py                   45      1    98%   91
+utils/__init__.py                          0      0   100%
+utils/email_parser.py                    160     16    90%   178-184, 188-189, 204, 206-207, 290-291, 303-304
+utils/url_parser.py                       70      0   100%
+--------------------------------------------------------------------
+TOTAL                                   3884    298    92%
+Required test coverage of 90% reached. Total coverage: 92.33%
+1087 passed, 28 skipped, 41 warnings in 20.85s
