@@ -122,6 +122,6 @@ def _get_script_name(ch: str) -> str:
         name = unicodedata.name(ch, "")
         if name:
             return name.split()[0]
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("unicode_script_name_lookup_failed", char=repr(ch), error=str(exc))
     return "UNKNOWN"

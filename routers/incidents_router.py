@@ -301,8 +301,9 @@ async def get_settings(
                 n_feedback=int(row["n_feedback"]),
                 created_at=row["created_at"],
             )
-    except Exception:
-        pass  # tabla ausente (instalación previa a T12) — campo queda en None
+    except Exception as exc:
+        # tabla ausente (instalación previa a T12) — campo queda en None
+        logger.debug("theta_calibration_lookup_failed", error=str(exc))
 
     return FusionSettings(
         alpha=ALPHA,

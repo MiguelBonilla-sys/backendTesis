@@ -166,8 +166,8 @@ def _invalidate_bm25() -> None:
         from data_pipeline.hybrid_retrieval import hybrid_retriever
 
         hybrid_retriever.invalidate()
-    except Exception:  # noqa: BLE001 — best-effort
-        pass
+    except Exception as exc:  # noqa: BLE001 — best-effort
+        logger.debug("bm25_invalidate_failed", error=str(exc))
 
 
 def tier_for(verdict: str, s_risk: float) -> str:

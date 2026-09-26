@@ -96,7 +96,7 @@ async def login(request: LoginRequest, response: Response) -> TokenResponse:
 
     return TokenResponse(
         access_token=token,
-        token_type="bearer",
+        token_type="bearer",  # nosec B106 -- RFC 6750 literal, not a secret
         expires_in=settings.JWT_EXPIRE_MINUTES * 60,
         role=user.role,
         refresh_token=refresh,
@@ -112,7 +112,7 @@ async def login(request: LoginRequest, response: Response) -> TokenResponse:
 def _issue_tokens(sub: str, role: str) -> TokenResponse:
     return TokenResponse(
         access_token=create_access_token(data={"sub": sub, "role": role}),
-        token_type="bearer",
+        token_type="bearer",  # nosec B106 -- RFC 6750 literal, not a secret
         expires_in=settings.JWT_EXPIRE_MINUTES * 60,
         role=role,
         refresh_token=create_refresh_token(data={"sub": sub, "role": role}),
@@ -201,7 +201,7 @@ async def refresh_token(
 
     return TokenResponse(
         access_token=token,
-        token_type="bearer",
+        token_type="bearer",  # nosec B106 -- RFC 6750 literal, not a secret
         expires_in=settings.JWT_EXPIRE_MINUTES * 60,
         role=role,
         refresh_token=new_refresh,

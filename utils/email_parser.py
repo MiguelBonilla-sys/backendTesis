@@ -21,7 +21,10 @@ import re
 from dataclasses import dataclass, field
 from email.message import Message
 
+from core.logger import get_logger
 from utils.url_parser import extract_urls_from_html, extract_urls_from_text, normalize_url
+
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Urgency keyword sets (Spanish + English — case-insensitive substring match)
@@ -270,8 +273,8 @@ def _extract_body_and_urls(msg: Message) -> tuple[str, list[str]]:
                     for url in extract_urls_from_text(html_str):
                         _add_url(url)
                     text_chunks.append(_strip_html(html_str))
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("email_part_decode_failed", content_type=content_type, error=str(exc))
 
         elif content_type == "text/plain":
             try:
@@ -283,8 +286,8 @@ def _extract_body_and_urls(msg: Message) -> tuple[str, list[str]]:
                     for url in extract_urls_from_text(plain_str):
                         _add_url(url)
                     text_chunks.append(plain_str)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("email_part_decode_failed", content_type=content_type, error=str(exc))
 
     body_text = " ".join(text_chunks)
     return body_text, deduped_urls
