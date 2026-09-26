@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from datetime import UTC
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -64,7 +65,9 @@ class ThreatIntelService:
         # `email.mg.abdataclassactionmail.com` → `abdataclassactionmail.com`.
         # IDN analysis may supply a domain extracted from a CDN filename.
         # Reputation providers must query the actual network host of the URL.
-        host = httpx.URL(url).host.lower().rstrip(".")
+        # urlsplit, not httpx.URL: httpx forces IDNA encoding and raises on hosts
+        # IDNA2008 rejects (e.g. Cherokee homographs) — the domains this detector targets.
+        host = (urlsplit(url).hostname or domain).lower().rstrip(".")
         domain_2ld = extract_registrable_domain(host)
 
         # --- 2. Dev/test mode: todas las keys vacías --------------------------

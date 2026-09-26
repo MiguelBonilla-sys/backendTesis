@@ -40,6 +40,17 @@ class TestThreatIntelDevMode:
         assert result.s_ti == 0.0
 
     @pytest.mark.asyncio
+    async def test_non_idna_homograph_host_does_not_crash(self, service: ThreatIntelService):
+        """Hosts IDNA2008 rejects (Cherokee Ꮐ) are exactly what the detector must score."""
+        with patch("data_pipeline.threat_intel.settings") as mock_settings:
+            mock_settings.VIRUSTOTAL_API_KEY = ""
+            mock_settings.URLSCAN_API_KEY = ""
+            mock_settings.GOOGLE_SAFE_BROWSING_API_KEY = ""
+            mock_settings.WHOISXML_API_KEY = ""
+            result = await service.analyze("https://bloᏀfa.com", "bloꮐfa.com")
+        assert result.s_ti == 0.0
+
+    @pytest.mark.asyncio
     async def test_returns_cached_result_on_cache_hit(self, service: ThreatIntelService):
         async def cached(key):
             return {"value": {"vt": 0.9, "urlscan": 0.8, "gsb": 1.0,
