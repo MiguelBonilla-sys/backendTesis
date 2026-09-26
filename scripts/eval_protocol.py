@@ -5,18 +5,19 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-from urllib.parse import urlsplit
-
-import httpx
+from urllib.parse import urlsplit, urlunsplit
 
 from utils.url_parser import extract_registrable_domain
 
 
 def canonical_url(url: str) -> str:
-    parsed = httpx.URL(url.strip())
-    if parsed.scheme not in ("http", "https") or not parsed.host:
+    # urlsplit, not httpx.URL: httpx's host encoder forces IDNA/ASCII conversion,
+    # which rejects raw-Unicode IDN homograph hosts (e.g. Cherokee substitutions)
+    # that this corpus exists to test.
+    parsed = urlsplit(url.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("Corpus contains an invalid HTTP(S) URL")
-    return str(parsed.copy_with(fragment=None))
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, parsed.query, ""))
 
 
 def unique_cases(cases: list[dict]) -> list[dict]:
