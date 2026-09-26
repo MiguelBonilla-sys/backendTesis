@@ -25,6 +25,7 @@ omit = ["tests/*", "scripts/*", "docs/*"]
 
 [tool.uv]
 constraint-dependencies = ["numpy==2.4.4"]
+exclude-newer = "7 days"
 
 [dependency-groups]
 dev = [

@@ -22,6 +22,4 @@ def validate_origin(request: Request, *, cookie_auth: bool = False) -> None:
 
 
 def has_auth_cookies(request: Request) -> bool:
-    return bool(
-        request.cookies.get(ACCESS_TOKEN_COOKIE) or request.cookies.get(REFRESH_TOKEN_COOKIE)
-    )
+    return any(request.cookies.get(name) for name in (ACCESS_TOKEN_COOKIE, REFRESH_TOKEN_COOKIE))
