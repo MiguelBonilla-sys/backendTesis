@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import time
 
+import jwt
 import pytest
-from jose import jwt
 
 from auth.jwt import create_access_token, decode_token
 from core.config import settings

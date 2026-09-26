@@ -1,10 +1,11 @@
-"""JWT creation and validation using python-jose (HS256)."""
+"""JWT creation and validation using PyJWT (HS256)."""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from jose import JWTError, jwt
+import jwt
+from jwt import PyJWTError
 
 from core.config import settings
 from core.exceptions import AuthenticationError
@@ -58,7 +59,7 @@ def decode_token(token: str) -> dict:
             algorithms=[settings.JWT_ALGORITHM],
         )
         return payload
-    except JWTError as exc:
+    except PyJWTError as exc:
         raise AuthenticationError(
             message="Invalid or expired token",
             detail=str(exc),
