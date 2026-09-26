@@ -49,7 +49,7 @@ async def _save_analysis(
     placeholders = ", ".join(f"${n}" for n in range(1, len(values) + 1))
     try:
         await execute(
-            f"INSERT INTO incidents ({columns}) VALUES ({placeholders}) "
+            f"INSERT INTO incidents ({columns}) VALUES ({placeholders}) "  # nosec B608 # columnas literales del código; valores con $n
             "ON CONFLICT (id) DO NOTHING", *values,
         )
     except Exception as exc:

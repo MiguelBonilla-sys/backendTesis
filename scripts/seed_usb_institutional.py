@@ -80,7 +80,7 @@ def build_usb_homograph_docs(n_per_target: int, seed: int) -> tuple[list, list, 
 
     from agents.confusables_loader import load_confusables_catalog
 
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # nosec B311 # datos de prueba reproducibles, no criptografía
     catalog = load_confusables_catalog(Path(settings.CONFUSABLES_PATH))
     reverse = build_reverse_catalog(catalog)
     ids, docs, metas = [], [], []

@@ -125,7 +125,7 @@ def generate(
     top1m_path: Path,
     confusables_path: Path,
 ) -> list[dict]:
-    rng = random.Random(seed)
+    rng = random.Random(seed)  # nosec B311 # corpus sintético reproducible, no criptografía
     catalog = load_confusables_catalog(confusables_path)
     reverse = build_reverse_catalog(catalog)
     if not reverse:

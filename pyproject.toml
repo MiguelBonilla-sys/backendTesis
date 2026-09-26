@@ -24,8 +24,10 @@ addopts = "--cov=. --cov-report=term-missing --cov-fail-under=90"
 omit = ["tests/*", "scripts/*", "docs/*"]
 
 [tool.uv]
-constraint-dependencies = ["numpy==2.4.4"]
+# Va primero: la regla semgrep uv-missing-dependency-cooldown deja de leer la
+# sección en el primer corchete, y la lista de abajo abre uno.
 exclude-newer = "7 days"
+constraint-dependencies = ["numpy==2.4.4"]
 
 [dependency-groups]
 dev = [

@@ -27,12 +27,12 @@ async def retain_email_metadata(conn, *, days: int, apply: bool = False) -> int:
     cutoff = datetime.now(UTC) - timedelta(days=days)
     if not apply:
         return await conn.fetchval(
-            f"SELECT count(*) FROM incidents WHERE created_at < $1 AND {_NONEMPTY}",
+            f"SELECT count(*) FROM incidents WHERE created_at < $1 AND {_NONEMPTY}",  # nosec B608 # constantes del módulo; cutoff parametrizado
             cutoff,
         )
     # Count and clear in the same statement; rerunning the job is idempotent.
     return await conn.fetchval(
-        f"WITH cleared AS (UPDATE incidents SET {_FIELDS} "
+        f"WITH cleared AS (UPDATE incidents SET {_FIELDS} "  # nosec B608 # constantes del módulo; cutoff parametrizado
         f"WHERE created_at < $1 AND {_NONEMPTY} RETURNING id) SELECT count(*) FROM cleared",
         cutoff,
     )

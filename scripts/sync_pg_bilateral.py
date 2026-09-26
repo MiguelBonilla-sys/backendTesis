@@ -39,9 +39,9 @@ async def _merge_uuid_table(src, dst, table: str, *, dry: bool) -> int:
     collist = ", ".join(f'"{c}"' for c in cols)
     placeholders = ", ".join(f"${i + 1}" for i in range(len(cols)))
     updates = ", ".join(f'"{c}" = EXCLUDED."{c}"' for c in cols if c != "id")
-    ins = f'INSERT INTO "{table}" ({collist}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {updates}'
+    ins = f'INSERT INTO "{table}" ({collist}) VALUES ({placeholders}) ON CONFLICT (id) DO UPDATE SET {updates}'  # nosec B608 # tabla en lista blanca, columnas del information_schema
     moved = 0
-    async for row in src.cursor(f'SELECT {collist} FROM "{table}" ORDER BY id', prefetch=_BATCH):
+    async for row in src.cursor(f'SELECT {collist} FROM "{table}" ORDER BY id', prefetch=_BATCH):  # nosec B608 # tabla en lista blanca, columnas del information_schema
         if not dry:
             await dst.execute(ins, *tuple(row))
         moved += 1
@@ -51,12 +51,12 @@ async def _merge_uuid_table(src, dst, table: str, *, dry: bool) -> int:
 async def _prune_table(src, dst, table: str, *, dry: bool) -> int:
     if table not in _UUID_TABLES:
         raise ValueError("Unsupported replica table")
-    src_ids = {r["id"] for r in await src.fetch(f'SELECT id FROM "{table}"')}
-    dst_ids = {r["id"] for r in await dst.fetch(f'SELECT id FROM "{table}"')}
+    src_ids = {r["id"] for r in await src.fetch(f'SELECT id FROM "{table}"')}  # nosec B608 # tabla en lista blanca
+    dst_ids = {r["id"] for r in await dst.fetch(f'SELECT id FROM "{table}"')}  # nosec B608 # tabla en lista blanca
     stale = list(dst_ids - src_ids)
     if not dry:
         for i in range(0, len(stale), _BATCH):
-            await dst.execute(f'DELETE FROM "{table}" WHERE id = ANY($1::uuid[])', stale[i:i + _BATCH])
+            await dst.execute(f'DELETE FROM "{table}" WHERE id = ANY($1::uuid[])', stale[i:i + _BATCH])  # nosec B608 # tabla en lista blanca; ids parametrizados
     return len(stale)
 
 
