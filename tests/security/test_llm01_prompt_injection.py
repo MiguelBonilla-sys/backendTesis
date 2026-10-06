@@ -80,12 +80,12 @@ class TestLivePipelineResilience:
     def test_injection_in_email_body_does_not_flip_verdict(self):
         import httpx
 
-        from tests.security.conftest import LIVE_BASE
+        from tests.security.conftest import LIVE_BASE, LIVE_PASSWORD, LIVE_USER
 
         with httpx.Client(base_url=LIVE_BASE, timeout=120) as c:
             tok = c.post("/api/v1/auth/login", json={
-                "username": "jsfandinon@academia.usbbog.edu.co",
-                "password": "Tesis.Fandino.7290",
+                "username": LIVE_USER,
+                "password": LIVE_PASSWORD,
             }).json()["access_token"]
             r = c.post("/api/v1/analyze_email", headers={"Authorization": f"Bearer {tok}"},
                        json={
