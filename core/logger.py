@@ -15,6 +15,10 @@ def _configure_structlog(log_level: str = "INFO") -> None:
         stream=sys.stdout,
         level=getattr(logging, log_level.upper(), logging.INFO),
     )
+    # httpx logs every request URL at INFO; URLs can carry credentials (a Safe Browsing
+    # key leaked this way, found in T35). Only warnings and errors from HTTP clients.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
     structlog.configure(
         processors=[

@@ -304,7 +304,8 @@ class ThreatIntelService:
             async with httpx.AsyncClient(timeout=_API_TIMEOUT) as client:
                 resp = await client.post(
                     "https://safebrowsing.googleapis.com/v4/threatMatches:find",
-                    params={"key": settings.GOOGLE_SAFE_BROWSING_API_KEY},
+                    # Key in a header, never in the URL (URLs end up in logs and proxies).
+                    headers={"X-Goog-Api-Key": settings.GOOGLE_SAFE_BROWSING_API_KEY},
                     json=payload,
                 )
 
