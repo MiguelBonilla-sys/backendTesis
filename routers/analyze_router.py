@@ -33,6 +33,7 @@ from schemas.analyze import (
     BatchAnalyzeResponse,
     EmailSignals,
 )
+from schemas.errors import PROTECTED
 from services.analysis import (
     _aggregate_email_reasons,
     _analyze_single_url_for_email,
@@ -49,7 +50,7 @@ from utils.email_parser import _detect_urgency
 from utils.url_parser import extract_effective_domain
 
 logger = get_logger(__name__)
-router = APIRouter(tags=["analyze"])
+router = APIRouter(tags=["analyze"], responses=PROTECTED)
 
 
 @router.post(

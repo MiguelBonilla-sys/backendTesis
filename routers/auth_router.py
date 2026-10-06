@@ -37,9 +37,10 @@ from schemas.auth import (
     TokenResponse,
     UserInfo,
 )
+from schemas.errors import AUTH
 
 logger = get_logger(__name__)
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"], responses=AUTH)
 
 
 def _cookie_kwargs() -> dict:

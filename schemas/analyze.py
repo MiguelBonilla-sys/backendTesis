@@ -221,6 +221,18 @@ class ReportRequest(BaseModel):
     reporter_note: str = Field(default="", max_length=500)
     reported_verdict: Literal["PHISHING", "SUSPICIOUS"] = "PHISHING"
 
+    @field_validator("url")
+    @classmethod
+    def http_url_with_host(cls, value: str) -> str:
+        """Only http(s) URLs with a real host reach storage (F33-06)."""
+        from urllib.parse import urlsplit
+
+        parts = urlsplit(value.strip())
+        host = parts.hostname or ""
+        if parts.scheme not in {"http", "https"} or not host or len(host) > 253:
+            raise ValueError("url must be an http(s) URL with a valid host")
+        return value.strip()
+
 
 class ReportResponse(BaseModel):
     report_id: str

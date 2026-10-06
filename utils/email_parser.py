@@ -54,7 +54,8 @@ _SUSPICIOUS_ATTACHMENT_EXTS: frozenset[str] = frozenset({
 })
 
 # HTML tag stripper for plain-text extraction
-_HTML_TAG_RE = re.compile(r"<[^>]+>")
+# Linear: a tag cannot contain "<", so unclosed "<" runs do not rescan (F33-01, ReDoS).
+_HTML_TAG_RE = re.compile(r"<[^<>]*>")
 
 # Auth result pattern: e.g. "dkim=pass" or "spf=fail"
 _AUTH_RESULT_RE = re.compile(

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StrictBool, field_validator
 
 from auth.permissions import PERMISSIONS
 
@@ -68,5 +68,5 @@ class UserOut(BaseModel):
 class UserUpdate(BaseModel):
     # role_id explícito en null = volver a los permisos del rol base.
     role_id: str | None = Field(None, min_length=36, max_length=36)
-    clear_role: bool = False
-    is_active: bool | None = None
+    clear_role: StrictBool = False
+    is_active: StrictBool | None = None

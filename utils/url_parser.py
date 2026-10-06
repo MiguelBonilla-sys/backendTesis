@@ -128,9 +128,14 @@ def extract_registrable_domain(domain: str) -> str:
 
 
 def is_ip_address(domain: str) -> bool:
-    """Return True if *domain* is a bare IPv4 or IPv6 address."""
-    domain = domain.strip("[]")
-    return bool(_IPV4_RE.match(domain)) or bool(_IPV6_RE.match(domain))
+    """Return True if *domain* is a bare IPv4 or IPv6 address (strict, F33-03)."""
+    import ipaddress
+
+    try:
+        ipaddress.ip_address(domain.strip().strip("[]"))
+    except ValueError:
+        return False
+    return True
 
 
 def extract_urls_from_text(text: str) -> list[str]:

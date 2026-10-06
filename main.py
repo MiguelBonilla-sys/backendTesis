@@ -112,6 +112,7 @@ app.include_router(access_router, prefix="/api/v1", tags=["access"])
 # HSTS por fuera de toda la pila de middleware, incluido ServerErrorMiddleware:
 # los 500 de errores no manejados también deben llevar el encabezado. El
 # middleware deja pasar los scopes no-HTTP (lifespan/websocket) sin tocarlos.
+fastapi_app = app  # FastAPI interno (openapi, state, routes) para scripts y pruebas
 app = TransportHeadersMiddleware(app)
 
 

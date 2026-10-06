@@ -25,6 +25,7 @@ from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from data_pipeline.knowledge_updater import knowledge_updater
 from models.database import execute, fetch, fetchrow
+from schemas.errors import RESOURCE
 from schemas.feedback import FeedbackRequest, FeedbackResponse
 from schemas.incidents import (
     IncidentGuidance,
@@ -70,7 +71,7 @@ class FusionSettings(BaseModel):
     evaluation: dict = Field(default_factory=dict)
 
 logger = get_logger(__name__)
-router = APIRouter(tags=["incidents"])
+router = APIRouter(tags=["incidents"], responses=RESOURCE)
 
 
 # --------------------------------------------------------------------------- #
@@ -191,7 +192,7 @@ async def list_incidents(
     summary="Obtiene un incidente por ID",
 )
 async def get_incident(
-    incident_id: str,
+    incident_id: UUID,
     current_user: dict = Depends(require_permission("incidents:read")),
 ) -> IncidentRecord:
     """

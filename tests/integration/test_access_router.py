@@ -181,3 +181,32 @@ def test_student_gets_403_over_http(auth_store):
         for path in ("/api/v1/roles", "/api/v1/users", "/api/v1/permissions"):
             resp = client.get(path, headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 403, path
+
+
+async def test_f33_02_rename_to_existing_name_is_409(db):
+    a = await ar.create_role(RoleCreate(name="alfa"), ADMIN)
+    await ar.create_role(RoleCreate(name="beta"), ADMIN)
+    with pytest.raises(HTTPException) as exc:
+        await ar.update_role(a.id, RoleUpdate(name="BETA"), ADMIN)
+    assert exc.value.status_code == 409
+    assert (await ar.update_role(a.id, RoleUpdate(name="Alfa"), ADMIN)).name == "Alfa"
+
+
+async def test_f33_02_unique_race_maps_to_409():
+    import asyncpg
+
+    from core.exceptions import DatabaseError
+
+    async def racing(*args):
+        try:
+            raise asyncpg.UniqueViolationError("duplicate key")
+        except asyncpg.UniqueViolationError as cause:
+            raise DatabaseError("Database fetchrow failed") from cause
+
+    with patch.object(ar, "fetchrow", side_effect=racing):
+        with pytest.raises(HTTPException) as exc:
+            await ar._write_role("INSERT ...")
+    assert exc.value.status_code == 409
+    with patch.object(ar, "fetchrow", side_effect=DatabaseError("down")):
+        with pytest.raises(DatabaseError):
+            await ar._write_role("INSERT ...")

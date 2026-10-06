@@ -31,13 +31,14 @@ from schemas.analyze import (
     ReportRequest,
     ReportResponse,
 )
+from schemas.errors import PROTECTED
 from services.analysis import _aggregate_email_reasons, _analyze_single_url_for_email
 from services.email_analysis import analyze_email_content
 from services.persistence import _persist_eml_incident, _persist_manual_report
 from utils.email_parser import ParsedEmail, parse_eml
 
 logger = get_logger(__name__)
-router = APIRouter(tags=["analyze"])
+router = APIRouter(tags=["analyze"], responses=PROTECTED)
 
 _EML_MAX_BYTES = 10 * 1024 * 1024  # 10 MB hard cap
 _EML_MAX_URLS = 10  # máximo de URLs únicas a analizar por email

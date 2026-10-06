@@ -18,12 +18,14 @@ from auth.permissions import (
     parse_permissions,
     require_permission,
 )
+from core.exceptions import DatabaseError
 from core.logger import get_logger
 from models.database import execute, fetch, fetchrow, log_audit_event
 from schemas.access import PermissionInfo, RoleCreate, RoleOut, RoleUpdate, UserOut, UserUpdate
+from schemas.errors import RESOURCE
 
 logger = get_logger(__name__)
-router = APIRouter(tags=["access"])
+router = APIRouter(tags=["access"], responses=RESOURCE)
 
 _ROLE_SQL = (
     "SELECT r.id, r.name, r.description, r.permissions, r.is_system, "
@@ -40,6 +42,19 @@ _MANAGERS_SQL = (
     "(u.role_id IS NULL AND u.role = 'admin') OR "
     "(u.role_id IS NOT NULL AND r.permissions ? 'roles:manage'))"
 )
+
+
+async def _write_role(query: str, *args: object):
+    """Run a role write; a unique-name race surfaces as 409, not as storage failure."""
+    import asyncpg
+
+    try:
+        return await fetchrow(query, *args)
+    except DatabaseError as exc:
+        if isinstance(exc.__cause__, asyncpg.UniqueViolationError):
+            raise HTTPException(status_code=409,
+                                detail="A role with that name already exists") from exc
+        raise
 
 
 def _uuid(value: str) -> str:
@@ -96,7 +111,7 @@ async def create_role(body: RoleCreate, actor: dict = Depends(require_permission
     _ensure_grantable(actor, body.permissions)
     if await fetchrow("SELECT id FROM roles WHERE lower(name) = lower($1)", body.name):
         raise HTTPException(status_code=409, detail="A role with that name already exists")
-    row = await fetchrow(
+    row = await _write_role(
         "INSERT INTO roles (name, description, permissions) VALUES ($1, $2, $3::jsonb) "
         "RETURNING id, name, description, permissions, is_system",
         body.name, body.description, json.dumps(body.permissions),
@@ -120,6 +135,9 @@ async def update_role(
     role_id: str, body: RoleUpdate, actor: dict = Depends(require_permission("roles:manage")),
 ):
     current = await _load_role(role_id)
+    if body.name and body.name.lower() != current["name"].lower() and await fetchrow(
+            "SELECT id FROM roles WHERE lower(name) = lower($1)", body.name):
+        raise HTTPException(status_code=409, detail="A role with that name already exists")
     permissions = body.permissions if body.permissions is not None else parse_permissions(
         current["permissions"])
     _ensure_grantable(actor, permissions)
@@ -130,7 +148,7 @@ async def update_role(
         if not managers["n"]:
             raise HTTPException(
                 status_code=409, detail="This would leave no account able to manage roles")
-    row = await fetchrow(
+    row = await _write_role(
         "UPDATE roles SET name = $2, description = $3, permissions = $4::jsonb, updated_at = NOW() "
         "WHERE id = $1 RETURNING id, name, description, permissions, is_system",
         current["id"], body.name or current["name"],
