@@ -1,3 +1,5 @@
+import pytest
+
 from core import incident_taxonomy as tx
 from schemas.analyze import WebProbeResult
 from tests.unit.test_persist_helpers import _make_response
@@ -55,3 +57,5 @@ def test_mixed_script_confusables_count_even_below_idn_threshold():
     assert tx.categorize(r)[0] == "idn_homograph"
     r.idn_result.is_mixed_script = False
     assert tx.categorize(r)[0] == "generic_phishing"
+
+pytestmark = [pytest.mark.acceptance]

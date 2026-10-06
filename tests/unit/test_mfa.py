@@ -242,3 +242,5 @@ class TestHttpFlow:
             resp = client.post("/api/v1/auth/mfa/recovery-codes", headers={
                 **ORIGIN, "Authorization": f"Bearer {admin}"})
         assert resp.status_code == 200 and resp.json()["codes"] == ["abcd-1234"]
+
+pytestmark = [pytest.mark.acceptance]

@@ -210,3 +210,5 @@ async def test_f33_02_unique_race_maps_to_409():
     with patch.object(ar, "fetchrow", side_effect=DatabaseError("down")):
         with pytest.raises(DatabaseError):
             await ar._write_role("INSERT ...")
+
+pytestmark = [pytest.mark.acceptance]

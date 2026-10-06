@@ -189,3 +189,5 @@ async def test_persistence_schedules_alert_only_for_phishing(monkeypatch):
     persistence._schedule_alert(phishing)
     persistence._schedule_alert(_make_response(verdict="LEGITIMATE", s_risk=0.1))
     assert scheduled == [f"alert:{phishing.request_id}"]
+
+pytestmark = [pytest.mark.acceptance]

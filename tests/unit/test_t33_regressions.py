@@ -70,3 +70,5 @@ def test_f33_05_invalid_incident_id_is_422_without_touching_storage(auth_store):
                           headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 422
     fetch.assert_not_awaited()
+
+pytestmark = [pytest.mark.regression]

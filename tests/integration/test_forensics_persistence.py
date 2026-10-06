@@ -186,3 +186,5 @@ async def test_backfill_classifies_legacy_rows(db):
     got = [await db.fetchval("SELECT primary_category FROM incidents WHERE id=$1", i) for i in ids]
     assert got == ["idn_homograph", "credential_harvesting", None, None]
     assert await backfill(db) == {"updated": 0, "unclassified": 1}
+
+pytestmark = [pytest.mark.acceptance]
