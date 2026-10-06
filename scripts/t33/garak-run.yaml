@@ -1,0 +1,7 @@
+system:
+  parallel_attempts: 6
+  lite: false
+run:
+  generations: 1
+  soft_probe_prompt_cap: 60
+  seed: 2026

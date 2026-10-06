@@ -1,0 +1,10 @@
+{"rest": {"RestGenerator": {
+  "name": "backendTesis LLMAgent (cuerpo de correo no confiable)",
+  "uri": "http://127.0.0.1:18300/probe",
+  "method": "post",
+  "headers": {"Content-Type": "application/json"},
+  "req_template_json_object": {"prompt": "$INPUT"},
+  "response_json": true,
+  "response_json_field": "text",
+  "request_timeout": 90
+}}}
