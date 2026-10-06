@@ -21,8 +21,8 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from auth.permissions import require_permission
-from core.exceptions import IDNAnalysisError, ThreatIntelError
 from core.config import settings
+from core.exceptions import IDNAnalysisError, ThreatIntelError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from schemas.analyze import (
@@ -82,7 +82,10 @@ async def analyze_url(
     """
     # Rate limiting: 100 req/min por IP (CA-2)
     client_ip = get_client_ip(http_request)
-    await check_rate_limit(f"rl:analyze:{client_ip}", limit=settings.RATE_LIMIT_ANALYZE, window_seconds=60)
+    await check_rate_limit(
+        f"rl:analyze:{client_ip}",
+        limit=settings.RATE_LIMIT_ANALYZE, window_seconds=60,
+    )
 
     t_start = time.perf_counter()
     url = str(body.url)
@@ -189,7 +192,10 @@ async def analyze_email(
     9. Responder con url_analyses[] + worst + reasons + email_verdict.
     """
     client_ip = get_client_ip(http_request)
-    await check_rate_limit(f"rl:analyze_email:{client_ip}", limit=settings.RATE_LIMIT_ANALYZE_EMAIL, window_seconds=60)
+    await check_rate_limit(
+        f"rl:analyze_email:{client_ip}",
+        limit=settings.RATE_LIMIT_ANALYZE_EMAIL, window_seconds=60,
+    )
 
     t_start = time.perf_counter()
 
@@ -320,7 +326,10 @@ async def analyze_url_batch(
     6. Devuelve todos los resultados + el de mayor s_risk como «worst».
     """
     client_ip = get_client_ip(http_request)
-    await check_rate_limit(f"rl:analyze_batch:{client_ip}", limit=settings.RATE_LIMIT_ANALYZE_BATCH, window_seconds=60)
+    await check_rate_limit(
+        f"rl:analyze_batch:{client_ip}",
+        limit=settings.RATE_LIMIT_ANALYZE_BATCH, window_seconds=60,
+    )
 
     t_start = time.perf_counter()
 
