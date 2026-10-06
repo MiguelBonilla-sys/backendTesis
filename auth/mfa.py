@@ -66,13 +66,13 @@ async def _send_code(email: str, code: str) -> bool:
 
 
 async def _within_send_budget(email: str) -> bool:
-    """At most 3 codes per 15 minutes per account."""
+    """At most MFA_CODES_PER_WINDOW codes per 15 minutes per account."""
     key = f"mfa:sends:{hash_email(email)}"
     redis = _redis()
     count = await redis.incr(key)
     if count == 1:
         await redis.expire(key, 900)
-    return count <= 3
+    return count <= settings.MFA_CODES_PER_WINDOW
 
 
 async def start_challenge(email: str) -> tuple[str, bool]:
@@ -116,29 +116,40 @@ async def _consume_recovery(email: str, code: str) -> bool:
     return row is not None
 
 
+# One atomic step per verification: a challenge that was consumed or never existed
+# is not recreated by the attempt counter, so concurrent verifications of the same
+# code cannot both succeed (found by the T33 MFA pentest with 8 parallel requests).
+VERIFY_SCRIPT = """
+local sub = redis.call('HGET', KEYS[1], 'sub')
+if not sub then return {'expired', ''} end
+local attempts = redis.call('HINCRBY', KEYS[1], 'attempts', 1)
+if attempts > tonumber(ARGV[2]) then
+  redis.call('DEL', KEYS[1])
+  return {'too_many_attempts', ''}
+end
+if ARGV[1] == '' then return {'recovery', sub} end
+if redis.call('HGET', KEYS[1], 'digest') ~= ARGV[1] then return {'invalid_code', ''} end
+redis.call('DEL', KEYS[1])
+return {'ok', sub}
+"""
+
+
 async def verify_challenge(challenge_id: str, code: str) -> str:
     """Return the subject when the code (or a recovery code) is valid."""
     redis = _redis()
     key = f"mfa:{challenge_id}"
-    attempts = await redis.hincrby(key, "attempts", 1)
-    challenge = await redis.hgetall(key)
-    if not challenge.get("sub"):
+    recovery = "-" in code
+    outcome, email = await redis.eval(
+        VERIFY_SCRIPT, 1, key, "" if recovery else _digest(code), settings.MFA_MAX_ATTEMPTS)
+    if outcome == "ok":
+        return email
+    if outcome != "recovery":
+        raise MfaError(outcome)
+    # Recovery codes are consumed by one conditional UPDATE: also single use under races.
+    if await _consume_recovery(email, code):
         await redis.delete(key)
-        raise MfaError("expired")
-    if attempts > settings.MFA_MAX_ATTEMPTS:
-        await redis.delete(key)
-        raise MfaError("too_many_attempts")
-    email = challenge["sub"]
-    if "-" in code:
-        if await _consume_recovery(email, code):
-            await redis.delete(key)
-            return email
-        raise MfaError("invalid_code")
-    if not hmac.compare_digest(challenge["digest"], _digest(code)):
-        raise MfaError("invalid_code")
-    if await redis.delete(key) != 1:
-        raise MfaError("expired")
-    return email
+        return email
+    raise MfaError("invalid_code")
 
 
 async def new_recovery_codes(email: str) -> list[str]:

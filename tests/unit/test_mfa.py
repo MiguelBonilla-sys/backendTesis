@@ -45,6 +45,22 @@ class FakeRedis:
     async def delete(self, key):
         return 1 if self.data.pop(key, None) is not None else 0
 
+    async def eval(self, script, numkeys, key, digest, max_attempts):
+        """Same semantics as mfa.VERIFY_SCRIPT, atomic like Redis EVAL."""
+        bucket = self.data.get(key)
+        if not bucket or not bucket.get("sub"):
+            return ["expired", ""]
+        bucket["attempts"] = str(int(bucket.get("attempts", 0)) + 1)
+        if int(bucket["attempts"]) > int(max_attempts):
+            self.data.pop(key, None)
+            return ["too_many_attempts", ""]
+        if digest == "":
+            return ["recovery", bucket["sub"]]
+        if bucket.get("digest") != digest:
+            return ["invalid_code", ""]
+        self.data.pop(key, None)
+        return ["ok", bucket["sub"]]
+
 
 @pytest.fixture
 def mfa_env(monkeypatch):
@@ -118,7 +134,7 @@ class TestChallenge:
         with pytest.raises(mfa.MfaError):
             await mfa.resend_code("x" * 20)
         cid, _ = await mfa.start_challenge("boss@usb.edu.co")
-        for _ in range(2):
+        for _ in range(settings.MFA_CODES_PER_WINDOW - 1):
             redis.data.pop(f"mfa:cooldown:{cid}", None)
             await mfa.resend_code(cid)
         redis.data.pop(f"mfa:cooldown:{cid}", None)

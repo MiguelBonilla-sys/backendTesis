@@ -229,6 +229,7 @@ class Settings(BaseSettings):
     MFA_OTP_TTL_SECONDS: int = Field(default=300, ge=60, le=900)
     MFA_MAX_ATTEMPTS: int = Field(default=5, ge=1, le=10)
     MFA_RESEND_COOLDOWN_SECONDS: int = Field(default=30, ge=5, le=300)
+    MFA_CODES_PER_WINDOW: int = Field(default=5, ge=1, le=20)  # por cuenta cada 15 min
     OTP_DAILY_CAP: int = Field(default=40, ge=1, le=1000)
 
     # GeoIP local (DB-IP Lite, MMDB). Vacío = sin geolocalización.
