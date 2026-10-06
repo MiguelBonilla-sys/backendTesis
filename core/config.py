@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     ANALYSIS_QUEUE_TIMEOUT_S: float = Field(default=10.0, gt=0, le=120)
     ANALYSIS_TIMEOUT_S: float = Field(default=45.0, gt=0, le=300)
     STORE_EMAIL_CONTENT: bool = False
+    # /docs, /redoc y /openapi.json. En producción se apaga (hallazgo F32-01 de T32).
+    API_DOCS_ENABLED: bool = True
     EMAIL_METADATA_RETENTION_DAYS: int = Field(default=30, ge=1, le=3650)
 
     # Database

@@ -73,13 +73,19 @@ async def lifespan(app: FastAPI):
         await llm_gateway.aclose()
 
 
+def _docs_urls() -> dict[str, str | None]:
+    """/docs, /redoc y /openapi.json solo con API_DOCS_ENABLED (F32-01)."""
+    on = settings.API_DOCS_ENABLED
+    return {"docs_url": "/docs" if on else None, "redoc_url": "/redoc" if on else None,
+            "openapi_url": "/openapi.json" if on else None}
+
+
 app = FastAPI(
     title="BackendTesis API",
     description="IDN Homograph Phishing Detector — USB Bogotá 2026",
     version="1.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    **_docs_urls(),
 )
 
 
