@@ -25,7 +25,8 @@ def pytest_configure(config: pytest.Config) -> None:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     if _LIVE:
         return
-    skip = pytest.mark.skip(reason="live: exportá SECURITY_LIVE=1, SECURITY_LIVE_USER y SECURITY_LIVE_PASSWORD")
+    skip = pytest.mark.skip(
+        reason="live: exportá SECURITY_LIVE=1, SECURITY_LIVE_USER y SECURITY_LIVE_PASSWORD")
     for item in items:
         if "live" in item.keywords:
             item.add_marker(skip)
