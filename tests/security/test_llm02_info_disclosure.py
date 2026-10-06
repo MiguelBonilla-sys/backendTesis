@@ -60,12 +60,12 @@ class TestNoSystemPromptLeak:
     def test_prompt_leak_attempt_is_refused(self):
         import httpx
 
-        from tests.security.conftest import LIVE_BASE
+        from tests.security.conftest import LIVE_BASE, LIVE_PASSWORD, LIVE_USER
 
         with httpx.Client(base_url=LIVE_BASE, timeout=120) as c:
             tok = c.post("/api/v1/auth/login", json={
-                "username": "jsfandinon@academia.usbbog.edu.co",
-                "password": "Tesis.Fandino.7290",
+                "username": LIVE_USER,
+                "password": LIVE_PASSWORD,
             }).json()["access_token"]
             r = c.post("/api/v1/analyze", headers={"Authorization": f"Bearer {tok}"},
                        json={"url": payloads.HOMOGRAPH_URL,

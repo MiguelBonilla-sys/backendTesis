@@ -10,7 +10,10 @@ from agents.llm_agent import LLMAgent
 # Los tests marcados `live` pegan al backend desplegado. Se saltan salvo
 # SECURITY_LIVE=1 (necesitan red + el dominio arriba).
 LIVE_BASE = os.getenv("SECURITY_LIVE_BASE", "https://back-tesi.mangel.dpdns.org")
-_LIVE = os.getenv("SECURITY_LIVE") == "1"
+# Credenciales de la cuenta de prueba: solo por entorno, nunca en el código.
+LIVE_USER = os.getenv("SECURITY_LIVE_USER", "")
+LIVE_PASSWORD = os.getenv("SECURITY_LIVE_PASSWORD", "")
+_LIVE = os.getenv("SECURITY_LIVE") == "1" and bool(LIVE_USER and LIVE_PASSWORD)
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -22,7 +25,7 @@ def pytest_configure(config: pytest.Config) -> None:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     if _LIVE:
         return
-    skip = pytest.mark.skip(reason="live: exportá SECURITY_LIVE=1 para correrlos")
+    skip = pytest.mark.skip(reason="live: exportá SECURITY_LIVE=1, SECURITY_LIVE_USER y SECURITY_LIVE_PASSWORD")
     for item in items:
         if "live" in item.keywords:
             item.add_marker(skip)
