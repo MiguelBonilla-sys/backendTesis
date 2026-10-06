@@ -110,13 +110,15 @@ class TestListIncidents:
         )
         assert resp.status_code == 422
 
-    def test_database_error_returns_500(self, client):
+    def test_database_error_returns_503(self, client):
+        """Postgres caído o conexión cortada = transitorio: 503 + Retry-After (T35)."""
         from core.exceptions import DatabaseError
         with patch("routers.incidents_router.fetchrow",
                    new_callable=AsyncMock,
                    side_effect=DatabaseError("DB failed")):
             resp = client.get("/api/v1/incidents", headers=_auth_headers())
-        assert resp.status_code == 500
+        assert resp.status_code == 503
+        assert resp.headers["retry-after"] == "5"
 
 
 class TestGetIncident:
@@ -155,7 +157,7 @@ class TestGetIncident:
             )
         assert resp.status_code == 200
 
-    def test_database_error_returns_500(self, client):
+    def test_database_error_returns_503(self, client):
         from core.exceptions import DatabaseError
         with patch("routers.incidents_router.fetchrow",
                    new_callable=AsyncMock,
@@ -164,7 +166,7 @@ class TestGetIncident:
                 f"/api/v1/incidents/{uuid.uuid4()}",
                 headers=_auth_headers(),
             )
-        assert resp.status_code == 500
+        assert resp.status_code == 503
 
 
 class TestRowToRecord:

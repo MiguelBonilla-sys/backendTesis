@@ -173,11 +173,9 @@ async def list_incidents(
     except HTTPException:
         raise
     except DatabaseError as exc:
+        # El handler global responde 503 + Retry-After (caída de Postgres = transitoria).
         logger.error("list_incidents_db_error", error=str(exc))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error while retrieving incidents",
-        ) from exc
+        raise
     except Exception as exc:
         logger.error("list_incidents_error", error=str(exc))
         raise HTTPException(
@@ -234,10 +232,7 @@ async def get_incident(
         raise
     except DatabaseError as exc:
         logger.error("get_incident_db_error", incident_id=incident_id, error=str(exc))
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error while retrieving incident",
-        ) from exc
+        raise
     except Exception as exc:
         logger.error("get_incident_error", incident_id=incident_id, error=str(exc))
         raise HTTPException(
