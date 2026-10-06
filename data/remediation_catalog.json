@@ -1,0 +1,80 @@
+{
+  "idn_homograph": {
+    "label": "Homografía IDN",
+    "containment": [
+      "Bloquear el dominio homógrafo en el filtro de correo y en el proxy web institucional.",
+      "Buscar en los buzones otros mensajes con el mismo dominio o la misma URL y retirarlos de la bandeja de entrada.",
+      "Avisar a quienes recibieron el mensaje que no abran el enlace."
+    ],
+    "remediation": [
+      "Si alguien ingresó credenciales: restablecer la contraseña, cerrar sus sesiones activas y revisar el inicio de sesión con MFA.",
+      "Reportar el dominio al registrador y a la lista de phishing de Google Safe Browsing.",
+      "Agregar el dominio legítimo suplantado a la lista de referencia para detectar variantes futuras."
+    ],
+    "references": ["MITRE ATT&CK T1566.002 (Spearphishing Link)", "Unicode UTS #39"]
+  },
+  "credential_harvesting": {
+    "label": "Robo de credenciales",
+    "containment": [
+      "Bloquear la URL del formulario y el dominio de destino del envío del formulario.",
+      "Identificar a quienes visitaron la página desde los registros del proxy o del correo.",
+      "Forzar el cambio de contraseña de las cuentas que ingresaron datos."
+    ],
+    "remediation": [
+      "Revocar sesiones y tokens de las cuentas afectadas y revisar reglas de reenvío creadas en sus buzones.",
+      "Revisar inicios de sesión anómalos posteriores al incidente.",
+      "Reforzar MFA resistente a phishing en las cuentas con privilegios."
+    ],
+    "references": ["MITRE ATT&CK T1566.002", "MITRE ATT&CK T1078 (Valid Accounts)"]
+  },
+  "sender_spoofing": {
+    "label": "Suplantación del remitente",
+    "containment": [
+      "Poner en revisión los mensajes del mismo remitente o del mismo Return-Path.",
+      "Confirmar por otro canal con la persona o entidad que aparenta enviar el correo."
+    ],
+    "remediation": [
+      "Revisar la política DMARC del dominio institucional y pasarla a quarantine o reject si sigue en none.",
+      "Verificar los registros SPF y DKIM de los dominios propios.",
+      "Si el remitente suplantado es interno, revisar si su cuenta fue comprometida."
+    ],
+    "references": ["MITRE ATT&CK T1566", "RFC 7489 (DMARC)"]
+  },
+  "malicious_attachment": {
+    "label": "Adjunto sospechoso",
+    "containment": [
+      "Retirar el mensaje de los buzones y bloquear el hash del adjunto en el antivirus.",
+      "Aislar de la red los equipos donde se abrió el adjunto."
+    ],
+    "remediation": [
+      "Analizar el adjunto en un entorno aislado y buscar indicadores de compromiso en los equipos.",
+      "Restaurar desde respaldo los equipos con indicios de ejecución de malware.",
+      "Revisar que las extensiones peligrosas estén bloqueadas en el filtro de correo."
+    ],
+    "references": ["MITRE ATT&CK T1566.001 (Spearphishing Attachment)"]
+  },
+  "free_hosting_abuse": {
+    "label": "Abuso de hosting gratuito",
+    "containment": [
+      "Bloquear el subdominio exacto, no la plataforma completa, para no cortar servicios legítimos.",
+      "Retirar el mensaje de los buzones donde llegó."
+    ],
+    "remediation": [
+      "Reportar el subdominio al proveedor de hosting por su canal de abuso.",
+      "Si alguien ingresó credenciales, aplicar los pasos de robo de credenciales."
+    ],
+    "references": ["MITRE ATT&CK T1583.006 (Web Services)"]
+  },
+  "generic_phishing": {
+    "label": "Phishing sin categoría específica",
+    "containment": [
+      "Bloquear la URL y retirar el mensaje de los buzones donde llegó.",
+      "Avisar a quienes recibieron el mensaje."
+    ],
+    "remediation": [
+      "Revisar las señales del incidente para confirmar o corregir el veredicto con feedback.",
+      "Si alguien interactuó con el enlace, revisar su cuenta y su equipo."
+    ],
+    "references": ["MITRE ATT&CK T1566"]
+  }
+}

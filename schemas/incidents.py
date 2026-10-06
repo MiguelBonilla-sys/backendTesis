@@ -10,6 +10,26 @@ from pydantic import BaseModel, Field
 from schemas.analyze import AgentTelemetry
 
 
+class IncidentOrigin(BaseModel):
+    header_source: str = "none"
+    mail_date: datetime | None = None
+    country: str | None = None
+    city: str | None = None
+    isp: str | None = None
+    asn: int | None = None
+    # Solo con permiso incidents:forensics (descifrados en el detalle).
+    ip: str | None = None
+    message_id: str | None = None
+    headers: list[list[str]] | None = None
+
+
+class IncidentGuidance(BaseModel):
+    label: str = ""
+    containment: list[str] = Field(default_factory=list)
+    remediation: list[str] = Field(default_factory=list)
+    references: list[str] = Field(default_factory=list)
+
+
 class IncidentRecord(BaseModel):
     id: str
     email_hash: str
@@ -34,6 +54,11 @@ class IncidentRecord(BaseModel):
     email_images: list[str] = Field(default_factory=list)
     email_attachments: list[str] = Field(default_factory=list)
     agent_status: dict[str, AgentTelemetry] = Field(default_factory=dict)
+    primary_category: str | None = None
+    categories: list[str] = Field(default_factory=list)
+    impact: dict = Field(default_factory=dict)
+    origin: IncidentOrigin = Field(default_factory=IncidentOrigin)
+    guidance: IncidentGuidance | None = None
 
 
 class IncidentListResponse(BaseModel):

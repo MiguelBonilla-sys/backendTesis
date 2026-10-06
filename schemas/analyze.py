@@ -187,6 +187,10 @@ class AnalyzeEmailRequest(BaseModel):
     images: list[str] = Field(default_factory=list, max_length=50)
     attachments: list[str] = Field(default_factory=list, max_length=20)
     header_date: str | None = None
+    # Encabezados RFC 5322 tal como los entrega el cliente (complemento de Outlook,
+    # «mostrar original» de Gmail). "eml" lo asigna el servidor, no el cliente.
+    raw_headers: str | None = Field(None, max_length=65_536)
+    header_source: Literal["outlook-addin", "gmail-original"] | None = None
 
     @field_validator("all_urls")
     @classmethod

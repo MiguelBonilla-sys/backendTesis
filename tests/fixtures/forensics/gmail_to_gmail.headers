@@ -1,0 +1,18 @@
+Received: by 2002:a05:6022:1234:b0:52:aaaa:bbbb with SMTP id x7csp123456lav;
+        Mon, 5 Oct 2026 10:15:01 -0700 (PDT)
+X-Received: by 2002:a17:90a:1234:: with SMTP id abc; Mon, 5 Oct 2026 10:15:01 -0700 (PDT)
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id k1sor1234567qkj.12.2026.10.05.10.15.00
+        for <estudiante@academia.usbbog.edu.co>;
+        Mon, 5 Oct 2026 10:15:00 -0700 (PDT)
+Received: from attacker-laptop ([10.0.0.5]) by smtp.example.com; Mon, 5 Oct 2026 10:14:58 -0700
+Authentication-Results: mx.google.com; spf=pass smtp.mailfrom=example.org; dkim=pass header.i=@example.org
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=example.org; s=sel1; h=from:to; bh=abc=; b=SIGNATUREDATA=
+From: Soporte <soporte@example.org>
+To: estudiante@academia.usbbog.edu.co
+Cc: otro@academia.usbbog.edu.co
+Subject: Verifica tu cuenta
+Date: Mon, 5 Oct 2026 12:14:57 -0500
+Message-ID: <CAF1234567890@mail.gmail.com>
+Return-Path: <soporte@example.org>
+X-Custom-Tracking: 99999

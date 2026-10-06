@@ -183,11 +183,9 @@ async def test_persistence_schedules_alert_only_for_phishing(monkeypatch):
     monkeypatch.setattr("core.background.schedule",
                         lambda coro, name: (scheduled.append(name), coro.close()))
 
-    class R:
-        request_id, url, domain, s_risk, reasons = "r1", "https://x.com", "x.com", 0.9, ["a"]
-        verdict = "PHISHING"
+    from tests.unit.test_persist_helpers import _make_response
 
-    persistence._schedule_alert(R())
-    R.verdict = "LEGITIMATE"
-    persistence._schedule_alert(R())
-    assert scheduled == ["alert:r1"]
+    phishing = _make_response(verdict="PHISHING")
+    persistence._schedule_alert(phishing)
+    persistence._schedule_alert(_make_response(verdict="LEGITIMATE", s_risk=0.1))
+    assert scheduled == [f"alert:{phishing.request_id}"]

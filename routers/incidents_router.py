@@ -17,15 +17,21 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from auth.permissions import require_permission
+from auth.permissions import has_permission, require_permission
 from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
 from core.exceptions import DatabaseError
+from core.incident_taxonomy import CATEGORIES, guidance
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from data_pipeline.knowledge_updater import knowledge_updater
 from models.database import execute, fetch, fetchrow
 from schemas.feedback import FeedbackRequest, FeedbackResponse
-from schemas.incidents import IncidentListResponse, IncidentRecord
+from schemas.incidents import (
+    IncidentGuidance,
+    IncidentListResponse,
+    IncidentOrigin,
+    IncidentRecord,
+)
 
 _T = TypeVar("_T")
 
@@ -89,6 +95,12 @@ async def list_incidents(
         pattern="^(PHISHING|LEGITIMATE|SUSPICIOUS)$",
         description="Filtrar por veredicto",
     ),
+    category: str | None = Query(
+        default=None, pattern=f"^({'|'.join(CATEGORIES)})$", description="Categoría primaria",
+    ),
+    country: str | None = Query(
+        default=None, pattern="^[A-Z]{2}$", description="País de origen (ISO 3166-1 alfa-2)",
+    ),
     current_user: dict = Depends(require_permission("incidents:read")),
 ) -> IncidentListResponse:
     """
@@ -108,13 +120,17 @@ async def list_incidents(
         # ------------------------------------------------------------------ #
         # Total count
         # ------------------------------------------------------------------ #
-        if verdict:
-            count_row = await fetchrow(
-                "SELECT COUNT(*) AS count FROM incidents WHERE verdict = $1",
-                verdict,
-            )
-        else:
-            count_row = await fetchrow("SELECT COUNT(*) AS count FROM incidents")
+        filters, params = [], []
+        for column, value in (("verdict", verdict), ("primary_category", category),
+                              ("origin_country", country)):
+            if value:
+                params.append(value)
+                filters.append(f"{column} = ${len(params)}")
+        where = f" WHERE {' AND '.join(filters)}" if filters else ""
+        count_row = await fetchrow(
+            f"SELECT COUNT(*) AS count FROM incidents{where}",  # nosec B608 # columnas literales; valores $n
+            *params,
+        )
 
         total: int = int(count_row["count"]) if count_row else 0
 
@@ -126,23 +142,19 @@ async def list_incidents(
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
                    email_subject, email_from, email_to, all_urls, reasons,
-                   email_body_html, email_images, email_attachments, agent_status
+                   email_body_html, email_images, email_attachments, agent_status,
+                   primary_category, categories, impact, header_source, mail_date,
+                   origin_country, origin_city, origin_isp, origin_asn
             FROM incidents
         """
 
-        if verdict:
-            rows = await fetch(
-                f"{_select} WHERE verdict = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
-                verdict,
-                page_size,
-                offset,
-            )
-        else:
-            rows = await fetch(
-                f"{_select} ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-                page_size,
-                offset,
-            )
+        n = len(params)
+        rows = await fetch(
+            f"{_select}{where} ORDER BY created_at DESC LIMIT ${n + 1} OFFSET ${n + 2}",  # nosec B608 # columnas literales; valores $n
+            *params,
+            page_size,
+            offset,
+        )
 
         items = [_row_to_record(row) for row in (rows or [])]
 
@@ -194,7 +206,10 @@ async def get_incident(
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
                    email_subject, email_from, email_to, all_urls, reasons,
-                   email_body_html, email_images, email_attachments, agent_status
+                   email_body_html, email_images, email_attachments, agent_status,
+                   primary_category, categories, impact, header_source, mail_date,
+                   origin_country, origin_city, origin_isp, origin_asn,
+                   origin_ip_enc, message_id_enc, headers_enc
             FROM incidents
             WHERE id = $1
             """,
@@ -207,7 +222,8 @@ async def get_incident(
                 detail=f"Incident '{incident_id}' not found",
             )
 
-        return _row_to_record(row)
+        return _row_to_record(
+            row, detail=True, forensics=has_permission(current_user, "incidents:forensics"))
 
     except HTTPException:
         raise
@@ -361,7 +377,9 @@ async def get_incidents_by_hash(
                    s_risk, s_idn, s_llm, s_ti,
                    llm_reason, shap_contributions, created_at,
                    email_subject, email_from, email_to, all_urls, reasons,
-                   email_body_html, email_images, email_attachments, agent_status
+                   email_body_html, email_images, email_attachments, agent_status,
+                   primary_category, categories, impact, header_source, mail_date,
+                   origin_country, origin_city, origin_isp, origin_asn
             FROM incidents
             WHERE email_hash = $1
             ORDER BY created_at DESC
@@ -387,7 +405,30 @@ async def get_incidents_by_hash(
 # Helpers
 # --------------------------------------------------------------------------- #
 
-def _row_to_record(row: dict) -> IncidentRecord:
+def _origin(row, *, forensics: bool) -> IncidentOrigin:
+    get = row.get if hasattr(row, "get") else (lambda k, d=None: d)
+    origin = IncidentOrigin(
+        header_source=get("header_source") or "none", mail_date=get("mail_date"),
+        country=get("origin_country"), city=get("origin_city"), isp=get("origin_isp"),
+        asn=get("origin_asn"),
+    )
+    if not forensics:
+        return origin
+    from core import crypto
+
+    incident_id = str(row["id"])
+    try:
+        origin.ip = crypto.decrypt_field(get("origin_ip_enc"), f"{incident_id}|origin_ip_enc")
+        origin.message_id = crypto.decrypt_field(get("message_id_enc"),
+                                                 f"{incident_id}|message_id_enc")
+        headers = crypto.decrypt_field(get("headers_enc"), f"{incident_id}|headers_enc")
+        origin.headers = json.loads(headers) if headers else None
+    except crypto.FieldCryptoError:
+        logger.warning("forensics_decrypt_failed", incident_id=incident_id)
+    return origin
+
+
+def _row_to_record(row: dict, *, detail: bool = False, forensics: bool = False) -> IncidentRecord:
     """Convierte una fila asyncpg en un IncidentRecord Pydantic."""
     def _parse_jsonb(val: object, default: _T) -> _T:
         if isinstance(val, str):
@@ -422,6 +463,12 @@ def _row_to_record(row: dict) -> IncidentRecord:
         email_body_html=row.get("email_body_html") or "",
         email_images=email_images,
         email_attachments=email_attachments,
+        primary_category=row.get("primary_category"),
+        categories=_parse_jsonb(row.get("categories"), []),
+        impact=_parse_jsonb(row.get("impact"), {}),
+        origin=_origin(row, forensics=forensics and detail),
+        guidance=IncidentGuidance(**guidance(row.get("primary_category")))
+        if detail and row.get("primary_category") else None,
     )
 
 

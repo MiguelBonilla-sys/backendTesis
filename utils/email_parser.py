@@ -23,6 +23,7 @@ from email.message import Message
 from email.utils import getaddresses
 
 from core.logger import get_logger
+from utils.mail_forensics import Forensics, from_message
 from utils.url_parser import extract_urls_from_html, extract_urls_from_text, normalize_url
 
 logger = get_logger(__name__)
@@ -88,6 +89,7 @@ class ParsedEmail:
     # An uploaded file only declares authentication outcomes. It cannot attest
     # that a trusted receiver verified SPF/DKIM for the institutional sender.
     authentication_verified: bool = False
+    forensics: Forensics = field(default_factory=Forensics)
 
 
 # ---------------------------------------------------------------------------
@@ -155,6 +157,7 @@ def parse_eml(content: bytes) -> ParsedEmail:
         urgency_score=urgency_score,
         attachment_names=attachment_names,
         has_suspicious_attachments=has_suspicious_attachments,
+        forensics=from_message(msg, "eml"),
     )
 
 

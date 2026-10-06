@@ -14,6 +14,7 @@ from schemas.analyze import (
     BatchAnalyzeRequest,
 )
 from utils.email_parser import ParsedEmail
+from utils.mail_forensics import Forensics, from_raw
 from utils.url_parser import extract_domain
 
 logger = get_logger(__name__)
@@ -22,6 +23,7 @@ logger = get_logger(__name__)
 async def _save_analysis(
     response: AnalyzeResponse, *, email_hash: str, subject: str, sender: str,
     recipient: str, urls: list[str], content: tuple[str, list[str], list[str]] | None = None,
+    forensics: Forensics | None = None,
 ) -> None:
     from models.database import execute
 
@@ -40,6 +42,16 @@ async def _save_analysis(
         columns += ", email_body_html, email_images, email_attachments"
         html, images, attachments = content
         values.extend([html, json.dumps(images), json.dumps(attachments)])
+    if forensics is not None and forensics.header_source != "none":
+        extra = _forensic_columns(str(response.request_id), forensics)
+        columns += ", " + ", ".join(extra)
+        values.extend(extra.values())
+    from core.incident_taxonomy import categorize, impact_for
+
+    categories = categorize(response)
+    columns += ", primary_category, categories, impact"
+    values.extend([categories[0] if categories else None, json.dumps(categories),
+                   json.dumps(impact_for(categories, float(response.s_risk)))])
     columns += ", created_at, agent_status"
     values.extend([
         response.timestamp,
@@ -60,11 +72,38 @@ async def _save_analysis(
     _schedule_alert(response)
 
 
+def _forensic_columns(incident_id: str, forensics: Forensics) -> dict[str, object]:
+    """Clear, aggregable origin data plus encrypted IP, Message-ID and headers.
+
+    Without a configured key the sensitive values are not stored at all.
+    """
+    from core import crypto
+    from data_pipeline.geoip import lookup
+
+    geo = lookup(forensics.origin_ip)
+    columns: dict[str, object] = {
+        "header_source": forensics.header_source, "mail_date": forensics.mail_date,
+        "origin_country": geo.country, "origin_city": geo.city,
+        "origin_isp": geo.isp, "origin_asn": geo.asn,
+    }
+    sensitive = {
+        "origin_ip_enc": forensics.origin_ip, "message_id_enc": forensics.message_id,
+        "headers_enc": forensics.headers_json,
+    }
+    if crypto.is_configured():
+        for column, value in sensitive.items():
+            columns[column] = crypto.encrypt_field(value, f"{incident_id}|{column}")
+    elif any(sensitive.values()):
+        logger.warning("forensics_not_encrypted_skipped", request_id=incident_id)
+    return columns
+
+
 def _schedule_alert(response: AnalyzeResponse) -> None:
     """Early warning after the row is durable; never affects the analysis response."""
     if response.verdict != "PHISHING" or not settings.ALERTS_ENABLED:
         return
     from core.background import schedule
+    from core.incident_taxonomy import categorize
     from services.alerts import AlertIncident, notify_phishing
 
     schedule(
@@ -72,6 +111,7 @@ def _schedule_alert(response: AnalyzeResponse) -> None:
             incident_id=str(response.request_id), url=response.url, domain=response.domain,
             verdict=response.verdict, s_risk=float(response.s_risk),
             reasons=[str(r) for r in (response.reasons or [])],
+            category=(categorize(response) or [None])[0],
         )),
         name=f"alert:{response.request_id}",
     )
@@ -93,6 +133,7 @@ async def _persist_email_incident(response: AnalyzeResponse, body: AnalyzeEmailR
         sender=body.email_from or "", recipient=body.email_to or "", urls=body.all_urls,
         content=(body.email_body_html[:200_000] if keep_content else "",
                  body.images if keep_content else [], body.attachments if keep_content else []),
+        forensics=from_raw(body.raw_headers, body.header_source),
     )
 
 
@@ -101,7 +142,7 @@ async def _persist_eml_incident(
 ) -> None:
     await _save_analysis(
         response, email_hash=parsed.email_hash, subject=parsed.subject, sender=parsed.sender,
-        recipient="", urls=all_urls,
+        recipient="", urls=all_urls, forensics=parsed.forensics,
     )
 
 
