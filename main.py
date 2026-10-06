@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from core.config import settings
 from core.exceptions import DatabaseError
 from core.logger import logger
+from core.transport_headers import TransportHeadersMiddleware
 from models.database import close_db, init_db
 from models.redis_client import close_redis, init_redis
 from routers import (
@@ -94,6 +95,11 @@ app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
 app.include_router(analyze_router, prefix="/api/v1", tags=["analyze"])
 app.include_router(eml_router, prefix="/api/v1", tags=["analyze"])
 app.include_router(incidents_router, prefix="/api/v1", tags=["incidents"])
+
+# HSTS por fuera de toda la pila de middleware, incluido ServerErrorMiddleware:
+# los 500 de errores no manejados también deben llevar el encabezado. El
+# middleware deja pasar los scopes no-HTTP (lifespan/websocket) sin tocarlos.
+app = TransportHeadersMiddleware(app)
 
 
 if __name__ == "__main__":
