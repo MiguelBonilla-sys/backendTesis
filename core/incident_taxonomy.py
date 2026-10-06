@@ -45,10 +45,13 @@ def categorize(response: AnalyzeResponse) -> list[str]:
         return []
     idn, probe = response.idn_result, response.probe_result
     found: list[str] = []
-    if idn.is_suspicious and idn.confusable_chars:
+    # The verdict is already non-legitimate: confusables in a mixed-script name are
+    # the homograph pattern even when the IDN agent alone stayed below its threshold.
+    if idn.confusable_chars and (idn.is_suspicious or idn.is_mixed_script):
         found.append("idn_homograph")
-    if probe is not None and not probe.error and (probe.has_login_form or probe.has_password_field) \
-            and (probe.brand_impersonation or probe.external_form_action):
+    login_page = probe is not None and not probe.error and (
+        probe.has_login_form or probe.has_password_field)
+    if login_page and (probe.brand_impersonation or probe.external_form_action):
         found.append("credential_harvesting")
     if _has_reason(response, "Sender domain (", "SPF failure declared", "DKIM failure declared"):
         found.append("sender_spoofing")

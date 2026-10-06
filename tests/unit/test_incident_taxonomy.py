@@ -13,7 +13,7 @@ def test_idn_homograph_primary_and_impact():
 
 def test_credential_harvesting_and_spoofing_from_signals():
     r = _make_response()
-    r.idn_result.is_suspicious = False
+    r.idn_result.is_suspicious, r.idn_result.confusable_chars = False, []
     r.probe_result = WebProbeResult(has_login_form=True, brand_impersonation="Microsoft")
     r.reasons = ["Sender domain ('a.com') does not match return-path domain ('b.com')",
                  "Suspicious attachments detected: x.exe"]
@@ -36,7 +36,7 @@ def test_free_hosting_and_generic_and_legitimate():
 
 def test_probe_error_is_ignored():
     r = _make_response()
-    r.idn_result.is_suspicious = False
+    r.idn_result.is_suspicious, r.idn_result.confusable_chars = False, []
     r.probe_result = WebProbeResult(has_login_form=True, brand_impersonation="X", error="timeout")
     assert tx.categorize(r) == ["generic_phishing"]
 
@@ -47,3 +47,11 @@ def test_catalog_covers_every_category_in_spanish():
         assert g["label"] and g["containment"] and g["remediation"]
     assert tx.guidance(None) == {"label": "", "containment": [], "remediation": [],
                                  "references": []}
+
+
+def test_mixed_script_confusables_count_even_below_idn_threshold():
+    r = _make_response(s_risk=0.53)
+    r.idn_result.is_suspicious = False
+    assert tx.categorize(r)[0] == "idn_homograph"
+    r.idn_result.is_mixed_script = False
+    assert tx.categorize(r)[0] == "generic_phishing"

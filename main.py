@@ -22,6 +22,11 @@ from routers import (
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting BackendTesis...")
+    from core import crypto
+
+    if not crypto.is_configured():
+        # Sin llave válida los campos forenses (IP, Message-ID, encabezados) no se guardan.
+        logger.warning("field_encryption_disabled", active_kid=settings.FIELD_ENC_ACTIVE or None)
     await init_db()
     from agents.idn_agent import idn_agent
     from agents.llm_agent import llm_agent
