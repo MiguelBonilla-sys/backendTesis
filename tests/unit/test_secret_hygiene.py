@@ -39,3 +39,18 @@ async def test_safe_browsing_key_goes_in_header_not_url(monkeypatch):
     assert await ThreatIntelService()._query_gsb("https://example.org/") == 0.0
     assert "AIza-test-key" not in seen["url"] and not seen["params"]
     assert seen["headers"]["X-Goog-Api-Key"] == "AIza-test-key"
+
+
+def test_rate_limits_come_from_settings():
+    """T35: RATE_LIMIT_* existían pero los routers usaban números fijos."""
+    import re
+    from pathlib import Path
+
+    routers = Path(__file__).resolve().parents[2] / "routers"
+    fixed = [
+        f"{p.name}:{m.group(0)}"
+        for p in routers.glob("*.py")
+        for m in re.finditer(r"check_rate_limit\((?:(?!window_seconds).)*?limit=\d+",
+                             p.read_text(), re.S)
+    ]
+    assert fixed == []

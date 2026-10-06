@@ -21,6 +21,7 @@ from auth.permissions import has_permission, require_permission
 from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
 from core.exceptions import DatabaseError
 from core.incident_taxonomy import CATEGORIES, guidance
+from core.config import settings
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from data_pipeline.knowledge_updater import knowledge_updater
@@ -113,7 +114,7 @@ async def list_incidents(
     """
     # Rate limiting: 30 req/min por IP (CA-4)
     client_ip = get_client_ip(http_request)
-    await check_rate_limit(f"rl:incidents:{client_ip}", limit=30, window_seconds=60)
+    await check_rate_limit(f"rl:incidents:{client_ip}", limit=settings.RATE_LIMIT_INCIDENTS, window_seconds=60)
 
     offset = (page - 1) * page_size
 
@@ -361,7 +362,7 @@ async def get_incidents_by_hash(
     capturado por la extensión.
     """
     client_ip = get_client_ip(http_request)
-    await check_rate_limit(f"rl:incidents:{client_ip}", limit=30, window_seconds=60)
+    await check_rate_limit(f"rl:incidents:{client_ip}", limit=settings.RATE_LIMIT_INCIDENTS, window_seconds=60)
 
     offset = (page - 1) * page_size
 
@@ -493,7 +494,7 @@ async def submit_feedback(
     immediate ChromaDB ingestion so future RAG queries benefit from the pattern.
     Other verdicts are queued for batch ingestion via process_feedback_queue().
     """
-    await check_rate_limit(f"rl:feedback:{get_client_ip(request)}", limit=30, window_seconds=60)
+    await check_rate_limit(f"rl:feedback:{get_client_ip(request)}", limit=settings.RATE_LIMIT_FEEDBACK, window_seconds=60)
 
     incident = await fetchrow(
         "SELECT id, url, domain, verdict, s_risk, s_idn, s_llm, s_ti, llm_reason, reasons "

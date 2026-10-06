@@ -78,7 +78,7 @@ async def analyze_eml_file(
     5. Agrega veredicto email: max(s_risk) de todas las URLs analizadas.
     """
     client_ip = get_client_ip(http_request)
-    await check_rate_limit(f"rl:analyze_eml:{client_ip}", limit=10, window_seconds=60)
+    await check_rate_limit(f"rl:analyze_eml:{client_ip}", limit=settings.RATE_LIMIT_ANALYZE_EML, window_seconds=60)
 
     if not (file.filename or "").lower().endswith(".eml"):
         raise HTTPException(
@@ -244,7 +244,7 @@ async def report_url(
     Registrado en incidents table con s_risk=1.0 (PHISHING) o 0.5 (SUSPICIOUS).
     """
     client_ip = get_client_ip(http_request)
-    await check_rate_limit(f"rl:report:{client_ip}", limit=20, window_seconds=60)
+    await check_rate_limit(f"rl:report:{client_ip}", limit=settings.RATE_LIMIT_REPORT, window_seconds=60)
 
     report_id = str(uuid.uuid4())
     now = datetime.now(UTC)

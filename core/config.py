@@ -90,8 +90,16 @@ class Settings(BaseSettings):
     # Rate limiting. Socket peer is authoritative unless an explicit proxy CIDR
     # is configured and the entire right-hand proxy chain is trusted.
     TRUSTED_PROXY_CIDRS: list[str] = []
+    # Peticiones por IP cada 60 s. Antes RATE_LIMIT_ANALYZE/REPORT existían pero los routers
+    # usaban números fijos (hallazgo de T35); ahora mandan estos valores.
     RATE_LIMIT_ANALYZE: int = 100
+    RATE_LIMIT_ANALYZE_EMAIL: int = 30
+    RATE_LIMIT_ANALYZE_BATCH: int = 20
+    RATE_LIMIT_ANALYZE_EML: int = 10
     RATE_LIMIT_REPORT: int = 20
+    RATE_LIMIT_INCIDENTS: int = 30
+    RATE_LIMIT_FEEDBACK: int = 30
+    RATE_LIMIT_REGISTER: int = 5  # por hora
     RATE_LIMIT_LOGIN_IP: int = 20
     RATE_LIMIT_LOGIN_IDENTITY: int = 10
     RATE_LIMIT_LOGIN_WINDOW_SECONDS: int = 300

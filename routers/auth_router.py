@@ -207,7 +207,8 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
     """
     validate_origin(request, cookie_auth=has_auth_cookies(request))
     await check_rate_limit(
-        f"rl:register:{get_client_ip(request)}", limit=5, window_seconds=3600, fail_closed=True
+        f"rl:register:{get_client_ip(request)}", limit=settings.RATE_LIMIT_REGISTER,
+        window_seconds=3600, fail_closed=True
     )
 
     email = payload.email.strip().lower()
