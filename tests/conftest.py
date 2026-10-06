@@ -49,6 +49,15 @@ def _stub_startup_knowledge_io(request):
         yield
 
 
+@pytest.fixture(autouse=True)
+def _mfa_and_alerts_off(monkeypatch):
+    """MFA and outbound alerts are opt-in per test (test_mfa, test_alerts enable them)."""
+    from core.config import settings
+
+    monkeypatch.setattr(settings, "MFA_ENABLED", False)
+    monkeypatch.setattr(settings, "ALERTS_ENABLED", False)
+
+
 @pytest.fixture
 def auth_store(monkeypatch):
     """Opt-in auth persistence double; all security checks remain active."""

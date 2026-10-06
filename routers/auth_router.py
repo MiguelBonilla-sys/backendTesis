@@ -9,6 +9,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from auth.dependencies import require_auth
 from auth.jwt import decode_token
+from auth.mfa import (
+    MfaError,
+    new_recovery_codes,
+    requires_mfa,
+    resend_code,
+    start_challenge,
+    verify_challenge,
+)
 from auth.origins import has_auth_cookies, validate_origin
 from auth.sessions import issue_session, revoke_session, rotate_session
 from core.config import settings
@@ -17,9 +25,13 @@ from core.exceptions import AuthenticationError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
 from core.security import hash_email, hash_password_async
-from models.database import execute
+from models.database import execute, log_audit_event
 from schemas.auth import (
     LoginRequest,
+    MfaChallengeResponse,
+    MfaResendRequest,
+    MfaVerifyRequest,
+    RecoveryCodesResponse,
     RefreshRequest,
     RegisterRequest,
     TokenResponse,
@@ -76,8 +88,10 @@ def _clear_auth_cookies(response: Response) -> None:
 # --------------------------------------------------------------------------- #
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(payload: LoginRequest, request: Request, response: Response) -> TokenResponse:
+@router.post("/login", response_model=TokenResponse | MfaChallengeResponse)
+async def login(
+    payload: LoginRequest, request: Request, response: Response,
+) -> TokenResponse | MfaChallengeResponse:
     """Authenticate against the current account under identity and IP budgets."""
     validate_origin(request, cookie_auth=has_auth_cookies(request))
     identity = payload.username.strip().lower()
@@ -99,10 +113,71 @@ async def login(payload: LoginRequest, request: Request, response: Response) -> 
         raise HTTPException(
             status_code=401, detail="Invalid credentials", headers={"WWW-Authenticate": "Bearer"}
         )
+    if requires_mfa(user.role):
+        try:
+            challenge_id, sent = await start_challenge(user.username)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Second factor unavailable") from exc
+        await log_audit_event("mfa_challenge", "SUCCESS" if sent else "FAILURE",
+                              actor=user.username, detail={"email_sent": sent})
+        logger.info("login_mfa_challenge", username=user.username, email_sent=sent)
+        return MfaChallengeResponse(challenge_id=challenge_id, email_sent=sent,
+                                    expires_in=settings.MFA_OTP_TTL_SECONDS)
     issued = _token_response(await issue_session(user.username))
     logger.info("login_success", username=user.username, role=issued.role)
     _set_auth_cookies(response, issued.access_token, issued.refresh_token or "")
     return issued
+
+
+# --------------------------------------------------------------------------- #
+# POST /auth/mfa/*  — segundo factor del admin (RFS-01)
+# --------------------------------------------------------------------------- #
+
+_MFA_STATUS = {"cooldown": 429, "too_many_codes": 429, "too_many_attempts": 429}
+
+
+@router.post("/mfa/verify", response_model=TokenResponse)
+async def mfa_verify(
+    payload: MfaVerifyRequest, request: Request, response: Response,
+) -> TokenResponse:
+    validate_origin(request, cookie_auth=has_auth_cookies(request))
+    await check_rate_limit(
+        f"rl:mfa:ip:{get_client_ip(request)}",
+        limit=settings.RATE_LIMIT_LOGIN_IP,
+        window_seconds=settings.RATE_LIMIT_LOGIN_WINDOW_SECONDS,
+        fail_closed=True,
+    )
+    try:
+        subject = await verify_challenge(payload.challenge_id, payload.code)
+    except MfaError as exc:
+        await log_audit_event("mfa_failed", "FAILURE", detail={"reason": exc.reason})
+        raise HTTPException(status_code=_MFA_STATUS.get(exc.reason, 401),
+                            detail=f"Second factor rejected: {exc.reason}") from exc
+    issued = _token_response(await issue_session(subject))
+    await log_audit_event("mfa_verified", "SUCCESS", actor=subject)
+    _set_auth_cookies(response, issued.access_token, issued.refresh_token or "")
+    return issued
+
+
+@router.post("/mfa/resend", status_code=status.HTTP_202_ACCEPTED)
+async def mfa_resend(payload: MfaResendRequest, request: Request) -> dict:
+    validate_origin(request, cookie_auth=has_auth_cookies(request))
+    try:
+        sent = await resend_code(payload.challenge_id)
+    except MfaError as exc:
+        raise HTTPException(status_code=_MFA_STATUS.get(exc.reason, 401),
+                            detail=f"Cannot resend: {exc.reason}") from exc
+    return {"email_sent": sent}
+
+
+@router.post("/mfa/recovery-codes", response_model=RecoveryCodesResponse)
+async def mfa_recovery_codes(current_user: dict = Depends(require_auth)) -> RecoveryCodesResponse:
+    """Generate new one-time recovery codes for the current admin (shown once)."""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Recovery codes are for admin accounts")
+    codes = await new_recovery_codes(current_user["sub"])
+    await log_audit_event("mfa_recovery_regenerated", "SUCCESS", actor=current_user["sub"])
+    return RecoveryCodesResponse(codes=codes)
 
 
 # --------------------------------------------------------------------------- #

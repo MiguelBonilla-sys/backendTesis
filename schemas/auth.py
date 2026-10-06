@@ -52,3 +52,26 @@ class TokenPayload(BaseModel):
     jti: str = Field(..., min_length=1)
     iat: int
     exp: int
+
+
+class MfaChallengeResponse(BaseModel):
+    """Login de un admin: falta el segundo factor; no hay tokens todavía."""
+
+    mfa_required: Literal[True] = True
+    challenge_id: str
+    expires_in: int
+    email_sent: bool
+
+
+class MfaVerifyRequest(BaseModel):
+    challenge_id: str = Field(..., min_length=16, max_length=64)
+    # 6 dígitos del correo, o un código de recuperación xxxx-xxxx.
+    code: str = Field(..., pattern=r"^([0-9]{6}|[0-9a-fA-F]{4}-[0-9a-fA-F]{4})$")
+
+
+class MfaResendRequest(BaseModel):
+    challenge_id: str = Field(..., min_length=16, max_length=64)
+
+
+class RecoveryCodesResponse(BaseModel):
+    codes: list[str]
