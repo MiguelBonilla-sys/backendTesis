@@ -202,6 +202,7 @@ async def get_current_user_info(
     return UserInfo(
         username=current_user.get("sub", ""),
         role=current_user.get("role", "viewer"),
+        permissions=list(current_user.get("permissions") or []),
     )
 
 

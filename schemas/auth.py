@@ -41,6 +41,7 @@ class RefreshRequest(BaseModel):
 class UserInfo(BaseModel):
     username: str
     role: Literal["admin", "student", "viewer"]
+    permissions: list[str] = []
 
 
 class TokenPayload(BaseModel):

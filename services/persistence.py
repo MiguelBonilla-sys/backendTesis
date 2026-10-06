@@ -57,6 +57,24 @@ async def _save_analysis(
                      error_type=type(exc).__name__)
         raise DatabaseError("Unable to save the analysis") from exc
     logger.info("incident_persisted", request_id=response.request_id)
+    _schedule_alert(response)
+
+
+def _schedule_alert(response: AnalyzeResponse) -> None:
+    """Early warning after the row is durable; never affects the analysis response."""
+    if response.verdict != "PHISHING" or not settings.ALERTS_ENABLED:
+        return
+    from core.background import schedule
+    from services.alerts import AlertIncident, notify_phishing
+
+    schedule(
+        notify_phishing(AlertIncident(
+            incident_id=str(response.request_id), url=response.url, domain=response.domain,
+            verdict=response.verdict, s_risk=float(response.s_risk),
+            reasons=[str(r) for r in (response.reasons or [])],
+        )),
+        name=f"alert:{response.request_id}",
+    )
 
 
 async def _persist_incident(response: AnalyzeResponse, body: AnalyzeRequest) -> None:
