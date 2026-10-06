@@ -232,4 +232,51 @@ INSERT INTO schema_migrations(version) VALUES ('002_audit_event_identity') ON CO
 -- 003: preserve detector availability separately from numeric scores.
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS agent_status JSONB NOT NULL DEFAULT '{}';
 INSERT INTO schema_migrations(version) VALUES ('003_agent_status') ON CONFLICT DO NOTHING;
+
+-- 004: administrable roles. users.role stays as the base role used by the JWT claim.
+-- System roles use fixed UUIDs so the bilateral sync (merge by PK) sees the same rows.
+CREATE TABLE IF NOT EXISTS roles (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        VARCHAR(60)  UNIQUE NOT NULL,
+    description TEXT         NOT NULL DEFAULT '',
+    permissions JSONB        NOT NULL DEFAULT '[]',
+    is_system   BOOLEAN      NOT NULL DEFAULT false,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+INSERT INTO roles (id, name, description, permissions, is_system) VALUES
+    ('00000000-0000-4000-8000-000000000001', 'admin', 'Administrador de seguridad',
+     '["analyze:run","incidents:read","incidents:feedback","incidents:forensics","metrics:read","settings:read","settings:write","users:manage","roles:manage","alerts:receive","audit:read"]', true),
+    ('00000000-0000-4000-8000-000000000002', 'student', 'Estudiante',
+     '["analyze:run"]', true),
+    ('00000000-0000-4000-8000-000000000003', 'viewer', 'Consulta',
+     '["analyze:run","incidents:read","metrics:read"]', true)
+ON CONFLICT (id) DO NOTHING;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role_id UUID REFERENCES roles(id);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS mfa_recovery JSONB NOT NULL DEFAULT '[]';
+CREATE INDEX IF NOT EXISTS ix_users_role_id ON users(role_id);
+INSERT INTO schema_migrations(version) VALUES ('004_rbac') ON CONFLICT DO NOTHING;
+
+-- 005: message forensics. IP, Message-ID and headers are stored encrypted (core/crypto.py).
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS mail_date TIMESTAMPTZ;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS origin_country CHAR(2);
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS origin_city TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS origin_isp TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS origin_asn INTEGER;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS header_source VARCHAR(20) NOT NULL DEFAULT 'none';
+ALTER TABLE incidents DROP CONSTRAINT IF EXISTS incidents_header_source_check;
+ALTER TABLE incidents ADD CONSTRAINT incidents_header_source_check
+    CHECK (header_source IN ('outlook-addin', 'eml', 'gmail-original', 'none'));
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS origin_ip_enc TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS message_id_enc TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS headers_enc TEXT;
+CREATE INDEX IF NOT EXISTS ix_incidents_country ON incidents(origin_country);
+INSERT INTO schema_migrations(version) VALUES ('005_forensics') ON CONFLICT DO NOTHING;
+
+-- 006: incident classification (category, CIA impact).
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS primary_category VARCHAR(40);
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS categories JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS impact JSONB NOT NULL DEFAULT '{}';
+CREATE INDEX IF NOT EXISTS ix_incidents_category ON incidents(primary_category);
+INSERT INTO schema_migrations(version) VALUES ('006_classification') ON CONFLICT DO NOTHING;
 COMMIT;

@@ -19,7 +19,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 
-from auth.dependencies import require_auth
+from auth.permissions import require_permission
 from core.config import settings
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
@@ -65,7 +65,7 @@ _EML_MAX_URLS = 10  # máximo de URLs únicas a analizar por email
 async def analyze_eml_file(
     http_request: Request,
     file: UploadFile = File(..., description="Archivo .eml a analizar"),
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(require_permission("analyze:run")),
 ) -> EmailAnalysisResponse:
     """
     Pipeline de análisis de email completo:
@@ -236,7 +236,7 @@ async def analyze_eml_file(
 async def report_url(
     http_request: Request,
     body: ReportRequest,
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(require_permission("analyze:run")),
 ) -> ReportResponse:
     """
     Reporte manual de URL como phishing/suspicious.

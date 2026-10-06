@@ -112,11 +112,21 @@ async def test_legacy_upgrade_preserves_identity_and_is_repeatable(databases):
     await db.execute(SCHEMA)
     user = await db.fetchrow("SELECT * FROM users WHERE id=$1", user_id)
     assert (user["email"], user["password_hash"], user["role"]) == ("legacy", "hash", "viewer")
-    assert await db.fetchval("SELECT count(*) FROM schema_migrations") == 3
+    assert await db.fetchval("SELECT count(*) FROM schema_migrations") == 6
+    assert await db.fetchval("SELECT count(*) FROM roles WHERE is_system") == 3
     await replica.execute(SCHEMA)
+    await db.execute(
+        "INSERT INTO roles(name, permissions) VALUES ('soc', '[\"incidents:read\"]')"
+    )
+    await db.execute(
+        "UPDATE users SET role_id = (SELECT id FROM roles WHERE name='soc') WHERE id=$1", user_id
+    )
     await sync(db, replica)
     copied = await replica.fetchrow("SELECT * FROM users WHERE id=$1", user_id)
     assert (copied["email"], copied["role"]) == ("legacy", "viewer")
+    assert await replica.fetchval(
+        "SELECT r.name FROM users u JOIN roles r ON r.id = u.role_id WHERE u.id=$1", user_id
+    ) == "soc"
     assert (
         await db.fetchval(
             "SELECT count(*) FROM information_schema.columns "

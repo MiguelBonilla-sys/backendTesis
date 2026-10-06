@@ -15,7 +15,7 @@ import os
 from core.config import settings
 
 _UUID_TABLES = [
-    "users", "incidents", "analyzed_urls", "idn_scores", "ti_results", "feedback",
+    "roles", "users", "incidents", "analyzed_urls", "idn_scores", "ti_results", "feedback",
     "simulation_events", "theta_calibrations", "weight_calibrations",
 ]
 _BATCH = 500
@@ -91,9 +91,13 @@ async def sync(src, dst, *, dry: bool = False) -> dict[str, int]:
             for table in _UUID_TABLES:
                 if not await _cols(src, table) or set(await _cols(src, table)) != set(await _cols(dst, table)):
                     raise RuntimeError(f"Schema mismatch for {table}")
-            pruned = sum([await _prune_table(src, dst, t, dry=dry) for t in reversed(_UUID_TABLES) if t != "users"])
+            # users.role_id references roles: merge roles first, prune them last.
+            parents = ("users", "roles")
+            pruned = sum([await _prune_table(src, dst, t, dry=dry)
+                          for t in reversed(_UUID_TABLES) if t not in parents])
             copied = sum([await _merge_uuid_table(src, dst, t, dry=dry) for t in _UUID_TABLES])
-            pruned += await _prune_table(src, dst, "users", dry=dry)
+            for parent in parents:
+                pruned += await _prune_table(src, dst, parent, dry=dry)
             audit = await _append_audit_log(src, dst, dry=dry)
             audit += await _append_audit_log(dst, src, dry=dry)
     return {"copied": copied, "deleted": pruned, "audit_appended": audit}

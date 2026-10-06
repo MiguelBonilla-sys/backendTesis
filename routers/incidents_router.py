@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from auth.dependencies import require_admin
+from auth.permissions import require_permission
 from core.constants import ALPHA, BETA, GAMMA, THETA, W_GSB, W_URLSCAN, W_VT
 from core.exceptions import DatabaseError
 from core.logger import get_logger
@@ -89,7 +89,7 @@ async def list_incidents(
         pattern="^(PHISHING|LEGITIMATE|SUSPICIOUS)$",
         description="Filtrar por veredicto",
     ),
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("incidents:read")),
 ) -> IncidentListResponse:
     """
     Lista incidentes almacenados en PostgreSQL.
@@ -180,7 +180,7 @@ async def list_incidents(
 )
 async def get_incident(
     incident_id: str,
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("incidents:read")),
 ) -> IncidentRecord:
     """
     Retorna un único incidente identificado por su UUID.
@@ -235,7 +235,7 @@ async def get_incident(
     summary="Métricas de análisis del día actual",
 )
 async def get_metrics_summary(
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("metrics:read")),
 ) -> MetricsSummary:
     """Retorna totales de hoy agrupados por veredicto."""
     try:
@@ -280,7 +280,7 @@ async def get_metrics_summary(
     summary="Parámetros actuales del modelo de fusión",
 )
 async def get_settings(
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("settings:read")),
 ) -> FusionSettings:
     """Retorna los parámetros de fusión activos (alpha, gamma, theta, etc.).
 
@@ -336,7 +336,7 @@ async def get_incidents_by_hash(
     email_hash: str,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
-    current_user: dict = Depends(require_admin),
+    current_user: dict = Depends(require_permission("incidents:read")),
 ) -> IncidentListResponse:
     """
     Retorna todos los incidentes que comparten el mismo email_hash.
@@ -438,7 +438,7 @@ async def submit_feedback(
     incident_id: UUID,
     body: FeedbackRequest,
     request: Request,
-    current_user=Depends(require_admin),
+    current_user=Depends(require_permission("incidents:feedback")),
 ) -> FeedbackResponse:
     """
     Admin confirms or corrects a verdict. Confirmed PHISHING verdicts trigger

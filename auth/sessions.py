@@ -49,7 +49,9 @@ def _unavailable() -> HTTPException:
 async def current_account(subject: str) -> dict:
     try:
         row = await fetchrow(
-            "SELECT id, email, password_hash, role, is_active FROM users WHERE email = $1",
+            "SELECT u.id, u.email, u.password_hash, u.role, u.is_active, u.role_id, "
+            "r.permissions AS role_permissions "
+            "FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.email = $1",
             subject,
         )
     except Exception as exc:
@@ -108,7 +110,15 @@ async def validate_session(payload: dict) -> dict:
             raise _unauthorized()
     except (KeyError, ValueError, TypeError) as exc:
         raise _unauthorized() from exc
-    return {**payload, "role": account["role"], "id": str(account["id"])}
+    from auth.permissions import effective_permissions
+
+    permissions = effective_permissions(
+        account["role"], account.get("role_permissions") if account.get("role_id") else None
+    )
+    return {
+        **payload, "role": account["role"], "id": str(account["id"]),
+        "permissions": sorted(permissions),
+    }
 
 
 async def rotate_session(payload: dict) -> tuple[str, str, str]:

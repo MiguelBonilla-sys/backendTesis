@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from auth.dependencies import require_auth
+from auth.permissions import require_permission
 from core.exceptions import IDNAnalysisError, ThreatIntelError
 from core.logger import get_logger
 from core.rate_limiter import check_rate_limit, get_client_ip
@@ -66,7 +66,7 @@ router = APIRouter(tags=["analyze"])
 async def analyze_url(
     http_request: Request,
     body: AnalyzeRequest,
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(require_permission("analyze:run")),
 ) -> AnalyzeResponse:
     """
     Pipeline de análisis IDN:
@@ -171,7 +171,7 @@ async def analyze_url(
 async def analyze_email(
     http_request: Request,
     body: AnalyzeEmailRequest,
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(require_permission("analyze:run")),
 ) -> AnalyzeEmailResponse:
     """
     Pipeline de análisis de email completo desde la extensión:
@@ -305,7 +305,7 @@ async def analyze_email(
 async def analyze_url_batch(
     http_request: Request,
     body: BatchAnalyzeRequest,
-    current_user: dict = Depends(require_auth),
+    current_user: dict = Depends(require_permission("analyze:run")),
 ) -> BatchAnalyzeResponse:
     """
     Análisis paralelo de múltiples URLs:

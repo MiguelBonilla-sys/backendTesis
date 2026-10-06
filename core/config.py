@@ -205,5 +205,33 @@ class Settings(BaseSettings):
     # Logging
     LOG_LEVEL: str = "INFO"
 
+    # Cifrado de campos forenses (AES-256-GCM). JSON {"kid": "<base64 de 32 bytes>"}.
+    # Sin llaves configuradas los campos cifrados no se persisten (quedan NULL).
+    FIELD_ENC_KEYS: str = ""
+    FIELD_ENC_ACTIVE: str = ""
+
+    # Correo saliente (Resend) y alertas tempranas.
+    RESEND_API_KEY: str = ""
+    RESEND_API_URL: str = "https://api.resend.com/emails"
+    MAIL_FROM: str = ""
+    MAIL_DRY_RUN: bool = False
+    MAIL_TIMEOUT_S: float = Field(default=10.0, gt=0, le=60)
+    ALERTS_ENABLED: bool = True
+    ALERT_DAILY_CAP: int = Field(default=60, ge=0, le=1000)
+    ALERT_DEDUPE_SECONDS: int = Field(default=3600, ge=60, le=86400)
+    ALERT_FALLBACK_RECIPIENT: str = ""
+    DASHBOARD_URL: str = "https://dashdect.mangel.dpdns.org"
+
+    # MFA por OTP al correo para el rol base admin.
+    MFA_ENABLED: bool = True
+    MFA_OTP_TTL_SECONDS: int = Field(default=300, ge=60, le=900)
+    MFA_MAX_ATTEMPTS: int = Field(default=5, ge=1, le=10)
+    MFA_RESEND_COOLDOWN_SECONDS: int = Field(default=30, ge=5, le=300)
+    OTP_DAILY_CAP: int = Field(default=40, ge=1, le=1000)
+
+    # GeoIP local (DB-IP Lite, MMDB). Vacío = sin geolocalización.
+    GEOIP_CITY_DB: str = ""
+    GEOIP_ASN_DB: str = ""
+
 
 settings = Settings()
