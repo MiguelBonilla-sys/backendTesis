@@ -31,10 +31,10 @@ def _backend_available() -> bool:
         return False
 
 
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.system, pytest.mark.skipif(
     os.getenv("RUN_LIVE_TESTS") != "1",
     reason="Opt in with RUN_LIVE_TESTS=1 and seeded test credentials",
-)
+)]
 
 
 @pytest.fixture(scope="module", autouse=True)

@@ -87,3 +87,4 @@ class TestRateLimitIntegration:
                 await check_rate_limit("test_key", limit=100, window_seconds=60)
             assert exc_info.value.status_code == 429
             assert "Retry-After" in exc_info.value.headers
+pytestmark = [pytest.mark.regression]

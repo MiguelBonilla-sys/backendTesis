@@ -382,3 +382,4 @@ class TestThesisAcceptanceCriteria:
         assert false_positives == [], (
             f"False positives: {false_positives}"
         )
+pytestmark = [pytest.mark.acceptance]

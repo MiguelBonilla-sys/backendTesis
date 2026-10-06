@@ -58,6 +58,28 @@ def _mfa_and_alerts_off(monkeypatch):
     monkeypatch.setattr(settings, "ALERTS_ENABLED", False)
 
 
+@pytest.hookimpl(tryfirst=True)
+def pytest_collection_modifyitems(config, items):
+    """T35: asigna el marcador de tipo por directorio cuando no hay uno explícito.
+
+    unit ← tests/unit, integration ← tests/integration. Los archivos con
+    pytestmark explícito (system, regression, smoke, sanity, acceptance)
+    conservan sus etiquetas; la suma de tipos cubre toda la suite.
+    """
+    for item in items:
+        if (
+            item.get_closest_marker("unit")
+            or item.get_closest_marker("integration")
+            or item.get_closest_marker("system")
+        ):
+            continue
+        path = str(item.fspath)
+        if "/tests/unit/" in path:
+            item.add_marker(pytest.mark.unit)
+        elif "/tests/integration/" in path:
+            item.add_marker(pytest.mark.integration)
+
+
 @pytest.fixture
 def auth_store(monkeypatch):
     """Opt-in auth persistence double; all security checks remain active."""

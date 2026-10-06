@@ -95,3 +95,4 @@ class TestDecodeToken:
         assert payload["sub"] == "user1"
         assert payload["role"] == "admin"
         assert payload["custom"] == "value"
+pytestmark = [pytest.mark.smoke]

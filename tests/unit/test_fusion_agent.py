@@ -827,3 +827,4 @@ class TestProbeBoostGate:
         )
         assert response.agent_scores.s_probe == pytest.approx(0.45, abs=1e-6)
         assert response.verdict == "PHISHING"
+pytestmark = [pytest.mark.sanity]

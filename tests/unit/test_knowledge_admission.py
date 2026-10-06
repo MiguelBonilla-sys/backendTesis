@@ -179,3 +179,4 @@ def test_expired_and_undated_legacy_auto_never_retrieved():
     assert eligible_document(
         {"document": "seed evidence", "metadata": {"source": "admin_confirmed"}}
     )
+pytestmark = [pytest.mark.regression]

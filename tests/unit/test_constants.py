@@ -102,3 +102,4 @@ class TestCacheConstants:
 
     def test_rag_top_k_positive(self):
         assert RAG_TOP_K > 0
+pytestmark = [pytest.mark.smoke]

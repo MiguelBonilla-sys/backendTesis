@@ -615,3 +615,4 @@ class TestAnalyzeGenericExceptionPaths:
             )
         assert resp.status_code == 500
         assert "pipeline error" in resp.json()["detail"].lower()
+pytestmark = [pytest.mark.acceptance]
