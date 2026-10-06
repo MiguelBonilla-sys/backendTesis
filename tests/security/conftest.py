@@ -23,6 +23,10 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    for item in items:
+        # T35: la suite de seguridad es de tipo `system` (stack/live).
+        if "/tests/security/" in str(item.fspath):
+            item.add_marker(pytest.mark.system)
     if _LIVE:
         return
     skip = pytest.mark.skip(reason="live: exportá SECURITY_LIVE=1, SECURITY_LIVE_USER y SECURITY_LIVE_PASSWORD")

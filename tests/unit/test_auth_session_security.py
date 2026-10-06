@@ -364,3 +364,4 @@ def test_explicit_invalid_logout_token_cannot_revoke_ambient_cookie(client, auth
         client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {access}"}).status_code
         == 200
     )
+pytestmark = [pytest.mark.regression]

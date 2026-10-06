@@ -305,3 +305,4 @@ def _args(**kwargs):
         batch_size = kwargs.get("batch_size", 100)
 
     return Args()
+pytestmark = [pytest.mark.regression]

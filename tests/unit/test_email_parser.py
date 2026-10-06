@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import hashlib
 
+import pytest
+
 from utils.email_parser import (
     ParsedEmail,
     _detect_urgency,
@@ -263,3 +265,4 @@ class TestExtractEmailDomain:
 
     def test_lowercase_result(self):
         assert _extract_email_domain("User@PAYPAL.COM") == "paypal.com"
+pytestmark = [pytest.mark.sanity]

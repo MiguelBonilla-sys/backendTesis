@@ -263,3 +263,4 @@ async def test_retention_is_dry_by_default_and_preserves_recent_rows(databases):
         await db.fetchval("SELECT email_subject FROM incidents WHERE domain='new.example'")
         == "new subject"
     )
+pytestmark = [pytest.mark.acceptance]

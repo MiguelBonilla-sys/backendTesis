@@ -19,6 +19,15 @@ target-version = ["py311"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=. --cov-report=term-missing --cov-fail-under=90"
+markers = [
+    "unit: pruebas aisladas sin servicios externos (tests/unit)",
+    "integration: pruebas contra PostgreSQL/Redis/Chroma reales y efímeros (tests/integration)",
+    "system: pruebas que requieren el stack completo o servicios live (tests/security, agents live)",
+    "regression: pruebas que fijan bugs ya corregidos (no deben volver)",
+    "smoke: subconjunto rápido de primitivas del núcleo para verificar salud",
+    "sanity: chequeo profundo y estrecho de un componente (parsers, fusión)",
+    "acceptance: pruebas ligadas a criterios de aceptación de la spec",
+]
 
 [tool.coverage.run]
 omit = ["tests/*", "scripts/*", "docs/*"]

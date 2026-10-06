@@ -88,3 +88,4 @@ def test_unknown_format_and_kid(keys):
         crypto.decrypt_field("v1:zz:AAAA", "a")
     with pytest.raises(crypto.FieldCryptoError):
         crypto.decrypt_field("v1:k1:@@@", "a")
+pytestmark = [pytest.mark.smoke]

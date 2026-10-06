@@ -58,3 +58,4 @@ async def test_calibration_outage_keeps_static_configuration(dependencies):
     dependencies["theta"].side_effect = RuntimeError("no calibration")
     async with lifespan(app):
         dependencies["llm"].assert_awaited_once()
+pytestmark = [pytest.mark.smoke]

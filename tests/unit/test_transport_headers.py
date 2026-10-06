@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from starlette.responses import PlainTextResponse
 
 from core.transport_headers import TransportHeadersMiddleware
+import pytest
 
 HSTS = "Strict-Transport-Security"
 POLICY = "max-age=31536000"
@@ -139,3 +140,4 @@ def test_real_main_app_emits_hsts_on_health_and_404():
     client = TestClient(app, raise_server_exceptions=False)
     assert client.get("/health").headers[HSTS] == POLICY
     assert client.get("/definitely-not-a-route").headers[HSTS] == POLICY
+pytestmark = [pytest.mark.regression]

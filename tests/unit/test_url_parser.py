@@ -288,3 +288,4 @@ class TestSanitizePath:
         # "." resolves to cwd itself — allowed
         result = sanitize_path(str(tmp_path))
         assert result == str(tmp_path)
+pytestmark = [pytest.mark.sanity]
