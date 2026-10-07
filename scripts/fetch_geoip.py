@@ -32,7 +32,8 @@ def fetch(dest: Path, today: date | None = None) -> None:
             try:
                 # DB-IP responde 403 al User-Agent por defecto de urllib.
                 req = urllib.request.Request(url, headers={"User-Agent": "tesis-idn-geoip/1.0"})
-                with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310  # nosec B310 — URL fija https
+                # nosemgrep: dynamic-urllib-use-detected  (URL fija https de DB-IP)
+                with urllib.request.urlopen(req, timeout=120) as resp:  # noqa: S310  # nosec B310
                     data = gzip.decompress(resp.read())
             except OSError as exc:
                 print(f"{kind} {month}: {exc}", file=sys.stderr)
