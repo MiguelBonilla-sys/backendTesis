@@ -213,3 +213,5 @@ __marimo__/
 .claudeignore
 .claude
 CLAUDE.md
+# DB-IP Lite (CC BY 4.0): se descarga, no se versiona
+data/geoip/

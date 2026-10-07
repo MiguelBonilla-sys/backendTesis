@@ -28,6 +28,12 @@ RUN python -c "from huggingface_hub import hf_hub_download; \
     local_dir='/opt/models/phishing-url-detection')" \
     && chown -R appuser:appuser /opt/models
 
+# GeoIP de T26: DB-IP Lite City + ASN (CC BY 4.0) bajados en build, como el modelo ONNX.
+COPY scripts/fetch_geoip.py /tmp/fetch_geoip.py
+RUN python /tmp/fetch_geoip.py /opt/geoip && rm /tmp/fetch_geoip.py
+ENV GEOIP_CITY_DB=/opt/geoip/dbip-city-lite.mmdb \
+    GEOIP_ASN_DB=/opt/geoip/dbip-asn-lite.mmdb
+
 COPY --chown=appuser:appuser . .
 RUN mkdir -p "$HF_HOME" && chown -R appuser:appuser "$HF_HOME" /app
 
