@@ -112,9 +112,25 @@ class TestMailer:
 class TestRender:
     def test_escapes_html_and_links_incident(self):
         subject, text, html = alerts.render_alert(_incident(reasons=["<script>x</script>"]))
-        assert "paypa1.com" in subject
+        assert "paypa1[.]com" in subject
         assert "<script>" not in html and "&lt;script&gt;" in html
         assert "/incidents/inc-1" in text
+
+    def test_indicators_are_defanged_and_only_dashboard_is_linked(self, monkeypatch):
+        monkeypatch.setattr(settings, "DASHBOARD_URL", "https://dash.example.org")
+        subject, text, html = alerts.render_alert(_incident(
+            domain="secure-paypa1-login.test", reasons=["Redirige a evil.example.com/x"]))
+        assert "secure-paypa1-login[.]test" in subject and "Phishing" not in subject
+        assert "hxxps://secure-paypa1-login[.]test/login" in text
+        assert "evil[.]example[.]com/x" in text
+        for body in (text, html):
+            assert "secure-paypa1-login.test" not in body and "https://secure" not in body
+        assert html.count("<a ") == 1 and 'href="https://dash.example.org/incidents/inc-1"' in html
+
+    def test_defang_keeps_plain_prose(self):
+        prose = "Dominio imita a PayPal (1 por l), riesgo 0.93."
+        assert alerts.defang(prose) == prose
+        assert alerts.defang("http://a.b.co/p?q=1") == "hxxp://a[.]b[.]co/p?q=1"
 
 
 class TestNotify:

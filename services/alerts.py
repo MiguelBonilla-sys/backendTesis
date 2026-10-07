@@ -9,6 +9,7 @@ sent, so a storm cannot exhaust the quota unnoticed.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from html import escape
@@ -51,19 +52,36 @@ async def _recipients() -> list[str]:
     return emails
 
 
+_HOST_RE = re.compile(r"(?i)\b(?:[a-z0-9-]+\.)+[a-z][a-z0-9-]{1,62}\b")
+
+
+def defang(value: str) -> str:
+    """Indicador inerte (práctica SOC): ``hxxps://dominio[.]tld``.
+
+    Gmail convierte en enlace cualquier URL o dominio del texto, incluso en el
+    HTML sin ``<a>``, y el filtro antispam trata la alerta como el phishing que
+    describe. Neutralizado, el admin no puede abrir el sitio por error.
+    """
+    value = re.sub(r"(?i)\bhttp(s?)://", r"hxxp\1://", value)
+    return _HOST_RE.sub(lambda m: m.group(0).replace(".", "[.]"), value)
+
+
 def render_alert(incident: AlertIncident) -> tuple[str, str, str]:
-    """Plain text and escaped HTML; never includes the message body."""
+    """Plain text and escaped HTML; never includes the message body.
+
+    Domain, URL and reasons go defanged: the only clickable link is the dashboard.
+    """
     link = f"{settings.DASHBOARD_URL.rstrip('/')}/incidents/{incident.incident_id}"
     lines = [
         f"Veredicto: {incident.verdict} (riesgo {incident.s_risk:.2f})",
-        f"Dominio: {incident.domain}",
-        f"Enlace analizado: {incident.url}",
+        f"Dominio: {defang(incident.domain)}",
+        f"Enlace analizado: {defang(incident.url)}",
     ]
     if incident.category:
         lines.append(f"Categoría: {incident.category}")
     if incident.origin_country or incident.origin_isp:
         lines.append(f"Origen: {incident.origin_country or '?'} · {incident.origin_isp or '?'}")
-    reasons = incident.reasons[:3]
+    reasons = [defang(r) for r in incident.reasons[:3]]
     text = "\n".join(
         ["Alerta temprana de phishing", "", *lines, "", "Señales principales:"]
         + [f"- {r}" for r in reasons] + ["", f"Ver el incidente: {link}"]
@@ -75,7 +93,7 @@ def render_alert(incident: AlertIncident) -> tuple[str, str, str]:
         + "".join(f"<li>{escape(r)}</li>" for r in reasons)
         + f'</ul><p><a href="{escape(link, quote=True)}">Ver el incidente</a></p>'
     )
-    subject = f"[Phishing] {incident.domain} · riesgo {incident.s_risk:.2f}"
+    subject = f"Alerta temprana: {defang(incident.domain)} · riesgo {incident.s_risk:.2f}"
     return subject, text, html
 
 
